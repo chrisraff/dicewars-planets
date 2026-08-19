@@ -1,0 +1,37 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createInitialState, reduce, endTurn } from '@dicewars/core';
+import { generatePlanetWorld } from '../src/world/generateWorld.js';
+
+function seededRng(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
+
+test('a generated planet feeds straight into @dicewars/core', () => {
+  const world = generatePlanetWorld({
+    subdivisions: 2,
+    territoryCount: 20,
+    playerIds: ['p1', 'p2', 'p3'],
+    rng: seededRng(42),
+  });
+
+  const state = createInitialState(world);
+
+  assert.equal(state.nodes.size, 20);
+  for (const node of state.nodes.values()) {
+    assert.ok(world.playerIds.includes(node.owner));
+    assert.ok(node.dice >= 1 && node.dice <= 3);
+  }
+
+  // every player actually got at least one territory (20 territories / 3 players)
+  const owners = new Set([...state.nodes.values()].map((n) => n.owner));
+  assert.equal(owners.size, 3);
+
+  // and the state is actually playable end to end
+  const { state: next } = reduce(state, endTurn(), {});
+  assert.equal(next.currentTurnIndex, 1);
+});
