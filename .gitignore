@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.DS_Store
+
+# reference clone only — never track this
+dicewarsjs/
