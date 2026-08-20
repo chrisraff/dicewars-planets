@@ -2,11 +2,13 @@ import { MAX_DICE_PER_NODE, MAX_RESERVE, largestConnectedRegionSize } from './st
 
 const defaultRollDie = () => 1 + Math.floor(Math.random() * 6);
 
-function rollSum(count, rollDie) {
-  let sum = 0;
-  for (let i = 0; i < count; i++) sum += rollDie();
-  return sum;
+function rollDice(count, rollDie) {
+  const rolls = [];
+  for (let i = 0; i < count; i++) rolls.push(rollDie());
+  return rolls;
 }
+
+const sum = (values) => values.reduce((a, b) => a + b, 0);
 
 // Pure: returns a new nodes Map plus a description of what happened, so a
 // renderer can animate dice without recomputing anything.
@@ -14,8 +16,12 @@ export function resolveAttack(nodes, { from, to }, { rollDie = defaultRollDie } 
   const attacker = nodes.get(from);
   const defender = nodes.get(to);
 
-  const attackRoll = rollSum(attacker.dice, rollDie);
-  const defendRoll = rollSum(defender.dice, rollDie);
+  // every individual face, not just the totals — a renderer showing the dice
+  // land on their values needs to know what each one came up as
+  const attackRolls = rollDice(attacker.dice, rollDie);
+  const defendRolls = rollDice(defender.dice, rollDie);
+  const attackRoll = sum(attackRolls);
+  const defendRoll = sum(defendRolls);
   const attackerWins = attackRoll > defendRoll;
 
   const next = new Map(nodes);
@@ -29,7 +35,17 @@ export function resolveAttack(nodes, { from, to }, { rollDie = defaultRollDie } 
 
   return {
     nodes: next,
-    result: { from, to, attackRoll, defendRoll, attackerWins },
+    result: {
+      from,
+      to,
+      attackRolls,
+      defendRolls,
+      attackRoll,
+      defendRoll,
+      attackerWins,
+      attackerOwner: attacker.owner,
+      defenderOwner: defender.owner,
+    },
   };
 }
 

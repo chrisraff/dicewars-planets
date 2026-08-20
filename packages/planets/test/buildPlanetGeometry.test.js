@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { generateIcosphereCells } from '../src/geometry/icosphere.js';
-import { buildPlanetGeometry } from '../src/render/buildPlanetGeometry.js';
+import { buildPlanetGeometry, updateCellColors } from '../src/render/buildPlanetGeometry.js';
 
 test('produces one private vertex fan per cell, each triangle facing outward', () => {
   const cells = generateIcosphereCells(1);
@@ -50,5 +51,45 @@ test('every vertex within a cell shares that cell\'s color', () => {
       assert.equal(colors[(offset + i) * 3 + 2], Math.fround(b));
     }
     offset += vertexCount;
+  }
+});
+
+test('every triangle knows which cell it belongs to', () => {
+  const cells = generateIcosphereCells(1);
+  const { indices, positions, faceCellIds } = buildPlanetGeometry(cells, () => [1, 1, 1]);
+  const cellsById = new Map(cells.map((c) => [c.id, c]));
+
+  assert.equal(faceCellIds.length, indices.length / 3);
+
+  // each triangle's first vertex is its cell's center, so the reported cell id
+  // must be the one whose center sits exactly there
+  for (let face = 0; face < faceCellIds.length; face++) {
+    const v = indices[face * 3];
+    const center = cellsById.get(faceCellIds[face]).center;
+    assert.ok(Math.abs(positions[v * 3] - Math.fround(center.x)) < 1e-6);
+    assert.ok(Math.abs(positions[v * 3 + 1] - Math.fround(center.y)) < 1e-6);
+    assert.ok(Math.abs(positions[v * 3 + 2] - Math.fround(center.z)) < 1e-6);
+  }
+});
+
+test('recoloring a cell in place touches that cell and nothing else', () => {
+  const cells = generateIcosphereCells(1);
+  const { colors, cellVertexRanges } = buildPlanetGeometry(cells, () => [1, 1, 1]);
+  const target = cells[3].id;
+
+  const attribute = new THREE.BufferAttribute(colors, 3);
+  const versionBefore = attribute.version;
+  updateCellColors(attribute, [target], cellVertexRanges, () => [0, 0.5, 1]);
+
+  // `needsUpdate` is write-only on a BufferAttribute — bumping the version is
+  // the only way to see that the buffer was actually flagged for re-upload
+  assert.ok(attribute.version > versionBefore, 'the buffer must be flagged for the GPU');
+  for (const cell of cells) {
+    const { start, count } = cellVertexRanges.get(cell.id);
+    const expected = cell.id === target ? [0, 0.5, 1] : [1, 1, 1];
+    for (let i = 0; i < count; i++) {
+      const o = (start + i) * 3;
+      assert.deepEqual([colors[o], colors[o + 1], colors[o + 2]], expected.map(Math.fround));
+    }
   }
 });
