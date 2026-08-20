@@ -12,6 +12,7 @@ export const DEFAULT_PLAYER_COLORS = [
 ];
 
 const UNOWNED_COLOR = [0.25, 0.25, 0.25];
+const OCEAN_COLOR = [0.05, 0.22, 0.5];
 
 export function assignPlayerColors(playerIds, palette = DEFAULT_PLAYER_COLORS) {
   const colors = new Map();
@@ -19,4 +20,4 @@ export function assignPlayerColors(playerIds, palette = DEFAULT_PLAYER_COLORS) {
   return colors;
 }
 
-export { UNOWNED_COLOR };
+export { UNOWNED_COLOR, OCEAN_COLOR };

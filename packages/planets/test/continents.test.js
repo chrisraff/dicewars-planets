@@ -27,7 +27,7 @@ function isConnected(cellIds, cellsById) {
 test('every cell is claimed by exactly one connected territory', () => {
   const cells = generateIcosphereCells(2);
   const cellsById = new Map(cells.map((c) => [c.id, c]));
-  const { territories } = groupIntoTerritories(cells, 12, seededRng(7));
+  const { territories } = groupIntoTerritories(cells, { rng: seededRng(7) });
 
   const allCellIds = territories.flatMap((t) => t.cellIds);
   assert.equal(allCellIds.length, cells.length);
@@ -41,7 +41,7 @@ test('every cell is claimed by exactly one connected territory', () => {
 
 test('territory adjacency is symmetric and has no self-loops', () => {
   const cells = generateIcosphereCells(2);
-  const { edges } = groupIntoTerritories(cells, 10, seededRng(3));
+  const { edges } = groupIntoTerritories(cells, { rng: seededRng(3) });
 
   for (const [a, b] of edges) assert.notEqual(a, b);
 
@@ -49,7 +49,39 @@ test('territory adjacency is symmetric and has no self-loops', () => {
   assert.equal(asSet.size, edges.length); // no duplicate edges
 });
 
-test('rejects asking for more territories than cells', () => {
-  const cells = generateIcosphereCells(0); // just the 12 base vertices
-  assert.throws(() => groupIntoTerritories(cells, 13, seededRng(1)));
+test('territory sizes cluster around the target size and respect the floor', () => {
+  const cells = generateIcosphereCells(3); // 642 cells, plenty to sample a real distribution
+  const { territories } = groupIntoTerritories(cells, {
+    targetSize: 7,
+    sigma: 2,
+    minSize: 3,
+    rng: seededRng(42),
+  });
+
+  const sizes = territories.map((t) => t.cellIds.length);
+  for (const size of sizes) assert.ok(size >= 3, `territory of size ${size} is below the floor`);
+
+  const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
+  assert.ok(mean > 4 && mean < 10, `mean territory size ${mean} should be roughly around the target of 7`);
+});
+
+test('a tighter sigma produces less size variance than a looser one', () => {
+  const cells = generateIcosphereCells(3);
+  const tight = groupIntoTerritories(cells, { targetSize: 7, sigma: 0.5, minSize: 3, rng: seededRng(1) });
+  const loose = groupIntoTerritories(cells, { targetSize: 7, sigma: 4, minSize: 3, rng: seededRng(1) });
+
+  const variance = (territories) => {
+    const sizes = territories.map((t) => t.cellIds.length);
+    const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
+    return sizes.reduce((sum, s) => sum + (s - mean) ** 2, 0) / sizes.length;
+  };
+
+  assert.ok(variance(tight.territories) < variance(loose.territories));
+});
+
+test('handles an empty cell set', () => {
+  const { territories, edges, cellTerritory } = groupIntoTerritories([], { rng: seededRng(1) });
+  assert.deepEqual(territories, []);
+  assert.deepEqual(edges, []);
+  assert.equal(cellTerritory.size, 0);
 });
