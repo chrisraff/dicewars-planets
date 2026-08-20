@@ -8,16 +8,23 @@ import { createTerritoryPicker, pointerToNdc, ndcToScreen } from './render/pickT
 import { createDiePipMaterials } from './render/diceTextures.js';
 import { assignPlayerColors } from './render/palette.js';
 import { highlightsFor, pulseAt } from './render/highlights.js';
+import { playerStatsFor } from './game/playerStats.js';
 import { createHud } from './render/hud.js';
 import { createViewer } from './render/createViewer.js';
 
-const playerIds = ['p1', 'p2', 'p3', 'p4'];
-const playerNames = new Map([
-  ['p1', 'Red'],
-  ['p2', 'Blue'],
-  ['p3', 'Yellow'],
-  ['p4', 'Green'],
-]);
+// Named in palette order, so a player's name matches the color of their land.
+const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'White'];
+const DEFAULT_PLAYERS = 4;
+
+// `?players=8` fills the table, which is mostly useful for seeing the stats
+// row at full width without having to edit anything.
+const requested = Number(new URLSearchParams(location.search).get('players'));
+const playerCount = Number.isFinite(requested)
+  ? Math.min(8, Math.max(2, Math.round(requested)))
+  : DEFAULT_PLAYERS;
+
+const playerIds = PLAYER_NAMES.slice(0, playerCount).map((_, i) => `p${i + 1}`);
+const playerNames = new Map(playerIds.map((id, i) => [id, PLAYER_NAMES[i]]));
 
 const world = generatePlanetWorld({ subdivisions: 3, playerIds });
 const playerColors = assignPlayerColors(playerIds);
@@ -51,6 +58,7 @@ function refreshBoard(pulse = 1) {
     pulse,
   });
   surface.refresh(game.state, (territoryId) => marks.get(territoryId) ?? null);
+  hud.showPlayers(playerStatsFor(game.state, playerIds));
   hud.showTurn({
     playerId: game.currentPlayer(),
     isHuman: game.isHumanTurn(),
@@ -114,18 +122,23 @@ game.on('over', (winner) => hud.showWinner(winner));
 
 // A click is a press and release in roughly the same spot — anything further
 // than that was someone orbiting the planet, and must not also select a
-// territory just because the drag happened to end over one.
-const DRAG_SLOP = 5; // pixels
+// territory just because the drag happened to end over one. A finger wanders
+// much further than a mouse does while still meaning "tap".
+const DRAG_SLOP = { mouse: 5, pen: 6, touch: 14 }; // pixels
 let pressedAt = null;
 
 canvas.addEventListener('pointerdown', (e) => {
-  pressedAt = { x: e.clientX, y: e.clientY };
+  pressedAt = { x: e.clientX, y: e.clientY, slop: DRAG_SLOP[e.pointerType] ?? DRAG_SLOP.mouse };
+});
+canvas.addEventListener('pointercancel', () => {
+  pressedAt = null;
 });
 canvas.addEventListener('pointerup', (e) => {
   if (!pressedAt) return;
   const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y);
+  const { slop } = pressedAt;
   pressedAt = null;
-  if (moved > DRAG_SLOP) return;
+  if (moved > slop) return;
   const ndc = pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect());
   game.clickTerritory(pickTerritoryAt(ndc));
   refreshBoard();

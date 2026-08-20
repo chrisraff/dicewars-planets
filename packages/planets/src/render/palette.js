@@ -31,6 +31,31 @@ export function mix(color, toward, amount) {
 
 export const lighten = (color, amount) => mix(color, WHITE, amount);
 
+const DARK_INK = [0.06, 0.06, 0.09];
+const LIGHT_INK = [1, 1, 1];
+
+// WCAG relative luminance: sRGB channels linearized before weighting. The
+// linearization matters — judging by the raw channel values instead puts
+// purple's luminance below the midpoint and picks white ink for it, which is
+// the one combination in this palette that falls below AA contrast.
+export function luminance([r, g, b]) {
+  return [r, g, b]
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+}
+
+export function contrastRatio(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// Whichever of black or white reads better on this color, measured rather
+// than guessed from a threshold — the palette runs from dark red to
+// near-white and neither ink alone is legible across all eight.
+export function readableTextColor(color) {
+  return contrastRatio(color, DARK_INK) > contrastRatio(color, LIGHT_INK) ? DARK_INK : LIGHT_INK;
+}
+
 export function assignPlayerColors(playerIds, palette = DEFAULT_PLAYER_COLORS) {
   const colors = new Map();
   playerIds.forEach((id, i) => colors.set(id, palette[i % palette.length]));

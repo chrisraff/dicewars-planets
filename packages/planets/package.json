@@ -6,7 +6,9 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build",
+    "build": "vite build && node scripts/assert-deployable.js && npm run build:preview",
+    "build:site": "vite build",
+    "build:preview": "vite build --config vite.preview.config.js",
     "preview": "vite preview"
   },
   "dependencies": {

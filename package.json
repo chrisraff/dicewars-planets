@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "test": "node --test packages/*/test/*.test.js",
-    "dev": "npm run dev --workspace=@dicewars/planets"
+    "dev": "npm run dev --workspace=@dicewars/planets",
+    "build": "npm run build --workspace=@dicewars/planets"
   }
 }

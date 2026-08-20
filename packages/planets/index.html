@@ -2,8 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
     <title>Dicewars Planets</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
     <style>
       html, body {
         margin: 0;
@@ -14,94 +16,17 @@
         overflow: hidden;
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         color: #f2f2f2;
+        -webkit-text-size-adjust: 100%;
       }
+
+      /* 100dvh, so mobile browser chrome sliding in and out doesn't crop the
+         canvas or push the controls off the bottom of the screen */
       #planet-canvas {
         display: block;
         width: 100vw;
         height: 100vh;
-        touch-action: none;
-      }
-
-      /* the whole overlay ignores the pointer, so dragging still orbits the
-         planet everywhere except on an actual control */
-      #hud {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        user-select: none;
-      }
-
-      .hud-bar {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: 0.9rem 1.2rem;
-        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
-      }
-      .hud-turn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.55rem;
-        font-size: 1rem;
-        letter-spacing: 0.02em;
-      }
-      .hud-dot {
-        width: 0.85rem;
-        height: 0.85rem;
-        border-radius: 50%;
-        background: #fff;
-        box-shadow: 0 0 0.5rem rgba(255, 255, 255, 0.35);
-      }
-      .hud-end-turn {
-        pointer-events: auto;
-        font: inherit;
-        color: #f2f2f2;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        border-radius: 0.35rem;
-        padding: 0.4rem 0.9rem;
-        cursor: pointer;
-      }
-      .hud-end-turn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      .hud-end-turn:disabled {
-        opacity: 0.35;
-        cursor: default;
-      }
-
-      /* roll totals, centered on the stack they belong to */
-      .hud-roll {
-        position: absolute;
-        display: none;
-        transform: translate(-50%, -50%);
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: rgba(255, 255, 255, 0.75);
-        text-shadow: 0 0 0.5rem #000, 0 0 0.2rem #000;
-      }
-      .hud-roll.is-winning {
-        color: #fff;
-        text-shadow: 0 0 0.9rem rgba(255, 255, 255, 0.9), 0 0 0.25rem #000;
-      }
-
-      .hud-banner {
-        position: absolute;
-        inset: 0;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        font-size: 3rem;
-        font-weight: 700;
-        text-shadow: 0 0 1.5rem #000;
-      }
-      .hud-banner.is-shown {
-        display: flex;
+        height: 100dvh;
+        touch-action: none; /* the canvas handles its own drag-to-orbit */
       }
     </style>
   </head>

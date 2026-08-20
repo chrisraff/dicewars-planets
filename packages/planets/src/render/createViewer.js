@@ -20,7 +20,10 @@ export function createViewer(canvas) {
   camera.position.set(0, 0, 3.2);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  // phones report ratios of 3 and up; past 2 the extra pixels cost real frame
+  // time and buy nothing anyone can see
+  const pixelRatio = () => Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(pixelRatio());
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
@@ -31,10 +34,25 @@ export function createViewer(canvas) {
   controls.maxDistance = 8;
   controls.update();
 
+  // Tracked in CSS pixels rather than read back off the canvas, because the
+  // drawing buffer is pixelRatio times larger — comparing the two never
+  // matches on a HiDPI screen and re-sizes the renderer on every single frame.
+  let lastWidth = 0;
+  let lastHeight = 0;
+  let lastRatio = 0;
+
   function resize() {
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    if (canvas.width === width && canvas.height === height) return;
+    const ratio = pixelRatio();
+    if (width === lastWidth && height === lastHeight && ratio === lastRatio) return;
+    if (width === 0 || height === 0) return;
+
+    lastWidth = width;
+    lastHeight = height;
+    lastRatio = ratio;
+
+    renderer.setPixelRatio(ratio);
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
