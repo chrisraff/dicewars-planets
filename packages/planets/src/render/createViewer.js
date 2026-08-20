@@ -8,6 +8,14 @@ export function createViewer(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
+  // The planet itself is flat-shaded (MeshBasicMaterial, unaffected by
+  // lights) — these exist only so lit objects like the dice show their
+  // shape (bevels need light to catch an edge to be visible at all).
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  keyLight.position.set(3, 5, 4);
+  scene.add(keyLight);
+
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   camera.position.set(0, 0, 3.2);
 

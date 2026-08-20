@@ -4,5 +4,6 @@ export { carveOceans } from './world/oceans.js';
 export { chooseEquatorialAxis } from './world/equatorAxis.js';
 export { orientWorldToEquator } from './world/orientEquator.js';
 export { generatePlanetWorld } from './world/generateWorld.js';
+export { findDiceMountPoint, findAllDiceMountPoints } from './world/territoryCenters.js';
 export { buildTerritoryBoundaries } from './render/buildTerritoryBoundaries.js';
 

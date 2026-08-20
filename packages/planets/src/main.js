@@ -3,6 +3,8 @@ import { createInitialState } from '@dicewars/core';
 import { generatePlanetWorld } from './world/generateWorld.js';
 import { buildPlanetGeometry } from './render/buildPlanetGeometry.js';
 import { buildTerritoryBoundaries } from './render/buildTerritoryBoundaries.js';
+import { buildDiceGroup } from './render/buildDiceGroup.js';
+import { createDiePipMaterials } from './render/diceTextures.js';
 import { assignPlayerColors } from './render/palette.js';
 import { makeCellColorer } from './render/colorByOwner.js';
 import { createViewer } from './render/createViewer.js';
@@ -34,10 +36,14 @@ boundaryGeometry.setAttribute('position', new THREE.BufferAttribute(boundaryPosi
 const boundaryMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
 const boundaries = new THREE.LineSegments(boundaryGeometry, boundaryMaterial);
 
+const pipMaterials = createDiePipMaterials(); // generated once at startup
+const dice = buildDiceGroup(world, state, pipMaterials);
+
 const canvas = document.getElementById('planet-canvas');
 const viewer = createViewer(canvas);
 viewer.scene.add(planet);
 viewer.scene.add(boundaries);
+viewer.scene.add(dice);
 
 function animate() {
   requestAnimationFrame(animate);
