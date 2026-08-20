@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "node --test packages/*/test/*.test.js"
+    "test": "node --test packages/*/test/*.test.js",
+    "dev": "npm run dev --workspace=@dicewars/planets"
   }
 }
