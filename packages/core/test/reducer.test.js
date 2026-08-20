@@ -77,3 +77,40 @@ test('the game ends once only one player still holds territory', () => {
   assert.equal(next.winner, 'p1');
   assert.ok(events.some((e) => e.type === 'gameOver'));
 });
+
+test('taking a player’s last territory reports them as eliminated', () => {
+  const state = makeState();
+  // p2 holds only 'b' — 'd' has been taken already
+  const cornered = {
+    ...state,
+    nodes: new Map(state.nodes).set('d', { owner: 'p1', dice: 1 }),
+  };
+  const rolls = [6, 6, 6, 1];
+  const { events } = reduce(cornered, attack('a', 'b'), { rollDie: () => rolls.shift() });
+
+  const knockout = events.find((e) => e.type === 'eliminated');
+  assert.ok(knockout, 'losing the last territory should be reported');
+  assert.equal(knockout.playerId, 'p2');
+  assert.equal(knockout.by, 'p1', 'and say who did it');
+  assert.equal(events[0].type, 'attack', 'the attack itself still comes first');
+});
+
+test('a player who still holds ground elsewhere is not reported eliminated', () => {
+  const state = makeState(); // p2 holds both 'b' and 'd'
+  const rolls = [6, 6, 6, 1];
+  const { events } = reduce(state, attack('a', 'b'), { rollDie: () => rolls.shift() });
+
+  assert.equal(events.some((e) => e.type === 'eliminated'), false);
+});
+
+test('a failed attack never eliminates anyone', () => {
+  const state = makeState();
+  const cornered = {
+    ...state,
+    nodes: new Map(state.nodes).set('d', { owner: 'p1', dice: 1 }),
+  };
+  const rolls = [1, 1, 1, 6];
+  const { events } = reduce(cornered, attack('a', 'b'), { rollDie: () => rolls.shift() });
+
+  assert.equal(events.some((e) => e.type === 'eliminated'), false);
+});

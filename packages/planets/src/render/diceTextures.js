@@ -1,14 +1,5 @@
 import * as THREE from 'three';
-
-// Standard 3x3-grid pip layouts, as fractions of the face.
-const PIP_LAYOUTS = {
-  1: [[0.5, 0.5]],
-  2: [[0.27, 0.27], [0.73, 0.73]],
-  3: [[0.27, 0.27], [0.5, 0.5], [0.73, 0.73]],
-  4: [[0.27, 0.27], [0.73, 0.27], [0.27, 0.73], [0.73, 0.73]],
-  5: [[0.27, 0.27], [0.73, 0.27], [0.5, 0.5], [0.27, 0.73], [0.73, 0.73]],
-  6: [[0.27, 0.22], [0.27, 0.5], [0.27, 0.78], [0.73, 0.22], [0.73, 0.5], [0.73, 0.78]],
-};
+import { pipPositions } from './pips.js';
 
 function drawDieFace(pipCount, size) {
   const canvas = document.createElement('canvas');
@@ -21,7 +12,7 @@ function drawDieFace(pipCount, size) {
 
   ctx.fillStyle = '#1c1c1c';
   const radius = size * 0.09;
-  for (const [xf, yf] of PIP_LAYOUTS[pipCount]) {
+  for (const [xf, yf] of pipPositions(pipCount)) {
     ctx.beginPath();
     ctx.arc(xf * size, yf * size, radius, 0, Math.PI * 2);
     ctx.fill();

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { generateIcosphereCells } from '../src/geometry/icosphere.js';
 import { buildPlanetGeometry } from '../src/render/buildPlanetGeometry.js';
-import { pointerToNdc, ndcToScreen, createTerritoryPicker } from '../src/render/pickTerritory.js';
+import { pointerToNdc, createTerritoryPicker } from '../src/render/pickTerritory.js';
 
 const rect = { left: 100, top: 50, width: 800, height: 400 };
 
@@ -19,14 +19,6 @@ test('device coordinates run right and *up*, so screen y is flipped', () => {
 
   const bottomRight = pointerToNdc(900, 450, rect);
   assert.deepEqual(bottomRight, { x: 1, y: -1 });
-});
-
-test('screen and device coordinates convert back and forth', () => {
-  for (const point of [[100, 50], [500, 250], [900, 450], [321, 99]]) {
-    const roundTrip = ndcToScreen(pointerToNdc(point[0], point[1], rect), rect);
-    assert.ok(Math.abs(roundTrip.x - point[0]) < 1e-9);
-    assert.ok(Math.abs(roundTrip.y - point[1]) < 1e-9);
-  }
 });
 
 function planetPicker(cellTerritory) {

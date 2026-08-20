@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planDiceStacks, stackColumnCount, MAX_DICE_PER_STACK } from '../src/render/diceStacks.js';
+import {
+  planDiceStacks,
+  stackSlots,
+  stackColumnCount,
+  MAX_DICE_PER_STACK,
+} from '../src/render/diceStacks.js';
 
 function seededRng(seed) {
   let s = seed;
@@ -84,4 +89,38 @@ test('dice below the top are tumbled, not all alike', () => {
     }
   }
   assert.ok(seen.size > 6, `expected varied orientations, saw ${seen.size}`);
+});
+
+test('the slot rule gives one place per die, four to a column', () => {
+  for (let n = 1; n <= 8; n++) {
+    const slots = stackSlots(n);
+    assert.equal(slots.length, n);
+    assert.equal(new Set(slots.map((s) => `${s.column},${s.level}`)).size, n, 'no two share a slot');
+    for (const { level } of slots) assert.ok(level < MAX_DICE_PER_STACK);
+  }
+});
+
+test('the slot rule fills the first column before starting a second', () => {
+  assert.deepEqual(stackSlots(3).map((s) => s.column), [0, 0, 0]);
+  assert.deepEqual(stackSlots(6).map((s) => s.column), [0, 0, 0, 0, 1, 1]);
+  assert.equal(stackSlots(8).filter((s) => s.column === 1).length, 4);
+  assert.equal(stackSlots(0).length, 0);
+});
+
+test('each slot knows how tall its own column ends up', () => {
+  // this is what tells the dice layer which die is on top and must show the count
+  assert.deepEqual(stackSlots(6).map((s) => s.height), [4, 4, 4, 4, 2, 2]);
+});
+
+test('the dice on the planet and the readout stack mark agree', () => {
+  // both read from stackSlots, so a stack of six and the six-pip mark beside
+  // its total are the same shape
+  for (let n = 1; n <= 8; n++) {
+    const placements = planDiceStacks(n, () => 0.5);
+    assert.deepEqual(
+      placements.map(({ column, level }) => ({ column, level })),
+      stackSlots(n).map(({ column, level }) => ({ column, level }))
+    );
+    assert.equal(stackColumnCount(n), new Set(stackSlots(n).map((s) => s.column)).size);
+  }
 });

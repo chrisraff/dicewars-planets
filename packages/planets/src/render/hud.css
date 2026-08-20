@@ -24,6 +24,15 @@
   justify-content: space-between;
 }
 
+/* Everything anchored to the top of the screen. A flex column, so the battle
+   readout below the stats row can shrink to its own width instead of
+   stretching across and swallowing drags meant for the planet. */
+.hud-top {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* ---- player stats row ------------------------------------------- */
 
 .hud-players {
@@ -101,6 +110,272 @@
   box-shadow: 0 0 1.4rem rgba(255, 255, 255, 0.85);
 }
 
+/* ---- battle readout ---------------------------------------------- */
+
+/* Sits directly under the stats row and only as wide as its contents, so the
+   rest of the top of the screen still passes drags through to the planet. */
+/* Full width of the screen, so a big battle can use all of it — but only the
+   controls inside opt back into the pointer, or the empty space beside a short
+   readout would swallow drags meant for the planet. */
+.hud-battle {
+  align-self: stretch;
+  padding: 0 calc(var(--safe-left) + 0.7rem);
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.battle-current {
+  font: inherit;
+  color: inherit;
+  pointer-events: auto;
+  /* inline-flex, so a small battle stays small while an eight-on-eight is free
+     to grow out to the full width before it has to give up and go compact */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--panel-radius);
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.battle-current:hover { border-color: rgba(255, 255, 255, 0.32); }
+.battle-current.is-empty { display: none; } /* nothing has been fought yet */
+
+/* ---- the two readings of a battle -------------------------------------
+
+   Both are always in the DOM; `.is-compact` on the row picks between them.
+   Full is the default: every die next to its own total, all legible at once.
+   Compact is what a row falls back to when that will not fit. */
+
+.battle-summary {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto; /* the result never shrinks and never scrolls away */
+}
+.is-compact .battle-summary { display: flex; }
+
+.battle-dice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* only in compact does the dice strip become its own scrollable space */
+.is-compact .battle-dice {
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.battle-dice::-webkit-scrollbar { display: none; }
+
+/* Instead of a scrollbar, the strip fades out over whichever edge it can still
+   be scrolled towards: to the right when dice are waiting off-screen, to the
+   left once you have scrolled past some, and both at once in the middle. A
+   mask rather than an overlay, because what sits behind the strip is the
+   readout's own translucent background over a moving planet — there is no
+   solid color to fade into. The mask is anchored to the element, not to its
+   contents, so it stays at the edges while the dice scroll under it. */
+.is-compact .battle-dice {
+  --fade: 1.1rem;
+}
+.battle-dice.is-faded-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+}
+.battle-dice.is-faded-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+.battle-dice.is-faded-left.is-faded-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+}
+
+.battle-side {
+  display: flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex: 0 0 auto;
+}
+
+/* the totals and arrow that sit among the dice belong to the full reading */
+.is-compact .is-inline { display: none; }
+
+/* ---- how many dice were thrown ----------------------------------------
+
+   A miniature of the stack: two columns, four rows, filled bottom-up, exactly
+   how the dice pile up on the planet. Reading "how many" off eight scrolling
+   dice is work; reading it off this shape is not. */
+.battle-count {
+  display: grid;
+  grid-template-columns: repeat(2, 0.22rem);
+  grid-template-rows: repeat(4, 0.22rem);
+  gap: 0.1rem;
+  flex: 0 0 auto;
+}
+.battle-count i {
+  background: var(--die-color);
+  border-radius: 0.05rem;
+}
+
+.battle-outcome {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.25rem;
+  border-radius: 0.28rem;
+  border: 2px solid transparent;
+  background: var(--die-color);
+  color: var(--die-ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+/* the same white border the stats row uses for "this is the one that matters",
+   which reads at a glance without a glow smearing the digits */
+.battle-outcome.is-winner {
+  opacity: 1;
+  border-color: #fff;
+}
+.battle-outcome.is-rolling { opacity: 0.4; }
+
+/* one chip per die, showing the face it came up on, in its owner's color.
+   A shade larger than a digit would need, because six pips want more room
+   than the character "6" does. */
+.battle-die {
+  display: inline-flex;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 0.24rem;
+  background: var(--die-color);
+  flex: 0 0 auto;
+}
+.battle-die-face {
+  width: 100%;
+  height: 100%;
+  fill: var(--die-ink);
+}
+/* still in the air: the color says whose it is, the face is not known yet */
+.battle-die.is-rolling { opacity: 0.45; }
+
+.battle-arrow {
+  opacity: 0.5;
+  font-size: 0.85rem;
+  flex: 0 0 auto;
+}
+
+/* ---- battle history ---------------------------------------------- */
+
+.battle-history {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: calc(var(--safe-left) + 0.7rem);
+  /* Deliberately narrow: a history row is a scannable summary, so wide
+     battles collapse to their compact reading here rather than stretching the
+     panel across the screen. */
+  width: min(21rem, calc(100% - var(--safe-left) - var(--safe-right) - 1.4rem));
+  box-sizing: border-box;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--panel-radius);
+  background: rgba(8, 8, 11, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.battle-history[hidden] { display: none; }
+
+.battle-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9a9aa2;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.battle-history-close {
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  color: #cfcfd6;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+}
+.battle-history-close:hover { color: #fff; }
+
+.battle-history-list {
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  /* newest first, so the interesting end needs no scrolling */
+  max-height: min(50vh, 20rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.battle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow: hidden; /* again, the dice strip scrolls, the row does not */
+  padding: 0.22rem 0.35rem;
+  border-radius: 0.3rem;
+  white-space: nowrap;
+}
+.battle-row + .battle-row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.battle-row.is-elimination {
+  font-size: 0.78rem;
+  color: #b9b9c2;
+}
+.battle-row.is-empty {
+  font-size: 0.78rem;
+  color: #75757e;
+  justify-content: center;
+  padding: 0.6rem;
+}
+.battle-row-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
 /* ---- turn indicator + end turn ----------------------------------- */
 
 .hud-controls {
@@ -146,22 +421,7 @@
 .hud-end-turn:active:not(:disabled) { background: rgba(255, 255, 255, 0.3); }
 .hud-end-turn:disabled { opacity: 0.3; cursor: default; }
 
-/* ---- roll totals + winner ---------------------------------------- */
-
-.hud-roll {
-  position: absolute;
-  display: none;
-  transform: translate(-50%, -50%);
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.75);
-  text-shadow: 0 0 0.5rem #000, 0 0 0.2rem #000;
-  font-variant-numeric: tabular-nums;
-}
-.hud-roll.is-winning {
-  color: #fff;
-  text-shadow: 0 0 0.9rem rgba(255, 255, 255, 0.9), 0 0 0.25rem #000;
-}
+/* ---- winner banner ---------------------------------------------- */
 
 .hud-banner {
   position: absolute;
@@ -179,16 +439,19 @@
 /* ---- narrow screens ---------------------------------------------- */
 
 @media (max-width: 640px) {
+  .battle-die { width: 1.05rem; height: 1.05rem; }
+  .battle-outcome { min-width: 1.45rem; height: 1.45rem; font-size: 0.76rem; }
+  .battle-history { min-width: 13rem; }
   .hud-player { min-width: 3rem; padding: 0.28rem 0.4rem 0.32rem; }
   .hud-player-territories { font-size: 1.25rem; }
   .hud-player-name { font-size: 0.55rem; }
   .hud-player-reserve { font-size: 0.66rem; right: 0.15rem; }
   .hud-turn { font-size: 0.85rem; }
-  .hud-roll { font-size: 1.3rem; }
 }
 
 /* landscape phones: very little vertical room, so shrink the chrome */
 @media (max-height: 480px) {
+  .battle-history-list { max-height: 40vh; }
   .hud-players { padding-top: calc(var(--safe-top) + 0.35rem); padding-bottom: 0.35rem; }
   .hud-player-territories { font-size: 1.1rem; }
   .hud-controls { padding-top: 0.4rem; padding-bottom: calc(var(--safe-bottom) + 0.4rem); }

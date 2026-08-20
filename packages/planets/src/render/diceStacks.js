@@ -14,6 +14,22 @@ export const PIP_FACE_NORMALS = {
 // column alongside — so eight dice read as two stacks of four.
 export const MAX_DICE_PER_STACK = 4;
 
+/**
+ * Which column and level each die occupies: filled four high, then a new
+ * column alongside. Exported on its own because the battle readout draws the
+ * same arrangement as a grid of pips, so a stack of six on the planet and the
+ * six-pip mark beside its total are the same shape.
+ */
+export function stackSlots(diceCount) {
+  const slots = [];
+  for (let placed = 0; placed < diceCount; placed += MAX_DICE_PER_STACK) {
+    const height = Math.min(MAX_DICE_PER_STACK, diceCount - placed);
+    const column = placed / MAX_DICE_PER_STACK;
+    for (let level = 0; level < height; level++) slots.push({ column, level, height });
+  }
+  return slots;
+}
+
 // Splits `diceCount` dice into stacks and picks each die's resting
 // orientation, as plain data: `column` (0-based, left to right), `level`
 // (0 at the bottom), `pipUp` (which numbered face points away from the
@@ -26,21 +42,12 @@ export function planDiceStacks(diceCount, rng = Math.random) {
   const quarterTurn = () => Math.floor(rng() * 4) % 4;
   const anyFace = () => 1 + (Math.floor(rng() * 6) % 6);
 
-  const placements = [];
-  for (let placed = 0; placed < diceCount; placed += MAX_DICE_PER_STACK) {
-    const height = Math.min(MAX_DICE_PER_STACK, diceCount - placed);
-    const column = placed / MAX_DICE_PER_STACK;
-    for (let level = 0; level < height; level++) {
-      const onTop = level === height - 1;
-      placements.push({
-        column,
-        level,
-        pipUp: onTop ? height : anyFace(),
-        spin: quarterTurn(),
-      });
-    }
-  }
-  return placements;
+  return stackSlots(diceCount).map(({ column, level, height }) => ({
+    column,
+    level,
+    pipUp: level === height - 1 ? height : anyFace(),
+    spin: quarterTurn(),
+  }));
 }
 
 export function stackColumnCount(diceCount) {

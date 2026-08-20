@@ -1,6 +1,7 @@
-import { createHud } from './render/hud.js';
-import { playerStatsFor } from './game/playerStats.js';
-import { assignPlayerColors } from './render/palette.js';
+import { createHud } from '../render/hud.js';
+import { createBattleLog } from '../game/battleLog.js';
+import { playerStatsFor } from '../game/playerStats.js';
+import { assignPlayerColors } from '../render/palette.js';
 import { MAX_RESERVE } from '@dicewars/core';
 
 const NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'White'];
@@ -30,7 +31,34 @@ function stateFrom({ holdings, reserves, currentIndex = 0, phase = 'attack', win
   };
 }
 
-function addScenario({ title, note, stageClass = '', ...scenario }) {
+// Replays a list of attacks/knockouts into a real battle log, so the readout
+// and history below are built from exactly what a game would feed them.
+function logFrom(fights = [], playerIds) {
+  const log = createBattleLog();
+  for (const fight of fights) {
+    if (fight.out !== undefined) {
+      log.record({ type: 'eliminated', playerId: playerIds[fight.out], by: playerIds[fight.by] });
+      continue;
+    }
+    const [attackRolls, defendRolls] = [fight.attack, fight.defend];
+    const sum = (values) => values.reduce((a, b) => a + b, 0);
+    log.record({
+      type: 'attack',
+      from: 1,
+      to: 2,
+      attackRolls,
+      defendRolls,
+      attackRoll: sum(attackRolls),
+      defendRoll: sum(defendRolls),
+      attackerWins: sum(attackRolls) > sum(defendRolls),
+      attackerOwner: playerIds[fight.by],
+      defenderOwner: playerIds[fight.against],
+    });
+  }
+  return log;
+}
+
+function addScenario({ title, note, stageClass = '', fights, rolling = false, ...scenario }) {
   const { state, playerIds } = stateFrom(scenario);
 
   const section = document.createElement('section');
@@ -45,6 +73,12 @@ function addScenario({ title, note, stageClass = '', ...scenario }) {
   });
   hud.showPlayers(playerStatsFor(state, playerIds));
 
+  if (fights) {
+    const log = logFrom(fights, playerIds);
+    hud.showBattle(log.latestBattle, { revealed: !rolling });
+    hud.setHistory(log.entries);
+  }
+
   document.getElementById('scenarios').append(section);
 }
 
@@ -54,6 +88,50 @@ addScenario({
   holdings: [14, 14, 13, 13],
   reserves: [0, 0, 0, 0],
   currentIndex: 0,
+});
+
+addScenario({
+  title: 'Battle readout — attacker wins',
+  note: 'Under the stats row: a die per die rolled in each side’s color, then the total. '
+    + 'The winning total is the lit one. Tap it for the history.',
+  holdings: [14, 14, 13, 13],
+  reserves: [0, 2, 0, 0],
+  currentIndex: 0,
+  fights: [{ by: 0, against: 1, attack: [5, 6, 3, 6], defend: [2, 4] }],
+});
+
+addScenario({
+  title: 'Battle readout — attacker loses',
+  note: 'A failed attack: the defender’s total is the one lit up.',
+  holdings: [11, 17, 13, 13],
+  reserves: [0, 0, 0, 0],
+  currentIndex: 2,
+  fights: [{ by: 2, against: 3, attack: [1, 2, 1], defend: [6, 5] }],
+});
+
+addScenario({
+  title: 'Battle readout — mid-roll',
+  note: 'While the dice are still tumbling on the planet: the right number of dice in the right '
+    + 'colors, but no faces and no total yet — the readout must not spoil the roll.',
+  holdings: [14, 14, 13, 13],
+  reserves: [0, 0, 0, 0],
+  currentIndex: 1,
+  fights: [{ by: 1, against: 0, attack: [4, 4, 2, 6, 1], defend: [3, 3, 3] }],
+  rolling: true,
+});
+
+addScenario({
+  title: 'Battle readout — widest possible',
+  note: 'Eight dice against eight, the most that can ever be shown. On a narrow screen the '
+    + 'readout scrolls sideways rather than wrapping.',
+  holdings: [20, 20, 7, 7],
+  reserves: [0, 0, 0, 0],
+  currentIndex: 0,
+  fights: [{
+    by: 0, against: 1,
+    attack: [6, 5, 4, 3, 2, 1, 6, 5],
+    defend: [1, 2, 3, 4, 5, 6, 1, 2],
+  }],
 });
 
 addScenario({
@@ -83,10 +161,21 @@ addScenario({
 
 addScenario({
   title: 'Late game — players knocked out',
-  note: 'Eliminated players keep their slot, grayed out, rather than vanishing from the row.',
+  note: 'Eliminated players keep their slot, grayed out, rather than vanishing from the row. '
+    + 'Open the history: knockouts are logged alongside the fights that caused them.',
   holdings: [31, 0, 0, 9, 0, 4, 0, 0],
   reserves: [17, 0, 0, 2, 0, 0, 0, 0],
   currentIndex: 0,
+  fights: [
+    { by: 0, against: 1, attack: [3, 4], defend: [5, 6] },
+    { by: 5, against: 6, attack: [6, 6, 5], defend: [1, 2] },
+    { out: 6, by: 5 },
+    { by: 0, against: 4, attack: [6, 6, 6, 4], defend: [2, 3, 1] },
+    { out: 4, by: 0 },
+    { by: 3, against: 0, attack: [2, 2], defend: [6, 3] },
+    { by: 0, against: 2, attack: [5, 5, 6], defend: [1, 1] },
+    { out: 2, by: 0 },
+  ],
 });
 
 addScenario({

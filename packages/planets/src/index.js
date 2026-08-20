@@ -10,6 +10,6 @@ export { buildPlanetGeometry, updateCellColors } from './render/buildPlanetGeome
 export { planDiceStacks, stackColumnCount, MAX_DICE_PER_STACK } from './render/diceStacks.js';
 export { sampleAttack, attackDuration, DEFAULT_TIMING } from './render/rollTimeline.js';
 export { highlightsFor, pulseAt } from './render/highlights.js';
-export { pointerToNdc, ndcToScreen, createTerritoryPicker } from './render/pickTerritory.js';
+export { pointerToNdc, createTerritoryPicker } from './render/pickTerritory.js';
 export { createGame, AI_TIMING } from './game/createGame.js';
 

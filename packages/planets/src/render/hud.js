@@ -1,9 +1,9 @@
 import { readableTextColor } from './palette.js';
+import { createBattleReadout } from './battleReadout.js';
 import { MAX_RESERVE } from '../game/playerStats.js';
 
 // The DOM layer over the canvas: the player stats row, whose turn it is, the
-// end-turn button, the roll totals that float over a fight, and the game-over
-// banner. Kept in HTML rather than drawn into the scene because text in WebGL
+// end-turn button, the battle readout, and the game-over banner. Kept in HTML rather than drawn into the scene because text in WebGL
 // is a lot of work for no gain when it's always facing the camera anyway.
 
 const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
@@ -82,25 +82,26 @@ export function playerPanelView(player) {
 
 export function createHud(root, { playerColors, playerNames = new Map() } = {}) {
   root.innerHTML = `
-    <div class="hud-players" role="list" aria-label="Players"></div>
+    <div class="hud-top">
+      <div class="hud-players" role="list" aria-label="Players"></div>
+      <div class="hud-battle"></div>
+    </div>
     <div class="hud-controls">
       <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
       <button class="hud-end-turn" type="button">End turn</button>
     </div>
-    <div class="hud-roll hud-roll-attacker"></div>
-    <div class="hud-roll hud-roll-defender"></div>
     <div class="hud-banner"></div>
   `;
 
   const playersRow = root.querySelector('.hud-players');
+  const battle = createBattleReadout(root.querySelector('.hud-battle'), {
+    playerColors,
+    playerNames,
+  });
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
   const endTurnButton = root.querySelector('.hud-end-turn');
   const banner = root.querySelector('.hud-banner');
-  const rolls = {
-    attacker: root.querySelector('.hud-roll-attacker'),
-    defender: root.querySelector('.hud-roll-defender'),
-  };
 
   const nameOf = (playerId) => playerNames.get(playerId) ?? playerId;
   const panels = new Map();
@@ -164,6 +165,19 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   }
 
   return {
+    /** The last fight's dice. `revealed: false` while they are still in the air. */
+    showBattle(entry, options) {
+      battle.show(entry, options);
+    },
+
+    setHistory(entries) {
+      battle.setHistory(entries);
+    },
+
+    closeHistory() {
+      battle.close();
+    },
+
     onEndTurn(handler) {
       endTurnButton.addEventListener('click', handler);
     },
@@ -203,26 +217,6 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       turnText.textContent = isHuman ? 'Your turn' : `${nameOf(playerId)} is playing`;
       endTurnButton.disabled = !canAct;
       endTurnButton.style.visibility = isHuman ? 'visible' : 'hidden';
-    },
-
-    // `side` is 'attacker' or 'defender'; `screen` is a pixel position on the
-    // canvas, or null to hide the label.
-    showRoll(side, { total, screen, winning } = {}) {
-      const element = rolls[side];
-      if (!screen || total === undefined) {
-        element.style.display = 'none';
-        return;
-      }
-      element.style.display = 'block';
-      element.style.left = `${screen.x}px`;
-      element.style.top = `${screen.y}px`;
-      element.textContent = String(total);
-      element.classList.toggle('is-winning', Boolean(winning));
-    },
-
-    hideRolls() {
-      this.showRoll('attacker');
-      this.showRoll('defender');
     },
 
     showWinner(playerId) {

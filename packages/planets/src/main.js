@@ -4,11 +4,12 @@ import { createGame } from './game/createGame.js';
 import { createPlanetSurface } from './render/planetSurface.js';
 import { createDiceLayer } from './render/diceLayer.js';
 import { createRollAnimation } from './render/rollAnimation.js';
-import { createTerritoryPicker, pointerToNdc, ndcToScreen } from './render/pickTerritory.js';
+import { createTerritoryPicker, pointerToNdc } from './render/pickTerritory.js';
 import { createDiePipMaterials } from './render/diceTextures.js';
 import { assignPlayerColors } from './render/palette.js';
 import { highlightsFor, pulseAt } from './render/highlights.js';
 import { playerStatsFor } from './game/playerStats.js';
+import { createBattleLog, battleEntry } from './game/battleLog.js';
 import { createHud } from './render/hud.js';
 import { createViewer } from './render/createViewer.js';
 
@@ -39,6 +40,8 @@ const dice = createDiceLayer(world, createDiePipMaterials());
 viewer.scene.add(surface.group, dice.group);
 
 const hud = createHud(document.getElementById('hud'), { playerColors, playerNames });
+const battles = createBattleLog();
+hud.setHistory(battles.entries);
 const pickTerritoryAt = createTerritoryPicker({
   planetMesh: surface.mesh,
   camera: viewer.camera,
@@ -66,27 +69,13 @@ function refreshBoard(pulse = 1) {
   });
 }
 
-// Parks a roll total on the canvas above the stack it belongs to, and hides
-// it while that stack is round the far side of the planet.
-const toCamera = new THREE.Vector3();
-function placeRollLabel(side, territoryId, total, winning) {
-  const stand = dice.standFor(territoryId);
-  const position = stand.object.position.clone().multiplyScalar(1.14);
-  toCamera.subVectors(viewer.camera.position, position);
-  const facingUs = stand.normal.dot(toCamera) > 0;
-
-  hud.showRoll(side, {
-    total,
-    winning,
-    screen: facingUs
-      ? ndcToScreen(position.project(viewer.camera), canvas.getBoundingClientRect())
-      : null,
-  });
-}
-
 // --- the game talks, the renderer listens --------------------------------
 
 game.on('attack', ({ event, timing }) => {
+  // the dice are known already, but they belong on the planet first — show the
+  // readout with blank faces so it fills in as the roll lands
+  hud.showBattle(battleEntry(event), { revealed: false });
+
   roll = {
     event,
     timing,
@@ -104,7 +93,8 @@ game.on('attack', ({ event, timing }) => {
 game.on('resolved', (state) => {
   const { event } = roll;
   roll = null;
-  hud.hideRolls();
+  hud.showBattle(battles.record(event));
+  hud.setHistory(battles.entries);
   // both stacks are still lying on the faces they rolled; stand them back up
   // before the 'change' handler below sees them
   dice.reroll(event.from, state);
@@ -114,6 +104,11 @@ game.on('resolved', (state) => {
 game.on('change', (state) => {
   dice.update(state);
   refreshBoard();
+});
+
+game.on('eliminated', (event) => {
+  battles.record(event);
+  hud.setHistory(battles.entries);
 });
 
 game.on('over', (winner) => hud.showWinner(winner));
@@ -160,14 +155,8 @@ function animate() {
 
   if (roll) {
     roll.elapsed += dt;
-    const beat = roll.animation.apply(roll.elapsed);
+    roll.animation.apply(roll.elapsed);
     refreshBoard(pulseAt(roll.elapsed));
-
-    if (beat.phase === 'read' || beat.phase === 'done') {
-      const { event } = roll;
-      placeRollLabel('attacker', event.from, event.attackRoll, event.attackerWins);
-      placeRollLabel('defender', event.to, event.defendRoll, !event.attackerWins);
-    }
   }
 
   game.tick(dt);

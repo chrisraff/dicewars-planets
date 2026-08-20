@@ -35,6 +35,7 @@ export function createGame({
   let state = createInitialState(world);
   let selection = null;
   let pending = null; // the resolved-but-not-yet-shown result of an attack
+  let pendingEvents = []; // everything else that happened in the same action
   let countdown = 0; // seconds left before `pending` is applied
   let thinking = 0; // seconds left before the AI's next move
 
@@ -70,6 +71,9 @@ export function createGame({
     const beats = timingFor(currentPlayer());
 
     pending = result.state;
+    // held back until the dice land — a player being knocked out is news that
+    // belongs after the roll that did it, not before
+    pendingEvents = result.events.filter((e) => e.type !== 'attack');
     countdown = attackDuration(beats);
     setSelection(null);
     emit('attack', { event, timing: beats });
@@ -78,7 +82,10 @@ export function createGame({
   function finishAttack() {
     state = pending;
     pending = null;
+
     emit('resolved', state);
+    for (const event of pendingEvents) emit(event.type, event);
+    pendingEvents = [];
     emit('change', state);
 
     if (!isHumanTurn()) thinking = AI_THINK_PAUSE;

@@ -11,16 +11,6 @@ export function pointerToNdc(clientX, clientY, rect) {
   };
 }
 
-// The other direction: a point already in device coordinates, back to a
-// pixel position within the canvas. Used to park the roll totals on top of
-// the territories they belong to.
-export function ndcToScreen(ndc, rect) {
-  return {
-    x: rect.left + ((ndc.x + 1) / 2) * rect.width,
-    y: rect.top + ((1 - ndc.y) / 2) * rect.height,
-  };
-}
-
 // Casts a ray at the planet and reports which territory was hit, or null for
 // a miss (empty space) or for ocean, which belongs to no territory. Only the
 // planet mesh is tested, so dice standing in front of a territory never

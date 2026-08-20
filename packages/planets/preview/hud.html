@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — HUD preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>HUD &amp; player stats</h1>
+      <p class="lede">
+        Every stats-row state, using the same <code>createHud</code> and the same
+        <code>hud.css</code> the game does — stats come from the real
+        <code>playerStatsFor</code>, so nothing here can drift from what you see in
+        a match. Reserve badges are the small <code>+n</code> in the lower-right of
+        each tile; tiles with nothing banked show no badge at all and must be
+        exactly the same size as ones that do. The battle readout sits under the
+        stats row — tap one to open its history.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/hud.js"></script>
+  </body>
+</html>

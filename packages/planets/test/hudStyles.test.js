@@ -3,25 +3,25 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// hud.js builds its markup and toggles its state classes in JavaScript, while
-// the rules that make any of it visible live in hud.css. Nothing else connects
-// the two, so a renamed class fails silently — the panel renders, just
-// unstyled. This checks they still agree.
+// hud.js and battleReadout.js build their markup and toggle their state
+// classes in JavaScript, while the rules that make any of it visible live in
+// hud.css. Nothing else connects the two, so a renamed class fails silently —
+// the element renders, just unstyled. This checks they still agree.
 const read = (relative) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
-const hudSource = read('../src/render/hud.js');
+// the HUD's markup is split across these two, and both draw on the same sheet
+const hudSource = read('../src/render/hud.js') + read('../src/render/battleReadout.js');
 const stylesheet = read('../src/render/hud.css');
 const page = read('../index.html');
-const previewPage = read('../preview.html');
+const previewPages = ['hud', 'battles'].map((page) => read(`../preview/${page}.html`));
+const previewIndex = read('../preview/index.html');
 
 // Classes that exist only so JavaScript can find the element again — they
 // carry no appearance of their own, so having no rule is correct. Everything
 // else on an element is there to be seen.
 const QUERY_HANDLES = new Set([
   'hud-turn-text', // sits inside .hud-turn, which is what's styled
-  'hud-roll-attacker', // both get their looks from .hud-roll; the side-specific
-  'hud-roll-defender', // class only tells the two labels apart in code
 ]);
 
 function classesUsedBy(source) {
@@ -31,6 +31,10 @@ function classesUsedBy(source) {
   }
   for (const [, name] of source.matchAll(/classList\.toggle\(\s*['"]([\w-]+)['"]/g)) {
     used.add(name);
+  }
+  // elements built with createElementNS take their class this way
+  for (const [, list] of source.matchAll(/setAttribute\(\s*'class',\s*'([^']+)'/g)) {
+    for (const name of list.trim().split(/\s+/)) used.add(name);
   }
   // the state classes the pure view hands back for the DOM to apply
   for (const [, name] of source.matchAll(/'(is-[\w-]+)':/g)) used.add(name);
@@ -88,6 +92,67 @@ test('the banked-dice badge cannot change the size of a tile', () => {
   assert.match(ruleFor('.hud-player-reserve'), /right:/, 'and sit against the right edge');
 });
 
+test('a battle shows every die when there is room, and falls back when there is not', () => {
+  // full is the default reading: totals sit among the dice, nothing scrolls
+  assert.match(ruleFor('.battle-summary'), /display:\s*none/, 'no stack marks unless compact');
+  assert.doesNotMatch(ruleFor('.battle-dice'), /overflow-x/, 'and the strip does not scroll');
+  assert.match(ruleFor('.battle-dice'), /min-width:\s*0/, 'or a flex child refuses to shrink');
+});
+
+test('the compact reading pins the result and scrolls only the dice', () => {
+  assert.match(ruleFor('.is-compact .battle-summary'), /display:\s*flex/);
+  assert.match(ruleFor('.battle-summary'), /flex:\s*0 0 auto/, 'the result must not shrink');
+  assert.match(ruleFor('.is-compact .battle-dice'), /overflow-x:\s*auto/, 'only the dice scroll');
+  assert.match(ruleFor('.is-compact .is-inline'), /display:\s*none/, 'inline totals step aside');
+
+  for (const container of ['.battle-current', '.battle-row']) {
+    assert.match(
+      ruleFor(container),
+      /overflow:\s*hidden/,
+      `${container} must not scroll as a whole, or the result scrolls away with the dice`
+    );
+  }
+});
+
+test('a big battle can use the full width, but the history panel stays narrow', () => {
+  // outside the history there is room to spread out, so an eight-on-eight is
+  // read in full; inside it the panel is capped, which is what collapses rows
+  assert.match(ruleFor('.hud-battle'), /align-self:\s*stretch/, 'the readout may use it all');
+  assert.match(ruleFor('.battle-current'), /max-width:\s*100%/, 'up to the width available');
+  assert.match(ruleFor('.battle-history'), /width:\s*min\(/, 'the panel is deliberately confined');
+});
+
+test('the stack mark is two wide and four high, as the dice stack on the planet', () => {
+  const mark = ruleFor('.battle-count');
+  assert.match(mark, /grid-template-columns:\s*repeat\(2,/, 'two columns');
+  assert.match(mark, /grid-template-rows:\s*repeat\(4,/, 'four rows');
+});
+
+test('a scrollable dice strip fades over the edges it can scroll towards', () => {
+  // a mask rather than an overlay: what sits behind the strip is a translucent
+  // panel over a moving planet, so there is no solid color to fade into
+  for (const [selector, edges] of [
+    ['.battle-dice.is-faded-right', ['right']],
+    ['.battle-dice.is-faded-left', ['left']],
+    ['.battle-dice.is-faded-left.is-faded-right', ['left', 'right']],
+  ]) {
+    const rule = ruleFor(selector);
+    assert.match(rule, /mask-image:\s*linear-gradient/, `${selector} needs a mask`);
+    assert.match(rule, /-webkit-mask-image/, `${selector} needs the prefixed form too`);
+    assert.equal(
+      (rule.match(/transparent/g) ?? []).length / 2, // the rule is written twice, prefixed
+      edges.length,
+      `${selector} should fade exactly ${edges.length} edge(s)`
+    );
+  }
+});
+
+test('the winning side is marked by a border rather than a glow', () => {
+  const winner = ruleFor('.battle-outcome.is-winner');
+  assert.match(winner, /border-color:\s*#fff/, 'the same signal the stats row uses');
+  assert.doesNotMatch(winner, /text-shadow/, 'a glow over digits makes them harder to read');
+});
+
 test('tiles are sized by a floor, not by their contents alone', () => {
   assert.match(ruleFor('.hud-player'), /min-width:/, 'tiles need a common minimum width');
   assert.match(ruleFor('.hud-player'), /flex:\s*0 0 auto/, 'and must not be squashed in the row');
@@ -101,11 +166,27 @@ test('the page is laid out for phones as well as desktops', () => {
   assert.ok(/@media[^{]*max-width/.test(stylesheet), 'no narrow-screen adjustments at all');
 });
 
-test('the preview page and the game share one stylesheet', () => {
-  // the preview is only worth having if it cannot drift from the real thing
+test('every preview page and the game share one stylesheet', () => {
+  // a preview is only worth having if it cannot drift from the real thing
   const href = '/src/render/hud.css';
   assert.ok(page.includes(href), 'the game loads the shared HUD stylesheet');
-  assert.ok(previewPage.includes(href), 'and so does the preview');
-  assert.ok(!/<style>[\s\S]*\.hud-player/.test(page), 'no HUD rules left inline in the game page');
-  assert.ok(!/<style>[\s\S]*\.hud-player/.test(previewPage), 'nor restyled in the preview');
+  assert.ok(!/<style>[\s\S]*\.hud-player/.test(page), 'no HUD rules left inline in the game page');
+
+  assert.equal(previewPages.length, 2, 'both preview pages are being checked');
+  for (const preview of previewPages) {
+    assert.ok(preview.includes(href), 'every preview loads the shared stylesheet');
+    assert.doesNotMatch(preview, /<style>/, 'preview pages carry no styles of their own');
+    assert.ok(
+      !/<style>[\s\S]*\.hud-player/.test(preview),
+      'a preview must not restyle the HUD, or it stops showing what the game shows'
+    );
+  }
+});
+
+test('every preview page links back to the directory', () => {
+  for (const preview of previewPages) {
+    assert.match(preview, /href="\/preview\/"/, 'each page offers a way back to the index');
+  }
+  assert.match(previewIndex, /id="directory"/, 'and the index has somewhere to render the list');
+  assert.doesNotMatch(previewIndex, /<style>/, 'the directory uses the shared preview stylesheet');
 });

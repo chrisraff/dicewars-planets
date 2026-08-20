@@ -2,14 +2,24 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, relative, sep } from 'node:path';
 
-// Anything whose name marks it as part of the HUD preview page. Vite names
-// entry chunks after their input, so preview.html's JavaScript and CSS come
-// out as `preview-<hash>.js` and friends.
-// paths are normalized to forward slashes by listFiles below
-const PREVIEW_PATTERN = /(^|\/)preview[-.]/i;
+// Anything living under a `preview/` directory, or named `preview.*` /
+// `preview-*`. Paths are normalized to forward slashes by listFiles below.
+const PREVIEW_PATTERN = /(^|\/)preview([-./]|$)/i;
 
 export function findPreviewArtifacts(paths) {
   return paths.filter((path) => PREVIEW_PATTERN.test(path));
+}
+
+/**
+ * Any page other than the game itself.
+ *
+ * This is the check that actually holds the line: the preview pages' script
+ * chunks are named after their entries (`hud-<hash>.js`, `battles-<hash>.js`),
+ * which is indistinguishable from an ordinary chunk — but a page cannot be
+ * reached without its HTML, so it is the HTML that has to be absent.
+ */
+export function findStrayPages(paths) {
+  return paths.filter((path) => path.endsWith('.html') && path !== 'index.html');
 }
 
 export function listFiles(directory, base = directory) {
@@ -33,17 +43,17 @@ function main() {
     process.exit(1);
   }
 
-  const leaked = findPreviewArtifacts(files);
+  const leaked = [...new Set([...findPreviewArtifacts(files), ...findStrayPages(files)])];
   if (leaked.length > 0) {
     console.error(
-      'assert-deployable: the HUD preview page must not be published, but ' +
+      'assert-deployable: the deployed site is the game and nothing else, but ' +
         `dist/ contains:\n  ${leaked.join('\n  ')}\n` +
-        'It should only be built by vite.preview.config.js, into dist-preview/.'
+        'Preview pages are built only by vite.preview.config.js, into dist-preview/.'
     );
     process.exit(1);
   }
 
-  console.log(`assert-deployable: ${files.length} files in dist/, no preview page. OK`);
+  console.log(`assert-deployable: ${files.length} files in dist/, one page, no previews. OK`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) main();

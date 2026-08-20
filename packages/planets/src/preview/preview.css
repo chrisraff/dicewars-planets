@@ -1,0 +1,170 @@
+/* Page furniture shared by every /preview/ page. Deliberately nothing in here
+   touches a .hud-* or .battle-* rule — those come from hud.css, unmodified, so
+   a preview always shows exactly what the game shows. */
+
+html,
+body {
+  margin: 0;
+  background: #0b0b0e;
+  color: #e8e8ea;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 6rem;
+}
+
+h1 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.lede {
+  margin: 0 0 0.75rem;
+  color: #9a9aa2;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-width: 46rem;
+}
+.lede code {
+  color: #d0d0d6;
+}
+
+.siblings {
+  margin: 0 0 2rem;
+  font-size: 0.82rem;
+}
+.siblings a {
+  color: #8fb8ff;
+}
+
+/* ---- a scenario and the stage it plays on ---------------------------- */
+
+.scenario {
+  margin-bottom: 2rem;
+}
+.scenario h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a93;
+  margin: 0 0 0.15rem;
+}
+.scenario p {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: #75757e;
+  max-width: 46rem;
+}
+
+.stage {
+  background: #16161b;
+  border: 1px solid #26262e;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0;
+}
+.stage.is-phone {
+  width: 360px;
+  max-width: 100%;
+}
+.stage.is-narrow {
+  width: 240px;
+  max-width: 100%;
+}
+/* an open history panel is a popover; leave it somewhere to hang */
+.stage.is-open {
+  min-height: 25rem;
+}
+
+.controls {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.controls button {
+  font: inherit;
+  font-size: 0.8rem;
+  color: #e8e8ea;
+  background: #22222a;
+  border: 1px solid #34343e;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+.controls button:hover {
+  background: #2c2c36;
+}
+.count {
+  font-size: 0.8rem;
+  color: #75757e;
+  align-self: center;
+}
+
+/* ---- the die-face grid on the battles page --------------------------- */
+
+.faces {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  grid-template-columns: 5rem repeat(6, auto);
+  justify-content: start;
+  align-items: center;
+}
+.faces .who {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9a9aa2;
+}
+.faces .head {
+  font-size: 0.7rem;
+  color: #75757e;
+  text-align: center;
+}
+.faces .battle-die {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.35rem;
+}
+
+/* ---- the directory at /preview/ -------------------------------------- */
+
+.directory {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.directory a {
+  display: block;
+  padding: 0.9rem 1rem;
+  border: 1px solid #26262e;
+  border-radius: 0.5rem;
+  background: #16161b;
+  color: inherit;
+  text-decoration: none;
+}
+.directory a:hover {
+  border-color: #3c3c48;
+  background: #1b1b21;
+}
+.directory h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #8fb8ff;
+}
+.directory p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #85858e;
+}
