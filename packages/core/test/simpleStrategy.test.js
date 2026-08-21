@@ -1,32 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createInitialState,
   createSimpleStrategy,
   legalAttacksFor,
   isLegalAttack,
   runAiTurn,
   getCurrentPlayerId,
 } from '../src/index.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
-
-function chain(assignments) {
-  const nodeIds = assignments.map(([id]) => id);
-  const edges = nodeIds.slice(1).map((id, i) => [nodeIds[i], id]);
-  return createInitialState({
-    nodeIds,
-    edges,
-    playerIds: ['p1', 'p2'],
-    assignments,
-  });
-}
+import { chainState as chain, rollsOf, seededRng } from './support/index.js';
 
 test('only offers attacks the reducer would accept', () => {
   const state = chain([
@@ -93,9 +74,8 @@ test('an attack reports every die that was rolled, not just the totals', () => {
     ['a', { owner: 'p1', dice: 3 }],
     ['b', { owner: 'p2', dice: 2 }],
   ]);
-  const rolls = [4, 5, 6, 1, 2];
   const { events } = runAiTurn(state, createSimpleStrategy({ rng: seededRng(5) }), {
-    rollDie: () => rolls.shift() ?? 1,
+    rollDie: rollsOf([4, 5, 6, 1, 2]),
   });
 
   const [first] = events;

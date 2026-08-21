@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settingRowView, menuView } from '../src/render/menu.js';
 import {
-  SETTING_DEFINITIONS,
+  MENU_SETTINGS,
   DEFAULT_SETTINGS,
   settingDefinition,
   normalizeSettings,
@@ -59,10 +59,12 @@ test('every row carries what the menu needs to draw it', () => {
   }
 });
 
-test('the menu draws one row per option, in declaration order', () => {
+test('the menu draws one row per offered option, in declaration order', () => {
+  // MENU_SETTINGS rather than every definition: an option can be declared and
+  // carried through the pipeline without being shown to anyone yet
   assert.deepEqual(
     menuView(DEFAULT_SETTINGS).map((row) => row.key),
-    SETTING_DEFINITIONS.map((setting) => setting.key)
+    MENU_SETTINGS.map((setting) => setting.key)
   );
 });
 

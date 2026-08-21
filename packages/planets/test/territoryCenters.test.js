@@ -8,6 +8,7 @@ import {
 import { generateIcosphereCells } from '../src/geometry/icosphere.js';
 import { groupIntoTerritories } from '../src/world/continents.js';
 import { normalize, dot } from '../src/geometry/vec3.js';
+import { seededRng } from '@dicewars/core/test-support';
 
 // A patch of square-grid cells around the north pole, spaced `spacing` apart,
 // with grid adjacency filled in so cell spacing can be measured off them.
@@ -21,14 +22,6 @@ function gridCells(coords, spacing = 0.05) {
       .map((c) => ids.get(key(c)))
       .filter((id) => id !== undefined),
   }));
-}
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
 }
 
 test('uses the projected centroid when it lands within the territory', () => {

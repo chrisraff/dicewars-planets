@@ -1,7 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { pipPositions, PIP_LAYOUTS } from '../src/render/pips.js';
 
 test('each face has as many pips as it is worth', () => {
@@ -48,24 +46,14 @@ test('six is two columns of three, not a ring', () => {
   assert.equal(columns.size, 2, 'both columns of three share an x');
 });
 
+test('the table covers every face a die has, and no more', () => {
+  // both the 3D texture and the flat SVG dice read this one table; that they
+  // read *this* one rather than a copy is checked by scripts/lint-conventions.js
+  assert.deepEqual(Object.keys(PIP_LAYOUTS).sort(), ['1', '2', '3', '4', '5', '6']);
+});
+
 test('an impossible face has no pips rather than blowing up', () => {
   assert.deepEqual(pipPositions(0), []);
   assert.deepEqual(pipPositions(7), []);
   assert.deepEqual(pipPositions(undefined), []);
-});
-
-test('both renderers read this table rather than keeping their own copy', () => {
-  // a die on the planet and the same die in the battle readout have to agree,
-  // which they only do for as long as there is one table
-  assert.equal(Object.keys(PIP_LAYOUTS).length, 6, 'all six faces live here');
-
-  for (const name of ['diceTextures', 'battleReadout']) {
-    const source = readFileSync(
-      fileURLToPath(new URL(`../src/render/${name}.js`, import.meta.url)),
-      'utf8'
-    );
-    assert.match(source, /from '\.\/pips\.js'/, `${name}.js should import the shared layouts`);
-    assert.doesNotMatch(source, /PIP_LAYOUTS\s*=/, `${name}.js has grown its own pip table`);
-    assert.doesNotMatch(source, /0\.27,\s*0\.27/, `${name}.js has pip coordinates inlined`);
-  }
 });

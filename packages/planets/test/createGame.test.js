@@ -1,28 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, AI_TIMING } from '../src/game/createGame.js';
+import { createGame, AI_TIMING, AUTOPLAY } from '../src/game/createGame.js';
 import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng, chainWorld, alwaysRolls } from '@dicewars/core/test-support';
 
 // A four-territory chain: p1 (human) holds a and c, the AI holds b and d.
-function chainWorld(assignments) {
-  const nodeIds = ['a', 'b', 'c', 'd'];
-  return {
-    nodeIds,
-    edges: [['a', 'b'], ['b', 'c'], ['c', 'd']],
-    playerIds: ['p1', 'p2'],
-    assignments,
-  };
-}
-
 const balanced = () =>
   chainWorld([
     ['a', { owner: 'p1', dice: 4 }],
@@ -36,7 +19,6 @@ function advance(game, seconds, step = 1 / 60) {
   for (let t = 0; t < seconds; t += step) game.tick(step);
 }
 
-const alwaysRoll = (value) => () => value;
 
 test('clicking your own territory picks it up, clicking it again puts it down', () => {
   const game = createGame({ world: balanced() });
@@ -69,7 +51,7 @@ test('the selected territory reports exactly the neighbors it may attack', () =>
 });
 
 test('clicking an enemy neighbor starts an attack and reports every die rolled', () => {
-  const game = createGame({ world: balanced(), rollDie: alwaysRoll(6) });
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
   const attacks = [];
   game.on('attack', (a) => attacks.push(a));
 
@@ -84,7 +66,7 @@ test('clicking an enemy neighbor starts an attack and reports every die rolled',
 });
 
 test('the board does not change until the dice have finished rolling', () => {
-  const game = createGame({ world: balanced(), rollDie: alwaysRoll(6) });
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
   game.clickTerritory('a');
   game.clickTerritory('b');
 
@@ -99,7 +81,7 @@ test('the board does not change until the dice have finished rolling', () => {
 });
 
 test('clicks are ignored while the dice are in the air', () => {
-  const game = createGame({ world: balanced(), rollDie: alwaysRoll(6) });
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
   game.clickTerritory('a');
   game.clickTerritory('b');
   game.clickTerritory('c');
@@ -134,7 +116,7 @@ test('the human cannot act on the AI’s turn', () => {
 });
 
 test('the AI takes its own turn and hands play back', () => {
-  const game = createGame({ world: balanced(), rollDie: alwaysRoll(3) });
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(3) });
   game.endTurn();
   assert.equal(game.currentPlayer(), 'p2');
 
@@ -145,7 +127,7 @@ test('the AI takes its own turn and hands play back', () => {
 });
 
 test('the AI’s attacks are animated too, just faster', () => {
-  const game = createGame({ world: balanced(), rollDie: alwaysRoll(3) });
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(3) });
   const attacks = [];
   game.on('attack', (a) => attacks.push(a));
 
@@ -165,7 +147,7 @@ test('the game ends when one player holds everything, and stops accepting input'
       ['c', { owner: 'p1', dice: 8 }],
       ['d', { owner: 'p2', dice: 1 }],
     ]),
-    rollDie: alwaysRoll(6),
+    rollDie: alwaysRolls(6),
   });
   const winners = [];
   game.on('over', (w) => winners.push(w));
@@ -187,7 +169,7 @@ test('the game ends when one player holds everything, and stops accepting input'
 
 test('a whole game plays itself out without stalling', () => {
   // both sides on autopilot: the human seat just ends its turn every time
-  const game = createGame({ world: balanced(), humanPlayerId: null });
+  const game = createGame({ world: balanced(), humanPlayerId: AUTOPLAY });
   let turns = 0;
   game.on('endTurn', () => turns++);
   game.start();
@@ -206,7 +188,7 @@ test('a real generated planet plays through to a winner', () => {
   // nobody at the human seat, so every player is on autopilot
   const game = createGame({
     world,
-    humanPlayerId: null,
+    humanPlayerId: AUTOPLAY,
     rollDie: () => 1 + Math.floor(rng() * 6),
   });
 

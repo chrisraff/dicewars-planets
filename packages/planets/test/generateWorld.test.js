@@ -2,14 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createInitialState, reduce, endTurn } from '@dicewars/core';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { settingDefinition, MAX_PLAYERS } from '../src/game/settings.js';
+import { seededRng } from '@dicewars/core/test-support';
 
 test('a generated planet feeds straight into @dicewars/core', () => {
   const world = generatePlanetWorld({
@@ -50,4 +44,42 @@ test('territory size knobs pass through to the generated territories', () => {
 
   const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
   assert.ok(mean > 4 && mean < 10);
+});
+
+test('every planet size the menu offers builds a world a full table can play', () => {
+  // the menu renders from the definitions, so anything listed there is a thing
+  // a player can pick — including the worst case of the smallest planet and
+  // the largest table, where there has to be ground left for everyone
+  const playerIds = Array.from({ length: MAX_PLAYERS }, (_, i) => `p${i + 1}`);
+
+  for (const { value: subdivisions, label } of settingDefinition('size').choices) {
+    const world = generatePlanetWorld({ subdivisions, playerIds, rng: seededRng(11) });
+    const state = createInitialState(world);
+
+    assert.ok(
+      world.nodeIds.length >= playerIds.length,
+      `${label} has ${world.nodeIds.length} territories for ${playerIds.length} players`
+    );
+    const owners = new Set([...state.nodes.values()].map((n) => n.owner));
+    assert.equal(owners.size, playerIds.length, `${label} left somebody with nothing`);
+
+    // the territory graph has to be one connected piece, or a game on it can
+    // never be won — nobody can reach the far side
+    const seen = new Set([world.nodeIds[0]]);
+    const stack = [world.nodeIds[0]];
+    const adjacency = new Map(world.nodeIds.map((id) => [id, []]));
+    for (const [a, b] of world.edges) {
+      adjacency.get(a).push(b);
+      adjacency.get(b).push(a);
+    }
+    while (stack.length) {
+      for (const next of adjacency.get(stack.pop())) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          stack.push(next);
+        }
+      }
+    }
+    assert.equal(seen.size, world.nodeIds.length, `${label} generated an unreachable island`);
+  }
 });

@@ -1,0 +1,192 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Dice Wars played on a sphere: a procedurally generated planet of hexagonal
+territories, rendered with three.js.
+
+## Commands
+
+```bash
+npm test                                   # every test in every package
+npm run dev                                # vite dev server (--host, so a phone on the LAN can reach it)
+npm run lint                               # the conventions lint on its own
+npm run build                              # lint, site -> dist/, the deployability guard, then the previews
+
+node --test packages/planets/test/settings.test.js       # one file
+node --test --test-name-pattern "banked dice" packages/planets/test/*.test.js   # one test
+```
+
+There is no linter and no build step for tests — they are plain
+`node --test` ESM files with no framework, no transpiler, and no mocking
+library. `npm test` globs `packages/*/test/*.test.js`, so a new test file is
+picked up by existing there.
+
+## Layout
+
+An npm workspace with two packages:
+
+- **`packages/core`** (`@dicewars/core`) — the rules. Pure, dependency-free,
+  and knows nothing about planets, three.js, or the DOM. Its whole surface is
+  `src/index.js`.
+- **`packages/planets`** (`@dicewars/planets`) — the world, the renderer and
+  the interface. Depends on core and three.js.
+
+Core does not know about planets; planets is a consumer of core. Keep it that
+way — a second board shape (the classic flat map) should be able to sit
+alongside `packages/planets` without core changing.
+
+## Core: the rules
+
+State is a plain object, actions are plain objects, and `reduce(state, action,
+deps)` returns `{ state, events }` without mutating anything. Both sources of
+chance arrive through `deps`, so a test or a replay can pin either:
+`deps.rollDie` for the dice a battle is fought with, `deps.rng` for where
+end-of-turn reinforcements land. Reinforcements scatter deliberately — placing
+them in board order piles every die onto the same few territories, game after
+game.
+
+The graph is topology only — which node ids touch which. No coordinates, no
+shape. `setNeighbors`/`updateAdjacency` exist so a world can rewire itself
+between rounds (the planned moon mode) without core learning any geometry.
+
+Terms that recur:
+
+- **node / territory** — one playable area, holding an owner and 1–8 dice.
+- **reserve** — end-of-turn reinforcements with nowhere to land because the
+  player's territories were full. Banked (capped at `MAX_RESERVE`), paid out
+  later. The UI calls these "banked dice".
+- **largest connected region** — what reinforcement is paid on.
+
+`attack` events carry every individual die face (`attackRolls` / `defendRolls`)
+as well as the totals, because the renderer lands the dice on their actual
+values. `ATTACK` also emits `eliminated` when it takes a player's last
+territory.
+
+## Planets: generation, game, render
+
+**`src/geometry/`** builds a Goldberg polyhedron: subdivide an icosahedron,
+take the dual, and every original vertex becomes a pentagon while every
+subdivision vertex becomes a hexagon. `vec3.js` is deliberately plain objects
+rather than three.js `Vector3`, so world generation stays testable under plain
+`node --test`.
+
+**`src/world/`** generates a planet: carve ocean out of the full sphere first
+(leaving a connected land mass), group only the land into territories (so the
+territory graph is connected for free), then rotate the whole thing so the
+strongest ring of territories runs along the equator. `generateWorld.js`
+returns exactly what `createInitialState` needs plus the extra geometry a
+renderer wants.
+
+**`src/game/`** is the layer between core and the screen:
+
+- `createGame.js` — turn flow, selection, when the AI plays. **No three.js**,
+  time arrives via `tick(dt)` rather than a clock, so a hundred turns can be
+  played in a test instantly. It emits events; the renderer listens. Passing
+  `humanPlayerId: AUTOPLAY` leaves nobody in the human seat, which is how a
+  whole match is played out unattended.
+- `session.js` — one match: a world, a game, and everything drawn for it,
+  created from settings and disposed whole. "New game" throws one away and
+  builds the next rather than resetting a dozen things.
+- `settings.js` — every configurable option declared once as data
+  (`SETTING_DEFINITIONS`). The menu renders itself from that list, so a new
+  option is added here and nowhere else.
+
+  Two flags say how finished an option is. `available: false` means it is
+  plumbed but its feature is unbuilt: the menu greys it out with its `note`
+  *and* `normalizeSettings` pins it to its default, so nothing downstream is
+  ever handed a setting it cannot honor (this is how `moon` sits).
+  `hidden: true` means the menu does not draw it at all — for something that
+  works but is not ready to be offered, where a greyed-out row would advertise
+  a half-finished feature rather than promise a coming one (this is how `size`,
+  the planet's subdivision count, sits). The menu and its preview render from
+  `MENU_SETTINGS`, which is `SETTING_DEFINITIONS` minus the hidden ones;
+  everything else in the pipeline still sees all of them.
+
+  Settings are parsed **once, at the edge** — `resolveSettings` for the page,
+  the menu for anything the player picks. Everything downstream
+  (`playerIdsFor`, `resolveStartSeat`, `subdivisionsFor`, `createSession`)
+  takes an already-normalized object and trusts it. Re-validating deeper in
+  would mean no caller could be sure which layer had the last word.
+
+**`src/render/`** — pure decisions are split out from DOM and three.js
+plumbing wherever it is worth testing. `hud.js` exports `playerPanelView`,
+`turnIndicatorView` and `outcomeView` as pure functions and applies them just
+below; `rollTimeline.js` is the animation's timing with no three.js in it at
+all. Modules importable without a DOM are testable, so keep `document` access
+inside functions rather than at module top level.
+
+Two constants are shared deliberately and must not be duplicated:
+`pips.js` (where the dots sit on a die face) is read by both the 3D dice
+texture and the flat SVG dice in the battle readout, and `diceStacks.js`
+`stackSlots` (four to a column, then a new column) is read by both the dice on
+the planet and the stack marks in the readout. `scripts/lint-conventions.js`
+asserts neither has grown a second copy.
+
+## Rendering conventions
+
+- The planet mesh gives each cell its own private vertices so a cell can carry
+  one flat color. That layout also means a cell owns a contiguous run of
+  vertices and triangles, which is what makes both picking (`faceCellIds`) and
+  in-place recoloring (`cellVertexRanges`) possible.
+- Only recolor what changed, and remember that `needsUpdate` on a three.js
+  `BufferAttribute` is **write-only** — it reads back as `undefined`, so
+  guarding on it silently skips the GPU upload and the planet keeps whatever
+  colors it was first built with.
+- The HUD is DOM over the canvas, not text in the scene. `#hud` ignores the
+  pointer as a whole; individual controls opt back in, so dragging anywhere
+  else still orbits the planet.
+- One stylesheet, `src/render/hud.css`, shared by the game and every preview
+  page.
+
+## Previews
+
+`/preview/` is a directory of development pages showing each piece of the
+interface in every state it reaches, without playing a game to get there. They
+use the real components and the real stylesheet — a preview that can drift
+from the game is worse than none.
+
+- Pages live in `preview/*.html` with their scripts in `src/preview/`.
+- `src/preview/pages.js` is the manifest; the directory page renders from it,
+  and tests check the manifest and the folder still agree.
+- Preview CSS styles the caption, never the exhibit. A descendant selector
+  rooted at the preview's own furniture (`.scenario p`) outranks the game's own
+  rules on specificity and will silently restyle what the page exists to show.
+  Use `>`. The conventions lint checks this.
+
+**Previews are never deployed.** `npm run build` puts the site in `dist/`,
+asserts nothing preview-shaped got in (and that `index.html` is the only page),
+then compiles the previews separately into `dist-preview/` purely so a break
+fails the build. Point GitHub Pages at `dist/`.
+
+## Testing style
+
+Tests are written to say what the code should do and why, not to restate the
+implementation. A few patterns worth continuing:
+
+- Prefer testing a claim the implementation does not itself guarantee — e.g.
+  `readableTextColor` picks the better of two inks, and the test asserts the
+  better one actually clears WCAG AA across the whole palette.
+- When fixing a bug, check the new test actually fails against the old code.
+- Shared fixtures live in `packages/core/test/support/` — `seededRng`,
+  `rollsOf`, `chainState`/`chainWorld`. Planets reaches them through the
+  `@dicewars/core/test-support` export, so there is one seeded generator in the
+  repo rather than one per test file.
+
+## Conventions lint
+
+`packages/planets/scripts/lint-conventions.js` holds the checks that read the
+source as *text*: a class agreeing with the stylesheet that makes it visible, a
+shared constant not having grown a second copy, a preview not restyling its own
+exhibit, the CSS invariants behind the layout.
+
+These deliberately do **not** live in `npm test`. They are coupled to how the
+code is written rather than to what it does, so a rename or a reformat can fail
+one without anything being broken — and a test suite that cries wolf stops
+being read. `npm run build` runs them, so the site still cannot be built after
+drifting.
+
+The file is in two halves. The structural checks guard things nothing else
+connects. The appearance checks assert exact CSS declarations and are the
+brittle ones; the right home for them is a couple of headless-browser layout
+assertions, and when that exists that block should go rather than grow.

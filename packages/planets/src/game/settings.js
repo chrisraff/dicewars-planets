@@ -7,10 +7,20 @@ export const MAX_PLAYERS = 8;
  * option — difficulty, board size, whatever comes next — is added here and
  * appears in both without either being touched.
  *
- * `available: false` means the option is real and carried through the
- * pipeline, but the thing it controls has not been built yet: the menu shows
- * it greyed out with its note, and `normalizeSettings` refuses to turn it on,
- * so nothing downstream can be handed a setting it cannot honor.
+ * Two flags say how finished an option is, and they answer different
+ * questions.
+ *
+ * `available: false` — the option is real and carried through the pipeline,
+ * but the thing it controls has not been built. The menu greys it out and
+ * shows its `note`, which is the point: it tells a player what is coming.
+ * `normalizeSettings` pins it to its default, so nothing downstream can be
+ * handed a setting the game cannot honor. This is how `moon` sits.
+ *
+ * `hidden: true` — the menu does not draw it at all. For an option that works
+ * but is not ready to be offered, where a greyed-out row would be advertising
+ * something half-finished rather than promising something to come. It is still
+ * declared here, still normalized, and still read by the game, so it stays one
+ * flag away from being offered. This is how `size` sits.
  */
 export const SETTING_DEFINITIONS = [
   {
@@ -40,6 +50,26 @@ export const SETTING_DEFINITIONS = [
     ],
   },
   {
+    key: 'size',
+    label: 'Planet',
+    help: 'How much ground there is to fight over. A bigger planet is a longer '
+      + 'game and takes a moment more to build.',
+    kind: 'choice',
+    default: 3,
+    available: false,
+    hidden: true,
+    // subdivisions of the icosahedron the globe is built from, so the jump
+    // from one to the next is roughly four times the territories: 16, 55, 238.
+    // The generator handles all three; what needs work is the game on them —
+    // starting dice, territory size and ocean all want different values on a
+    // small planet than on a large one.
+    choices: [
+      { value: 2, label: 'Small' },
+      { value: 3, label: 'Medium' },
+      { value: 4, label: 'Large' },
+    ],
+  },
+  {
     key: 'moon',
     label: 'Moon',
     help: 'A moon passes overhead, bridging the territories it covers as it goes.',
@@ -49,6 +79,12 @@ export const SETTING_DEFINITIONS = [
     note: 'Not built yet',
   },
 ];
+
+/**
+ * The options the menu draws. Everything in `SETTING_DEFINITIONS` is still
+ * parsed, stored and read — this is only about what a player is shown.
+ */
+export const MENU_SETTINGS = SETTING_DEFINITIONS.filter((setting) => !setting.hidden);
 
 const byKey = new Map(SETTING_DEFINITIONS.map((setting) => [setting.key, setting]));
 
@@ -107,14 +143,19 @@ export function normalizeSettings(raw = {}) {
 }
 
 /**
- * Which seat in the turn order the player takes, 0-based, for these settings.
+ * Which seat in the turn order the player takes, 0-based.
  *
  * `early` and `late` are halves rounded up, so with an odd number of players
  * the middle seat belongs to both — better than a seat that neither range can
  * ever land on.
+ *
+ * Takes settings that have already been through `normalizeSettings`, as
+ * everything below this line does: settings are parsed once, at the edge —
+ * `resolveSettings` for the page, and the menu for anything the player picks —
+ * and are a settled answer from then on. Re-validating here would mean no
+ * caller could ever be sure which of the two had the last word.
  */
-export function resolveStartSeat(settings, rng = Math.random) {
-  const { players, start } = normalizeSettings(settings);
+export function resolveStartSeat({ players, start }, rng = Math.random) {
   const pick = (from, count) => from + Math.min(count - 1, Math.floor(rng() * count));
 
   if (start === 'any') return pick(0, players);
@@ -197,7 +238,15 @@ export function settingDefinition(key) {
   return byKey.get(key);
 }
 
-/** The player ids a game with these settings is played by. */
-export function playerIdsFor(settings) {
-  return Array.from({ length: normalizeSettings(settings).players }, (_, i) => `p${i + 1}`);
+/** The player ids a game with these (normalized) settings is played by. */
+export function playerIdsFor({ players }) {
+  return Array.from({ length: players }, (_, i) => `p${i + 1}`);
+}
+
+/**
+ * How finely the globe is subdivided for these (normalized) settings — the one
+ * number the world generator needs out of the whole set.
+ */
+export function subdivisionsFor({ size }) {
+  return size;
 }

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SETTING_DEFINITIONS,
+  MENU_SETTINGS,
   DEFAULT_SETTINGS,
   MIN_PLAYERS,
   MAX_PLAYERS,
@@ -12,6 +13,7 @@ import {
   readStoredSettings,
   writeStoredSettings,
   playerIdsFor,
+  subdivisionsFor,
   settingDefinition,
   resolveStartSeat,
   seatsInRange,
@@ -46,7 +48,14 @@ test('every option declares what the menu needs to draw it', () => {
     assert.notEqual(setting.default, undefined, `${setting.key} needs a default`);
     if (setting.kind === 'choice') assert.ok(setting.choices.length > 1);
     if (setting.kind === 'seat') assert.ok(setting.modes.length > 1, `${setting.key} needs ranges`);
-    if (!setting.available) assert.ok(setting.note, `${setting.key} should say why it is off`);
+    // a greyed-out row has to say why it is greyed out; a hidden one is never
+    // drawn, so a note on it would be text nobody can read
+    if (!setting.available && !setting.hidden) {
+      assert.ok(setting.note, `${setting.key} is greyed out and should say why`);
+    }
+    if (setting.hidden) {
+      assert.equal(setting.note, undefined, `${setting.key} is hidden, so its note is dead text`);
+    }
   }
 });
 
@@ -150,8 +159,60 @@ test('stored settings that are out of range are still normalized', () => {
 test('player ids match the count asked for', () => {
   assert.deepEqual(playerIdsFor({ players: 3 }), ['p1', 'p2', 'p3']);
   assert.equal(playerIdsFor({ players: MAX_PLAYERS }).length, MAX_PLAYERS);
-  assert.equal(playerIdsFor({}).length, DEFAULT_SETTINGS.players, 'and defaults when unset');
   assert.equal(new Set(playerIdsFor({ players: 8 })).size, 8, 'ids are unique');
+
+  // filling in what was not asked for is normalizeSettings' job and nobody
+  // else's, so that there is one answer to what a missing option means
+  assert.equal(playerIdsFor(normalizeSettings({})).length, DEFAULT_SETTINGS.players);
+});
+
+// --- how big a planet ------------------------------------------------------
+
+test('planet size is carried through as the subdivision the generator wants', () => {
+  assert.equal(subdivisionsFor({ size: 2 }), 2);
+  assert.equal(subdivisionsFor(normalizeSettings({})), DEFAULT_SETTINGS.size);
+});
+
+test('a hidden option cannot be set from a URL or from stale storage either', () => {
+  // hiding it from the menu is not the guarantee — the pipeline is, exactly as
+  // for an unavailable one, or a link could hand the game an untuned planet
+  const size = settingDefinition('size');
+  assert.equal(size.hidden, true, 'this test is about a hidden option');
+  assert.equal(normalizeSettings({ size: 4 }).size, size.default);
+  assert.equal(normalizeSettings({ size: '2' }).size, size.default);
+  assert.equal(resolveSettings({ search: '?size=4' }).size, size.default);
+});
+
+test('a hidden option is still declared, normalized and readable', () => {
+  // the point of hiding rather than deleting: it stays one flag from being
+  // offered, and nothing downstream has to change when it is
+  assert.ok(SETTING_DEFINITIONS.some((setting) => setting.key === 'size'));
+  assert.equal(DEFAULT_SETTINGS.size, settingDefinition('size').default);
+  assert.equal(subdivisionsFor(normalizeSettings({})), settingDefinition('size').default);
+});
+
+test('every size the setting lists is one the generator could build', () => {
+  // they are not offered yet, but they are what will be offered — a value that
+  // cannot make a planet should not be sitting in the list waiting
+  for (const { value } of settingDefinition('size').choices) {
+    assert.ok(Number.isInteger(value) && value >= 1, `subdivision ${value} is not buildable`);
+  }
+});
+
+// --- what the menu is allowed to draw --------------------------------------
+
+test('the menu is offered every option except the hidden ones', () => {
+  const hidden = SETTING_DEFINITIONS.filter((setting) => setting.hidden).map((s) => s.key);
+  assert.ok(hidden.includes('size'), 'size is the one being held back');
+
+  const offered = MENU_SETTINGS.map((setting) => setting.key);
+  for (const key of hidden) assert.ok(!offered.includes(key), `${key} should not be drawn`);
+  assert.equal(offered.length, SETTING_DEFINITIONS.length - hidden.length);
+});
+
+test('a hidden option keeps its place in declaration order for the rest', () => {
+  const declared = SETTING_DEFINITIONS.filter((setting) => !setting.hidden).map((s) => s.key);
+  assert.deepEqual(MENU_SETTINGS.map((setting) => setting.key), declared);
 });
 
 // --- where you sit in the turn order --------------------------------------

@@ -6,14 +6,7 @@ import {
   stackColumnCount,
   MAX_DICE_PER_STACK,
 } from '../src/render/diceStacks.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 test('every die gets exactly one placement', () => {
   for (let n = 1; n <= 8; n++) {

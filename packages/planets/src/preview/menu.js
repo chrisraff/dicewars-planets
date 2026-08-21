@@ -1,7 +1,7 @@
 import { createMenu } from '../render/menu.js';
 import {
   DEFAULT_SETTINGS,
-  SETTING_DEFINITIONS,
+  MENU_SETTINGS,
   normalizeSettings,
   settingsToQuery,
   playerIdsFor,
@@ -108,7 +108,7 @@ const summary = document.createElement('section');
 summary.className = 'scenario';
 summary.innerHTML = `
   <h2>Declared options</h2>
-  <p>Everything in <code>SETTING_DEFINITIONS</code>. The menu renders from this list, so adding
+  <p>Everything in <code>MENU_SETTINGS</code>. The menu renders from this list, so adding
      an option here — difficulty, board size — puts it in the menu and in the preview at once,
      with no markup to write.</p>
   <div class="stage"><ul class="option-list"></ul></div>
@@ -116,7 +116,7 @@ summary.innerHTML = `
 scenarios.append(summary);
 
 const list = summary.querySelector('.option-list');
-for (const setting of SETTING_DEFINITIONS) {
+for (const setting of MENU_SETTINGS) {
   const item = document.createElement('li');
   const state = setting.available ? 'available' : `unavailable — ${setting.note}`;
   const values =

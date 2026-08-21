@@ -16,6 +16,14 @@ export const AI_TIMING = { aim: 0.12, roll: 0.45, read: 0.25 };
 const AI_THINK_PAUSE = 0.25; // beat between one AI move and the next
 
 /**
+ * Nobody in the human seat, so every player is the AI and the match plays
+ * itself. This is how a whole game is exercised in a test, and how a demo
+ * runs unattended — a value that matches no player id says that outright,
+ * where a bare `humanPlayerId: null` read like something left unfinished.
+ */
+export const AUTOPLAY = Symbol('autoplay');
+
+/**
  * Drives the game: whose turn it is, what the human has selected, when an
  * attack is playing out, and when the AI takes its turn. Knows nothing about
  * three.js — it emits events and the renderer listens, which is what lets the
@@ -31,7 +39,14 @@ export function createGame({
   timing = DEFAULT_TIMING,
   aiTiming = AI_TIMING,
   rollDie,
+  rng,
 } = {}) {
+  // the two sources of chance in the rules; left out, core falls back to
+  // Math.random, which is what a real game wants
+  const deps = {};
+  if (rollDie) deps.rollDie = rollDie;
+  if (rng) deps.rng = rng;
+
   let state = createInitialState(world);
   let selection = null;
   let pending = null; // the resolved-but-not-yet-shown result of an attack
@@ -66,7 +81,7 @@ export function createGame({
   }
 
   function beginAttack(from, to) {
-    const result = reduce(state, attack(from, to), rollDie ? { rollDie } : {});
+    const result = reduce(state, attack(from, to), deps);
     const event = result.events.find((e) => e.type === 'attack');
     const beats = timingFor(currentPlayer());
 
@@ -92,7 +107,7 @@ export function createGame({
   }
 
   function finishTurn() {
-    const { state: next, events } = reduce(state, endTurnAction(), rollDie ? { rollDie } : {});
+    const { state: next, events } = reduce(state, endTurnAction(), deps);
     state = next;
     setSelection(null);
 

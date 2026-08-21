@@ -39,8 +39,10 @@ function advanceTurn(state) {
   return { ...state, currentTurnIndex: idx, phase: 'attack' };
 }
 
-// Pure: (state, action) -> { state, events }. `deps.rollDie` lets callers
-// (tests, replays) inject deterministic dice.
+// Pure: (state, action) -> { state, events }. `deps` carries the two sources
+// of chance in the rules, so a test or a replay can pin either: `deps.rollDie`
+// for the dice a battle is fought with, `deps.rng` for where end-of-turn
+// reinforcements land.
 export function reduce(state, action, deps = {}) {
   switch (action.type) {
     case 'ATTACK': {
@@ -67,7 +69,7 @@ export function reduce(state, action, deps = {}) {
 
     case 'END_TURN': {
       const playerId = getCurrentPlayerId(state);
-      const { state: reinforced, earned } = applyReinforcement(state, playerId);
+      const { state: reinforced, earned } = applyReinforcement(state, playerId, deps);
       const advanced = advanceTurn(reinforced);
 
       const events = [{ type: 'endTurn', playerId, earned }];

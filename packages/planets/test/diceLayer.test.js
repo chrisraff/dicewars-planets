@@ -3,14 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createDiceLayer, dieTumble, surfaceFrame } from '../src/render/diceLayer.js';
 import { PIP_FACE_NORMALS, MAX_DICE_PER_STACK } from '../src/render/diceStacks.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 // Two single-cell territories on opposite sides of the planet, so mount
 // points and surface normals are exactly known.

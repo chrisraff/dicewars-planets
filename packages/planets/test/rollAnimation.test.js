@@ -5,14 +5,7 @@ import { createDiceLayer } from '../src/render/diceLayer.js';
 import { createRollAnimation } from '../src/render/rollAnimation.js';
 import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { PIP_FACE_NORMALS } from '../src/render/diceStacks.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 const world = {
   cells: [

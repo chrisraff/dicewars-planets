@@ -26,7 +26,7 @@ export function resolveAttack(nodes, { from, to }, { rollDie = defaultRollDie } 
 
   const next = new Map(nodes);
   if (attackerWins) {
-    const movingDice = Math.min(attacker.dice - 1, MAX_DICE_PER_NODE);
+    const movingDice = attacker.dice - 1;
     next.set(from, { ...attacker, dice: 1 });
     next.set(to, { owner: attacker.owner, dice: movingDice });
   } else {
@@ -52,28 +52,43 @@ export function resolveAttack(nodes, { from, to }, { rollDie = defaultRollDie } 
 // End-of-turn reinforcement: the player earns one die per territory in their
 // largest connected region, banked in `reserve` (capped) then handed out to
 // under-full owned territories.
-export function applyReinforcement(state, playerId) {
+//
+// Where the dice land is drawn from `deps.rng`, for the same reason the dice
+// themselves are: walking the territories in board order would pile every
+// reinforcement onto the same few territories, every turn, every game.
+export function applyReinforcement(state, playerId, { rng = Math.random } = {}) {
   const player = state.players.get(playerId);
   const earned = largestConnectedRegionSize(state, playerId);
 
   let reserve = Math.min(player.reserve + earned, MAX_RESERVE);
   const nodes = new Map(state.nodes);
-  const ownedIds = [...nodes].filter(([, n]) => n.owner === playerId).map(([id]) => id);
 
-  let i = 0;
-  while (reserve > 0 && ownedIds.length > 0) {
-    const id = ownedIds[i % ownedIds.length];
+  // the territories a die could actually land on right now
+  const withRoom = [];
+  for (const [id, node] of nodes) {
+    if (node.owner === playerId && node.dice < MAX_DICE_PER_NODE) withRoom.push(id);
+  }
+
+  while (reserve > 0 && withRoom.length > 0) {
+    // `Math.min` because an injected rng is only promised to be in [0, 1] —
+    // a generator that can return exactly 1 would otherwise index off the end
+    const pick = Math.min(withRoom.length - 1, Math.floor(rng() * withRoom.length));
+    const id = withRoom[pick];
     const node = nodes.get(id);
-    if (node.dice < MAX_DICE_PER_NODE) {
-      nodes.set(id, { ...node, dice: node.dice + 1 });
-      reserve--;
-    }
-    i++;
-    if (i % ownedIds.length === 0 && ownedIds.every((id) => nodes.get(id).dice >= MAX_DICE_PER_NODE)) {
-      break; // everything is full; whatever's left sits in reserve
+    const dice = node.dice + 1;
+
+    nodes.set(id, { ...node, dice });
+    reserve--;
+
+    // full now, so it is out of the running — swap-with-last keeps this O(1)
+    // and the order of what remains does not matter, since the pick is random
+    if (dice >= MAX_DICE_PER_NODE) {
+      withRoom[pick] = withRoom[withRoom.length - 1];
+      withRoom.pop();
     }
   }
 
+  // anything that could not land stays banked for a later turn
   const players = new Map(state.players);
   players.set(playerId, { ...player, reserve });
 

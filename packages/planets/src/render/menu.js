@@ -1,5 +1,5 @@
 import {
-  SETTING_DEFINITIONS,
+  MENU_SETTINGS,
   DEFAULT_SETTINGS,
   normalizeSettings,
   seatsInRange,
@@ -69,7 +69,7 @@ export function settingRowView(setting, value, context = {}) {
   };
 }
 
-export function menuView(settings, definitions = SETTING_DEFINITIONS) {
+export function menuView(settings, definitions = MENU_SETTINGS) {
   const resolved = normalizeSettings(settings);
   return definitions.map((setting) => settingRowView(setting, resolved[setting.key], resolved));
 }
@@ -218,7 +218,7 @@ export function createMenu(root, { onStart, onResume } = {}) {
 
   const builders = { toggle: buildToggle, seat: buildSeats, choice: buildChoice };
 
-  for (const setting of SETTING_DEFINITIONS) {
+  for (const setting of MENU_SETTINGS) {
     const row = settingRowView(setting, setting.default, { players: DEFAULT_SETTINGS.players });
 
     const item = document.createElement('div');

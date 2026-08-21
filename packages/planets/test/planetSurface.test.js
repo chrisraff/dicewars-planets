@@ -5,14 +5,7 @@ import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createPlanetSurface } from '../src/render/planetSurface.js';
 import { assignPlayerColors, SELECTION_COLOR } from '../src/render/palette.js';
 import { highlightsFor } from '../src/render/highlights.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 const playerIds = ['p1', 'p2'];
 

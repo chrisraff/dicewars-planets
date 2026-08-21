@@ -2,14 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateIcosphereCells } from '../src/geometry/icosphere.js';
 import { carveOceans } from '../src/world/oceans.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 function isConnected(ids, cellsById) {
   const set = new Set(ids);

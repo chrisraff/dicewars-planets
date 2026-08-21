@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "src/index.js",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build && node scripts/assert-deployable.js && npm run build:preview",
+    "build": "npm run lint && vite build && node scripts/assert-deployable.js && npm run build:preview",
     "build:site": "vite build",
     "build:preview": "vite build --config vite.preview.config.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "node scripts/lint-conventions.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@dicewars/core": "*",

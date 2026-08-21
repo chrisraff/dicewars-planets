@@ -4,14 +4,7 @@ import { generateIcosphereCells } from '../src/geometry/icosphere.js';
 import { groupIntoTerritories } from '../src/world/continents.js';
 import { buildTerritoryBoundaries } from '../src/render/buildTerritoryBoundaries.js';
 import { length } from '../src/geometry/vec3.js';
-
-function seededRng(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
+import { seededRng } from '@dicewars/core/test-support';
 
 function countExpectedBoundaryEdges(cells, cellTerritory) {
   let count = 0;
