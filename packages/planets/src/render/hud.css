@@ -403,6 +403,13 @@
   box-shadow: 0 0 0.5rem rgba(255, 255, 255, 0.35);
   flex: 0 0 auto;
 }
+.hud-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hud-menu,
 .hud-end-turn {
   pointer-events: auto;
   font: inherit;
@@ -417,24 +424,81 @@
   cursor: pointer;
   backdrop-filter: blur(2px);
 }
+.hud-menu:hover,
 .hud-end-turn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
+.hud-menu:active,
 .hud-end-turn:active:not(:disabled) { background: rgba(255, 255, 255, 0.3); }
 .hud-end-turn:disabled { opacity: 0.3; cursor: default; }
 
+/* the way out is always available, but quieter than the turn you are taking */
+.hud-menu {
+  font-weight: 500;
+  opacity: 0.75;
+  padding-left: 0.8rem;
+  padding-right: 0.8rem;
+}
+.hud-menu:hover { opacity: 1; }
+
 /* ---- winner banner ---------------------------------------------- */
 
+/* The banner interrupts play: it is the one thing that gets the screen to
+   itself, so a win or a knockout is not something you have to notice. */
 .hud-banner {
   position: absolute;
   inset: 0;
-  display: none;
+  z-index: 2;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(2rem, 9vw, 3.5rem);
-  font-weight: 700;
+  padding: 1rem;
+  pointer-events: auto;
+  background: radial-gradient(ellipse at center, rgba(2, 2, 5, 0.55), rgba(2, 2, 5, 0.85));
+}
+.hud-banner[hidden] { display: none; }
+
+.hud-banner-card {
   text-align: center;
+  max-width: min(24rem, 100%);
+}
+
+.hud-banner-title {
+  margin: 0 0 0.4rem;
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1.05;
   text-shadow: 0 0 1.5rem #000;
 }
-.hud-banner.is-shown { display: flex; }
+.hud-banner-detail {
+  margin: 0 0 1.4rem;
+  font-size: 0.92rem;
+  color: #b4b4bd;
+  text-shadow: 0 0 0.6rem #000;
+}
+
+.hud-banner-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hud-banner-action {
+  font: inherit;
+  font-weight: 600;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.hud-banner-action:hover { background: rgba(255, 255, 255, 0.18); }
+.hud-banner-action.is-primary {
+  color: #101014;
+  background: #f2f2f4;
+  border-color: #fff;
+}
+.hud-banner-action.is-primary:hover { background: #fff; }
 
 /* ---- narrow screens ---------------------------------------------- */
 
@@ -447,6 +511,8 @@
   .hud-player-name { font-size: 0.55rem; }
   .hud-player-reserve { font-size: 0.66rem; right: 0.15rem; }
   .hud-turn { font-size: 0.85rem; }
+  .hud-banner-actions { flex-direction: column-reverse; }
+  .hud-banner-action { width: 100%; }
 }
 
 /* landscape phones: very little vertical room, so shrink the chrome */
@@ -455,9 +521,235 @@
   .hud-players { padding-top: calc(var(--safe-top) + 0.35rem); padding-bottom: 0.35rem; }
   .hud-player-territories { font-size: 1.1rem; }
   .hud-controls { padding-top: 0.4rem; padding-bottom: calc(var(--safe-bottom) + 0.4rem); }
-  .hud-end-turn { min-height: 2.25rem; padding: 0.35rem 0.9rem; }
+  .hud-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hud-menu,
+.hud-end-turn { min-height: 2.25rem; padding: 0.35rem 0.9rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hud-player { transition: none; }
+}
+
+/* ---- the setup menu ---------------------------------------------------- */
+
+#menu {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 1rem) calc(var(--safe-right) + 1rem)
+           calc(var(--safe-bottom) + 1rem) calc(var(--safe-left) + 1rem);
+  background: rgba(4, 4, 8, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+#menu[hidden] { display: none; }
+
+.menu-panel {
+  width: min(26rem, 100%);
+  box-sizing: border-box;
+  padding: 1.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.7rem;
+  background: rgba(14, 14, 19, 0.96);
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.55);
+}
+
+.menu-title {
+  margin: 0 0 1.2rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.menu-settings {
+  display: grid;
+  gap: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.menu-row {
+  display: grid;
+  gap: 0.5rem;
+}
+.menu-row.is-disabled { opacity: 0.45; }
+
+.menu-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+/* what an option is waiting on, said plainly rather than left a mystery */
+.menu-row-note {
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a93;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.3rem;
+}
+.menu-row-help {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #9a9aa2;
+}
+
+.menu-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.menu-choice {
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.35rem;
+  /* a comfortable touch target, not just a mouse target */
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  cursor: pointer;
+}
+.menu-choice:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.menu-choice.is-selected {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: #fff;
+  color: #101014;
+}
+.menu-choice:disabled { cursor: default; }
+
+/* ---- the turn order, as a row of seats --------------------------------- */
+
+.menu-seats {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* the seats themselves: the whole table, left to right, with your place on it */
+.menu-seat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.menu-seat {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--seat-ink);
+  background: var(--seat-color);
+  border: 2px solid transparent;
+  border-radius: 0.35rem;
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  cursor: pointer;
+  /* a seat you have not chosen still shows its color, just muted, so the row
+     always reads as the table rather than as a set of empty buttons */
+  opacity: 0.32;
+  transition: opacity 120ms ease, border-color 120ms ease;
+}
+.menu-seat:hover { opacity: 0.6; }
+/* covered by the range in force — one of the seats you might land in */
+.menu-seat.is-in-range { opacity: 0.72; }
+/* claimed outright, marked the way the stats row marks whose turn it is */
+.menu-seat.is-picked {
+  opacity: 1;
+  border-color: #fff;
+}
+
+.menu-mode {
+  min-width: 0;
+  min-height: 2.2rem;
+  padding: 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.menu-toggle {
+  justify-self: start;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.menu-toggle:disabled { cursor: default; }
+.menu-toggle-track {
+  display: block;
+  width: 2.9rem;
+  height: 1.6rem;
+  padding: 0.15rem;
+  box-sizing: border-box;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 140ms ease;
+}
+.menu-toggle-knob {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #d8d8de;
+  transition: transform 140ms ease, background 140ms ease;
+}
+.menu-toggle.is-on .menu-toggle-track { background: rgba(255, 255, 255, 0.85); }
+.menu-toggle.is-on .menu-toggle-knob {
+  background: #101014;
+  transform: translateX(1.3rem);
+}
+
+.menu-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+.menu-start,
+.menu-resume {
+  font: inherit;
+  font-weight: 600;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+.menu-start {
+  color: #101014;
+  background: #f2f2f4;
+  border: 1px solid #fff;
+}
+.menu-start:hover { background: #fff; }
+.menu-resume {
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+.menu-resume:hover { background: rgba(255, 255, 255, 0.16); }
+.menu-resume[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  .menu-panel { padding: 1.1rem; }
+  .menu-title { font-size: 1.1rem; margin-bottom: 1rem; }
+  .menu-actions { flex-direction: column-reverse; }
+  .menu-actions button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-toggle-track,
+  .menu-toggle-knob,
+  .menu-seat { transition: none; }
 }

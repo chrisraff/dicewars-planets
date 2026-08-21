@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — menu preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Setup menu</h1>
+      <p class="lede">
+        The menu built by the real <code>createMenu</code>, from the real
+        <code>SETTING_DEFINITIONS</code> — so every option declared in
+        <code>settings.js</code> shows up here without this page being touched.
+        The panels below are live: change a setting and the readout underneath
+        shows what the settings pipeline makes of it.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/menu.js"></script>
+  </body>
+</html>

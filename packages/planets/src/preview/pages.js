@@ -6,6 +6,20 @@
  */
 export const PREVIEW_PAGES = [
   {
+    href: '/preview/menu.html',
+    title: 'Setup menu',
+    description:
+      'The game-setup menu in each state it opens in — first visit, mid-game, and phone width — '
+      + 'plus a live panel showing what the settings pipeline makes of your choices.',
+  },
+  {
+    href: '/preview/endgame.html',
+    title: 'Endings & knockouts',
+    description:
+      'Where play stops — winning, losing, and being knocked out of a game that carries on '
+      + 'without you — with the turn indicator each one leaves behind.',
+  },
+  {
     href: '/preview/hud.html',
     title: 'HUD & player stats',
     description:

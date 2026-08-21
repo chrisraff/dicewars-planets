@@ -10,9 +10,12 @@ import { fileURLToPath } from 'node:url';
 const read = (relative) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
-// the HUD's markup is split across these two, and both draw on the same sheet
-const hudSource = read('../src/render/hud.js') + read('../src/render/battleReadout.js');
+// the interface's markup is split across these, and they all draw on one sheet
+const hudSource = ['hud', 'battleReadout', 'menu']
+  .map((module) => read(`../src/render/${module}.js`))
+  .join('\n');
 const stylesheet = read('../src/render/hud.css');
+const previewStyles = read('../src/preview/preview.css');
 const page = read('../index.html');
 const previewPages = ['hud', 'battles'].map((page) => read(`../preview/${page}.html`));
 const previewIndex = read('../preview/index.html');
@@ -189,4 +192,44 @@ test('every preview page links back to the directory', () => {
   }
   assert.match(previewIndex, /id="directory"/, 'and the index has somewhere to render the list');
   assert.doesNotMatch(previewIndex, /<style>/, 'the directory uses the shared preview stylesheet');
+});
+
+// A preview stage contains the game's own markup. A descendant selector rooted
+// at the preview's own furniture — `.scenario p` — reaches straight into it and
+// outranks `.hud-banner-title` on specificity, silently restyling the very
+// thing the preview exists to show. `.scenario > p` cannot.
+test('preview furniture styles the caption, never the exhibit', () => {
+  const containers = ['.scenario', '.stage', '.menu-host', '.hud-host'];
+  const reaching = [];
+
+  const SELECTOR = new RegExp('^([^@{}\\n][^{}]*)\\{', 'gm');
+  for (const [, selector] of previewStyles.matchAll(SELECTOR)) {
+    for (const part of selector.split(',')) {
+      const trimmed = part.trim();
+      for (const container of containers) {
+        // `.scenario > h2` is fine; `.scenario h2` reaches arbitrarily deep
+        if (trimmed.startsWith(`${container} `) && !trimmed.startsWith(`${container} >`)) {
+          reaching.push(trimmed);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    reaching.filter((selector) => !selector.includes('.battle-die')),
+    [],
+    'these reach into a stage and can restyle the game markup inside it'
+  );
+});
+
+test('the outcome banner reads as a title whichever ending it is', () => {
+  // the eliminated banner once had a size of its own, which made it the only
+  // one that looked like a heading when a preview rule stole the base size
+  const title = ruleFor('.hud-banner-title');
+  assert.match(title, /font-size:\s*clamp/, 'one size, set in one place');
+  assert.doesNotMatch(
+    stylesheet,
+    /\.hud-banner\.is-\w+\s+\.hud-banner-title\s*\{[^}]*font-size/,
+    'no ending gets a different title size from the others'
+  );
 });

@@ -42,12 +42,17 @@ h1 {
   color: #8fb8ff;
 }
 
-/* ---- a scenario and the stage it plays on ---------------------------- */
+/* ---- a scenario and the stage it plays on ----------------------------
+
+   Everything here is addressed with `>`, deliberately. A stage contains the
+   game's own markup, and a descendant selector like `.scenario p` outranks
+   `.hud-banner-title` on specificity — which silently restyles the very thing
+   the preview exists to show. Style the caption, never the exhibit. */
 
 .scenario {
   margin-bottom: 2rem;
 }
-.scenario h2 {
+.scenario > h2 {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -55,7 +60,7 @@ h1 {
   color: #8a8a93;
   margin: 0 0 0.15rem;
 }
-.scenario p {
+.scenario > p {
   margin: 0 0 0.6rem;
   font-size: 0.82rem;
   color: #75757e;
@@ -167,4 +172,76 @@ h1 {
   font-size: 0.82rem;
   line-height: 1.5;
   color: #85858e;
+}
+
+/* ---- the menu preview ------------------------------------------------- */
+
+/* The game shows the menu as a full-screen overlay (#menu in hud.css). Here it
+   sits inline in a stage, so only the placement differs — the panel itself is
+   styled entirely by the game's own rules. */
+.stage.is-menu {
+  padding: 0;
+}
+.menu-host {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem;
+}
+.menu-host[hidden] {
+  display: none;
+}
+
+.menu-readout {
+  margin: 0.5rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid #26262e;
+  border-radius: 0.4rem;
+  background: #101014;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #a7a7b0;
+  white-space: pre-wrap;
+}
+
+.option-list {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  list-style: none;
+  display: grid;
+  gap: 0.7rem;
+  font-size: 0.82rem;
+}
+.option-list b {
+  font-size: 0.9rem;
+}
+.option-list i {
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a93;
+}
+.option-list span {
+  color: #75757e;
+}
+
+/* ---- the endings preview ---------------------------------------------- */
+
+/* In the game the banner covers #hud, which is fixed to the viewport. Here it
+   has to stay inside its stage, so the stage is what it positions against. */
+.stage.is-hud {
+  position: relative;
+  min-height: 17rem;
+  overflow: hidden;
+}
+/* In the game the HUD is #hud, fixed to the viewport with the banner covering
+   it. Here it needs a host of its own with the same shape — styling the
+   stage's children directly would land on `.hud-banner` too, and `display`
+   there beats `[hidden]`, so every stage would wear a banner. */
+.hud-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }

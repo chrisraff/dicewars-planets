@@ -1,117 +1,46 @@
 import * as THREE from 'three';
-import { generatePlanetWorld } from './world/generateWorld.js';
-import { createGame } from './game/createGame.js';
-import { createPlanetSurface } from './render/planetSurface.js';
-import { createDiceLayer } from './render/diceLayer.js';
-import { createRollAnimation } from './render/rollAnimation.js';
-import { createTerritoryPicker, pointerToNdc } from './render/pickTerritory.js';
-import { createDiePipMaterials } from './render/diceTextures.js';
-import { assignPlayerColors } from './render/palette.js';
-import { highlightsFor, pulseAt } from './render/highlights.js';
-import { playerStatsFor } from './game/playerStats.js';
-import { createBattleLog, battleEntry } from './game/battleLog.js';
-import { createHud } from './render/hud.js';
 import { createViewer } from './render/createViewer.js';
-
-// Named in palette order, so a player's name matches the color of their land.
-const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'White'];
-const DEFAULT_PLAYERS = 4;
-
-// `?players=8` fills the table, which is mostly useful for seeing the stats
-// row at full width without having to edit anything.
-const requested = Number(new URLSearchParams(location.search).get('players'));
-const playerCount = Number.isFinite(requested)
-  ? Math.min(8, Math.max(2, Math.round(requested)))
-  : DEFAULT_PLAYERS;
-
-const playerIds = PLAYER_NAMES.slice(0, playerCount).map((_, i) => `p${i + 1}`);
-const playerNames = new Map(playerIds.map((id, i) => [id, PLAYER_NAMES[i]]));
-
-const world = generatePlanetWorld({ subdivisions: 3, playerIds });
-const playerColors = assignPlayerColors(playerIds);
-
-const game = createGame({ world, humanPlayerId: 'p1' });
+import { createDiePipMaterials } from './render/diceTextures.js';
+import { createMenu } from './render/menu.js';
+import { createSession } from './game/session.js';
+import { pointerToNdc } from './render/pickTerritory.js';
+import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
 
 const canvas = document.getElementById('planet-canvas');
+const hudRoot = document.getElementById('hud');
+const menuRoot = document.getElementById('menu');
+
+// These outlive any one game: the renderer and camera keep the planet where
+// the player left it, and the pip textures are generated once at startup.
 const viewer = createViewer(canvas);
+const pipMaterials = createDiePipMaterials();
 
-const surface = createPlanetSurface(world, playerColors);
-const dice = createDiceLayer(world, createDiePipMaterials());
-viewer.scene.add(surface.group, dice.group);
+let session = null;
 
-const hud = createHud(document.getElementById('hud'), { playerColors, playerNames });
-const battles = createBattleLog();
-hud.setHistory(battles.entries);
-const pickTerritoryAt = createTerritoryPicker({
-  planetMesh: surface.mesh,
-  camera: viewer.camera,
-  faceCellIds: surface.faceCellIds,
-  cellTerritory: world.cellTerritory,
-});
-
-// --- what's on screen right now ------------------------------------------
-
-let roll = null; // the attack being animated: { animation, event, elapsed, timing }
-
-function refreshBoard(pulse = 1) {
-  const marks = highlightsFor({
-    selection: game.selection,
-    targets: game.legalTargets(),
-    attack: roll?.event ?? null,
-    pulse,
+function startGame(settings) {
+  session?.dispose();
+  session = createSession({
+    viewer,
+    hudRoot,
+    pipMaterials,
+    settings,
+    onMenu: () => menu.show(session.settings, { canResume: true }),
+    onNewGame: () => menu.show(session.settings, { canResume: true }),
   });
-  surface.refresh(game.state, (territoryId) => marks.get(territoryId) ?? null);
-  hud.showPlayers(playerStatsFor(game.state, playerIds));
-  hud.showTurn({
-    playerId: game.currentPlayer(),
-    isHuman: game.isHumanTurn(),
-    canAct: game.isHumanTurn() && !game.isBusy() && !game.isOver(),
-  });
+
+  writeStoredSettings(window.localStorage, settings);
+  // so a reload, or a shared link, opens the same setup
+  history.replaceState(null, '', `${location.pathname}${settingsToQuery(settings)}`);
+
+  menu.hide();
 }
 
-// --- the game talks, the renderer listens --------------------------------
-
-game.on('attack', ({ event, timing }) => {
-  // the dice are known already, but they belong on the planet first — show the
-  // readout with blank faces so it fills in as the roll lands
-  hud.showBattle(battleEntry(event), { revealed: false });
-
-  roll = {
-    event,
-    timing,
-    elapsed: 0,
-    animation: createRollAnimation({
-      attackerStand: dice.standFor(event.from),
-      defenderStand: dice.standFor(event.to),
-      event,
-      dieSize: dice.dieSize,
-      timing,
-    }),
-  };
+const menu = createMenu(menuRoot, {
+  onStart: startGame,
+  onResume: () => menu.hide(),
 });
 
-game.on('resolved', (state) => {
-  const { event } = roll;
-  roll = null;
-  hud.showBattle(battles.record(event));
-  hud.setHistory(battles.entries);
-  // both stacks are still lying on the faces they rolled; stand them back up
-  // before the 'change' handler below sees them
-  dice.reroll(event.from, state);
-  dice.reroll(event.to, state);
-});
-
-game.on('change', (state) => {
-  dice.update(state);
-  refreshBoard();
-});
-
-game.on('eliminated', (event) => {
-  battles.record(event);
-  hud.setHistory(battles.entries);
-});
-
-game.on('over', (winner) => hud.showWinner(winner));
+menu.show(resolveSettings({ search: location.search, storage: window.localStorage }));
 
 // --- input ----------------------------------------------------------------
 
@@ -133,33 +62,20 @@ canvas.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y);
   const { slop } = pressedAt;
   pressedAt = null;
-  if (moved > slop) return;
-  const ndc = pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect());
-  game.clickTerritory(pickTerritoryAt(ndc));
-  refreshBoard();
-});
 
-hud.onEndTurn(() => {
-  game.endTurn();
-  refreshBoard();
+  if (moved > slop || !session || menu.isOpen()) return;
+  session.clickAt(pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect()));
 });
 
 // --- the loop -------------------------------------------------------------
-
-game.start();
 
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1); // a backgrounded tab shouldn't fast-forward
 
-  if (roll) {
-    roll.elapsed += dt;
-    roll.animation.apply(roll.elapsed);
-    refreshBoard(pulseAt(roll.elapsed));
-  }
-
-  game.tick(dt);
+  // the planet keeps turning behind the menu, but nothing plays out on it
+  if (session && !menu.isOpen()) session.tick(dt);
   viewer.render();
 }
 animate();

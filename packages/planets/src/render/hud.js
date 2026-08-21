@@ -80,6 +80,77 @@ export function playerPanelView(player) {
   };
 }
 
+/**
+ * What the turn indicator should say. Pure, because the awkward cases are all
+ * here: a game that has ended never moves its turn index off the winner, so
+ * asking "whose turn is it" after the fact gives a live-looking answer to a
+ * dead question — and a player knocked out mid-game is neither taking a turn
+ * nor watching a finished one.
+ */
+export function turnIndicatorView(status, nameOf = (id) => id) {
+  const { currentPlayerId, humanPlayerId, winner = null, isOver = false } = status;
+  const { humanEliminated = false, canAct = false } = status;
+
+  if (isOver) {
+    if (!winner) return { text: 'Nobody wins', playerId: currentPlayerId, endTurn: 'hidden' };
+    return {
+      text: winner === humanPlayerId ? 'You win' : `${nameOf(winner)} wins`,
+      playerId: winner,
+      endTurn: 'hidden',
+    };
+  }
+
+  if (humanEliminated) {
+    return { text: 'You are out — watching', playerId: currentPlayerId, endTurn: 'hidden' };
+  }
+
+  if (currentPlayerId === humanPlayerId) {
+    return { text: 'Your turn', playerId: currentPlayerId, endTurn: canAct ? 'ready' : 'waiting' };
+  }
+  return { text: `${nameOf(currentPlayerId)} is playing`, playerId: currentPlayerId, endTurn: 'hidden' };
+}
+
+/**
+ * The banner that interrupts play, and what it offers to do next.
+ *
+ * Winning is the point of the whole game, so it gets the screen to itself
+ * until the player decides to move on — the menu no longer barges in over it.
+ * Being knocked out is the other moment worth stopping for: without this the
+ * game simply carries on without you and never says why.
+ */
+export function outcomeView(outcome, nameOf = (id) => id) {
+  const { kind, winner = null, humanPlayerId, by = null } = outcome;
+
+  if (kind === 'eliminated') {
+    return {
+      kind,
+      playerId: by,
+      title: 'You are out',
+      detail: by ? `${nameOf(by)} took your last territory.` : 'Your last territory is gone.',
+      actions: [
+        { id: 'watch', label: 'Spectate', primary: true },
+        { id: 'newGame', label: 'New game', primary: false },
+      ],
+    };
+  }
+
+  const won = winner !== null && winner === humanPlayerId;
+  return {
+    kind: winner === null ? 'draw' : won ? 'won' : 'lost',
+    playerId: winner,
+    title: winner === null ? 'Nobody wins' : won ? 'You win' : `${nameOf(winner)} wins`,
+    detail: won
+      ? 'The whole planet is yours.'
+      : winner === null
+        ? 'The planet is empty.'
+        : `${nameOf(winner)} holds every territory.`,
+    actions: [
+      { id: 'newGame', label: 'New game', primary: true },
+      { id: 'dismiss', label: 'Look at the board', primary: false },
+    ],
+  };
+}
+
 export function createHud(root, { playerColors, playerNames = new Map() } = {}) {
   root.innerHTML = `
     <div class="hud-top">
@@ -88,9 +159,18 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     </div>
     <div class="hud-controls">
       <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
-      <button class="hud-end-turn" type="button">End turn</button>
+      <span class="hud-buttons">
+        <button class="hud-menu" type="button">Menu</button>
+        <button class="hud-end-turn" type="button">End turn</button>
+      </span>
     </div>
-    <div class="hud-banner"></div>
+    <div class="hud-banner" hidden>
+      <div class="hud-banner-card">
+        <p class="hud-banner-title"></p>
+        <p class="hud-banner-detail"></p>
+        <div class="hud-banner-actions"></div>
+      </div>
+    </div>
   `;
 
   const playersRow = root.querySelector('.hud-players');
@@ -101,7 +181,12 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
   const endTurnButton = root.querySelector('.hud-end-turn');
+  const menuButton = root.querySelector('.hud-menu');
   const banner = root.querySelector('.hud-banner');
+  const bannerTitle = banner.querySelector('.hud-banner-title');
+  const bannerDetail = banner.querySelector('.hud-banner-detail');
+  const bannerActions = banner.querySelector('.hud-banner-actions');
+  let onAction = null;
 
   const nameOf = (playerId) => playerNames.get(playerId) ?? playerId;
   const panels = new Map();
@@ -182,6 +267,10 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       endTurnButton.addEventListener('click', handler);
     },
 
+    onMenu(handler) {
+      menuButton.addEventListener('click', handler);
+    },
+
     /**
      * Repaints the stats row from `playerStatsFor(...)`. Called every frame
      * while dice are rolling, so each panel only touches the DOM for the
@@ -212,17 +301,42 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       }
     },
 
-    showTurn({ playerId, isHuman, canAct }) {
-      dot.style.background = rgb(playerColors.get(playerId) ?? [1, 1, 1]);
-      turnText.textContent = isHuman ? 'Your turn' : `${nameOf(playerId)} is playing`;
-      endTurnButton.disabled = !canAct;
-      endTurnButton.style.visibility = isHuman ? 'visible' : 'hidden';
+    showTurn(status) {
+      const view = turnIndicatorView(status, nameOf);
+      dot.style.background = rgb(playerColors.get(view.playerId) ?? [1, 1, 1]);
+      turnText.textContent = view.text;
+      endTurnButton.disabled = view.endTurn !== 'ready';
+      endTurnButton.style.visibility = view.endTurn === 'hidden' ? 'hidden' : 'visible';
     },
 
-    showWinner(playerId) {
-      banner.textContent = playerId ? `${nameOf(playerId)} wins` : 'Nobody wins';
-      banner.style.color = rgb(playerColors.get(playerId) ?? [1, 1, 1]);
-      banner.classList.add('is-shown');
+    /** Puts up the banner for a game ending, or for being knocked out of one. */
+    showOutcome(outcome) {
+      const view = outcomeView(outcome, nameOf);
+      banner.className = `hud-banner is-${view.kind}`;
+      bannerTitle.textContent = view.title;
+      bannerTitle.style.color = rgb(playerColors.get(view.playerId) ?? [1, 1, 1]);
+      bannerDetail.textContent = view.detail;
+
+      bannerActions.replaceChildren();
+      for (const action of view.actions) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = action.primary ? 'hud-banner-action is-primary' : 'hud-banner-action';
+        button.textContent = action.label;
+        button.addEventListener('click', () => onAction?.(action.id));
+        bannerActions.append(button);
+      }
+
+      banner.hidden = false;
+      bannerActions.querySelector('button')?.focus({ preventScroll: true });
+    },
+
+    hideOutcome() {
+      banner.hidden = true;
+    },
+
+    onOutcomeAction(handler) {
+      onAction = handler;
     },
   };
 }
