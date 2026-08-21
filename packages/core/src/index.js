@@ -7,9 +7,12 @@ export {
   isPlayerAlive,
   livingPlayerIds,
   largestConnectedRegionSize,
+  serializeState,
+  reviveState,
   MAX_DICE_PER_NODE,
   MAX_RESERVE,
 } from './state.js';
+export { seededRng, randomSeed } from './rng.js';
 export { attack, endTurn, updateAdjacency } from './actions.js';
 export { reduce, isLegalAttack } from './reducer.js';
 export { runAiTurn } from './ai/runAiTurn.js';

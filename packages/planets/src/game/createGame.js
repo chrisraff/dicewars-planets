@@ -31,9 +31,14 @@ export const AUTOPLAY = Symbol('autoplay');
  *
  * Time comes in through `tick(dt)` rather than a clock, so a test can run a
  * hundred turns instantly and the renderer can drive it off its own frames.
+ *
+ * `savedState` resumes a match instead of dealing a new one. Nothing else
+ * changes: the same world still has to be supplied, because it is the planet
+ * that board was fought over.
  */
 export function createGame({
   world,
+  savedState = null,
   humanPlayerId = world.playerIds[0],
   strategy = createSimpleStrategy(),
   timing = DEFAULT_TIMING,
@@ -47,7 +52,9 @@ export function createGame({
   if (rollDie) deps.rollDie = rollDie;
   if (rng) deps.rng = rng;
 
-  let state = createInitialState(world);
+  // a game being resumed carries on from the board it was saved on; a fresh
+  // one deals the world it was handed
+  let state = savedState ?? createInitialState(world);
   let selection = null;
   let pending = null; // the resolved-but-not-yet-shown result of an attack
   let pendingEvents = []; // everything else that happened in the same action

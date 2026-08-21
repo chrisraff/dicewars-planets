@@ -1,8 +1,10 @@
+import { isPlayerAlive, randomSeed, reviveState, seededRng, serializeState } from '@dicewars/core';
 import { generatePlanetWorld } from '../world/generateWorld.js';
 import { createGame } from './createGame.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
 import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, subdivisionsFor } from './settings.js';
+import { gameSave, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
@@ -25,19 +27,40 @@ export const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange
  *
  * `settings` has already been normalized by the time it gets here — the menu
  * and `resolveSettings` are the two places raw values are parsed.
+ *
+ * `saved` resumes a match rather than dealing a new one, and `onSave` is
+ * handed the state to write after every move — or `null` once the game is
+ * over, since a finished game is not one to come back to. Storage itself stays
+ * outside: the session says what is worth keeping, the page decides where it
+ * goes, and nothing here has to know that localStorage exists.
  */
-export function createSession({ viewer, hudRoot, pipMaterials, settings, onNewGame, onMenu }) {
+export function createSession({
+  viewer,
+  hudRoot,
+  pipMaterials,
+  settings,
+  saved = null,
+  onNewGame,
+  onMenu,
+  onSave,
+}) {
   const playerIds = playerIdsFor(settings);
   const playerNames = new Map(playerIds.map((id, i) => [id, PLAYER_NAMES[i]]));
   const playerColors = assignPlayerColors(playerIds);
 
-  // which seat in the turn order the player asked for — a range picks one of
-  // its seats now, so the rest of the match has a settled answer
-  const humanPlayerId = playerIds[resolveStartSeat(settings)];
+  const { world, seed, restored } = buildWorld(settings, playerIds, saved);
 
-  const world = generatePlanetWorld({ subdivisions: subdivisionsFor(settings), playerIds });
-  const game = createGame({ world, humanPlayerId });
-  const battles = createBattleLog();
+  // which seat in the turn order the player asked for — a range picks one of
+  // its seats now, so the rest of the match has a settled answer. A resumed
+  // game already has its answer and keeps it.
+  const humanPlayerId = restored ? restored.humanPlayerId : playerIds[resolveStartSeat(settings)];
+
+  const game = createGame({
+    world,
+    humanPlayerId,
+    savedState: restored ? reviveState(restored.state) : null,
+  });
+  const battles = createBattleLog({ entries: restored?.battles });
 
   const surface = createPlanetSurface(world, playerColors);
   const dice = createDiceLayer(world, pipMaterials);
@@ -54,7 +77,21 @@ export function createSession({ viewer, hudRoot, pipMaterials, settings, onNewGa
   });
 
   let roll = null; // the attack being animated
-  let humanEliminated = false;
+  // not stored in a save: the board itself says whether you still hold ground
+  let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
+
+  // What it would take to rebuild this match: the planet as the number it grew
+  // from, and everything about the game that no amount of regrowing recovers.
+  function snapshot() {
+    return gameSave({
+      seed,
+      settings,
+      humanPlayerId,
+      world,
+      state: serializeState(game.state),
+      battles: battles.entries,
+    });
+  }
 
   function refreshBoard(pulse = 1) {
     const marks = highlightsFor({
@@ -118,6 +155,13 @@ export function createSession({ viewer, hudRoot, pipMaterials, settings, onNewGa
   game.on('change', (state) => {
     dice.update(state);
     refreshBoard();
+    // Every change, rather than on a timer or on the way out of the page:
+    // `change` is the only moment the board moves, a pagehide handler is not
+    // reliable on mobile, and the alternative is losing whatever happened
+    // since the last tick. An attack still being animated is deliberately not
+    // saved — the state it will land on has not been applied yet, so a reload
+    // mid-roll simply un-throws those dice rather than saving half a battle.
+    onSave?.(game.isOver() ? null : snapshot());
   });
 
   game.on('over', (winner) => {
@@ -167,4 +211,26 @@ export function createSession({ viewer, hudRoot, pipMaterials, settings, onNewGa
       hudRoot.replaceChildren();
     },
   };
+}
+
+/**
+ * The planet this match is played on, and the seed that grows it.
+ *
+ * A saved game names its seed, so the same planet comes back cell for cell —
+ * but only as long as the generator itself has not changed. When the world it
+ * rebuilds no longer fits the board that was saved on it, the save is dropped
+ * and a fresh planet is grown: a new game is a far better outcome than a
+ * board laid over territories that are not there any more.
+ */
+function buildWorld(settings, playerIds, saved) {
+  const subdivisions = subdivisionsFor(settings);
+  const grow = (seed) => generatePlanetWorld({ subdivisions, playerIds, rng: seededRng(seed) });
+
+  if (saved) {
+    const world = grow(saved.seed);
+    if (saveMatchesWorld(saved, world)) return { world, seed: saved.seed, restored: saved };
+  }
+
+  const seed = randomSeed();
+  return { world: grow(seed), seed, restored: null };
 }

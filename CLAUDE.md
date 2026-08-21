@@ -50,6 +50,13 @@ The graph is topology only — which node ids touch which. No coordinates, no
 shape. `setNeighbors`/`updateAdjacency` exist so a world can rewire itself
 between rounds (the planned moon mode) without core learning any geometry.
 
+`serializeState`/`reviveState` are the state as plain JSON and back, which is
+what a saved game is made of. They read the edges out of the *graph* rather
+than out of whatever world description built it, because a board that has been
+rewired mid-game has to be saved as it stands. `seededRng` lives here too: both
+sources of chance already arrive through `deps`, and a generator that repeats
+is what makes that worth anything — a test pins a game, a save pins a world.
+
 Terms that recur:
 
 - **node / territory** — one playable area, holding an owner and 1–8 dice.
@@ -87,7 +94,29 @@ renderer wants.
   whole match is played out unattended.
 - `session.js` — one match: a world, a game, and everything drawn for it,
   created from settings and disposed whole. "New game" throws one away and
-  builds the next rather than resetting a dozen things.
+  builds the next rather than resetting a dozen things. It also decides what is
+  worth saving and hands it to `onSave`; where that goes is `main.js`'s
+  business, so nothing in here knows that localStorage exists.
+- `saveGame.js` — a game in progress, written down so a reload picks it up.
+  The planet is stored as the **seed it grew from**, not as its geometry: a
+  world is a deterministic function of `(seed, settings)`, so one number
+  rebuilds every cell. Everything that cannot be recomputed — owners, dice,
+  whose turn, banked dice, the battle log — is stored outright.
+
+  That trade has exactly one failure mode: change the generator and the same
+  seed grows a *different* planet. Hence `worldFingerprint`, a hash of the
+  territory graph and the cell-to-territory mapping, checked against the world
+  the seed just rebuilt. Note that territory ids are list positions (`0`, `1`,
+  `2`), so comparing ids would pass for any two planets that happen to have the
+  same number of territories — which is why the fingerprint hashes shape rather
+  than names. A mismatch discards the save and deals a fresh game.
+
+  Saving happens on every `change` event rather than on a timer or on
+  `pagehide` (which is not reliable on mobile). An attack that is still being
+  animated is deliberately *not* saved: the state it will land on has not been
+  applied yet, so a reload mid-roll un-throws those dice rather than storing
+  half a battle. A finished game clears the save — there is nothing to
+  continue.
 - `settings.js` — every configurable option declared once as data
   (`SETTING_DEFINITIONS`). The menu renders itself from that list, so a new
   option is added here and nowhere else.
@@ -104,7 +133,8 @@ renderer wants.
   everything else in the pipeline still sees all of them.
 
   Settings are parsed **once, at the edge** — `resolveSettings` for the page,
-  the menu for anything the player picks. Everything downstream
+  the menu for anything the player picks, `readSavedGame` for a game being
+  resumed. Everything downstream
   (`playerIdsFor`, `resolveStartSeat`, `subdivisionsFor`, `createSession`)
   takes an already-normalized object and trusts it. Re-validating deeper in
   would mean no caller could be sure which layer had the last word.

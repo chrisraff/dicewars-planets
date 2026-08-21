@@ -49,9 +49,22 @@ interface:
 - `src/game/` sits between core and the screen. `createGame.js` owns turn flow
   and takes time through `tick(dt)` rather than a clock, so a hundred turns run
   instantly in a test. `session.js` is one match, created whole and disposed
-  whole. `settings.js` declares every option once, as data.
+  whole. `settings.js` declares every option once, as data. `saveGame.js` keeps
+  a game in progress across a reload.
 - `src/render/` is three.js and the DOM, with the decisions worth testing
   pulled out as pure functions.
+
+## Coming back to a game
+
+Close the tab mid-game and the next visit leads with **Continue**. The planet
+is stored as the single number it was grown from rather than as geometry —
+world generation is deterministic given a seed, so one number rebuilds every
+cell — alongside the things no amount of regrowing recovers: who owns what, how
+many dice, whose turn it is, what has been banked, and the battles fought so
+far. It is written after every move, so nothing is lost to a crash or a phone
+killing the tab. If the world generator ever changes under an old save, a
+fingerprint of the planet catches it and the save is discarded rather than
+laid over land that is not there any more.
 
 ## Previews
 

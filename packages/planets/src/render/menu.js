@@ -75,13 +75,37 @@ export function menuView(settings, definitions = MENU_SETTINGS) {
 }
 
 /**
- * The menu over the planet: pick a setup and start, or go back to a game
- * already in progress.
+ * The buttons along the bottom, and which of them leads.
+ *
+ * There are two different ways to have a game to go back to and they are never
+ * both true. `canResume` is a match open behind this menu — the player pressed
+ * Menu and can press their way back out. `canContinue` is a match saved from a
+ * previous visit, with nothing running yet; that is what the player almost
+ * certainly came back for, so it takes the primary look and the focus, and
+ * starting a new game steps down to being the other option on the row.
+ */
+export function menuActionsView({ canResume = false, canContinue = false } = {}) {
+  return {
+    resume: { hidden: !canResume },
+    continue: { hidden: !canContinue },
+    start: {
+      // from inside a match, throwing it away is a deliberate act and says so
+      label: canResume ? 'Start over' : 'New game',
+      secondary: canContinue,
+    },
+    // whatever the button is, the player should be able to just press enter
+    focus: canContinue ? 'continue' : 'start',
+  };
+}
+
+/**
+ * The menu over the planet: pick a setup and start, go back to a game already
+ * in progress, or pick up one saved from a previous visit.
  *
  * It renders itself from the setting definitions rather than from hand-written
  * markup, so adding an option to settings.js is all it takes to have one here.
  */
-export function createMenu(root, { onStart, onResume } = {}) {
+export function createMenu(root, { onStart, onResume, onContinue } = {}) {
   root.innerHTML = `
     <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Game setup">
       <h1 class="menu-title">Dicewars Planets</h1>
@@ -89,6 +113,7 @@ export function createMenu(root, { onStart, onResume } = {}) {
       <div class="menu-actions">
         <button class="menu-resume" type="button" hidden>Back to game</button>
         <button class="menu-start" type="button">New game</button>
+        <button class="menu-continue" type="button" hidden>Continue</button>
       </div>
     </div>
   `;
@@ -96,6 +121,7 @@ export function createMenu(root, { onStart, onResume } = {}) {
   const settingsList = root.querySelector('.menu-settings');
   const startButton = root.querySelector('.menu-start');
   const resumeButton = root.querySelector('.menu-resume');
+  const continueButton = root.querySelector('.menu-continue');
 
   let settings = normalizeSettings({});
   const controls = new Map(); // key -> a function that re-reads the DOM
@@ -250,6 +276,7 @@ export function createMenu(root, { onStart, onResume } = {}) {
 
   startButton.addEventListener('click', () => onStart?.(settings));
   resumeButton.addEventListener('click', () => onResume?.());
+  continueButton.addEventListener('click', () => onContinue?.());
 
   // Escape backs out, but only when there is something to back out to
   root.addEventListener('keydown', (event) => {
@@ -261,14 +288,23 @@ export function createMenu(root, { onStart, onResume } = {}) {
       return settings;
     },
 
-    /** `canResume` shows the way back when a game is already under way. */
-    show(next = settings, { canResume = false } = {}) {
+    /**
+     * `canResume` shows the way back to a match already under way;
+     * `canContinue` offers one saved from a previous visit.
+     */
+    show(next = settings, { canResume = false, canContinue = false } = {}) {
       settings = normalizeSettings(next);
       refresh();
-      resumeButton.hidden = !canResume;
-      startButton.textContent = canResume ? 'Start over' : 'New game';
+
+      const actions = menuActionsView({ canResume, canContinue });
+      resumeButton.hidden = actions.resume.hidden;
+      continueButton.hidden = actions.continue.hidden;
+      startButton.textContent = actions.start.label;
+      startButton.classList.toggle('is-secondary', actions.start.secondary);
+
       root.hidden = false;
-      startButton.focus({ preventScroll: true });
+      const lead = actions.focus === 'continue' ? continueButton : startButton;
+      lead.focus({ preventScroll: true });
     },
 
     hide() {

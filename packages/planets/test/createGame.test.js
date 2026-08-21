@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, AI_TIMING, AUTOPLAY } from '../src/game/createGame.js';
 import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
+import { createInitialState, reviveState, serializeState } from '@dicewars/core';
 import { seededRng, chainWorld, alwaysRolls } from '@dicewars/core/test-support';
 
 // A four-territory chain: p1 (human) holds a and c, the AI holds b and d.
@@ -210,4 +211,59 @@ test('a real generated planet plays through to a winner', () => {
 
   const owners = new Set([...game.state.nodes.values()].map((n) => n.owner));
   assert.deepEqual([...owners], [game.state.winner], 'the winner holds the whole planet');
+});
+
+// --- resuming a saved game ---------------------------------------------------
+
+test('a game handed a saved board carries on from it rather than dealing a new one', () => {
+  const world = balanced();
+  const savedState = reviveState(
+    serializeState(
+      createInitialState({
+        ...world,
+        assignments: [
+          ['a', { owner: 'p1', dice: 1 }],
+          ['b', { owner: 'p1', dice: 7 }],
+          ['c', { owner: 'p2', dice: 3 }],
+          ['d', { owner: 'p2', dice: 2 }],
+        ],
+      })
+    )
+  );
+
+  const game = createGame({ world, savedState });
+
+  assert.equal(game.state.nodes.get('b').dice, 7, 'the board that was saved, not the dealt one');
+  assert.equal(game.state.nodes.get('c').owner, 'p2');
+});
+
+test('a resumed game picks up whose turn it was, not the top of the order', () => {
+  const savedState = reviveState({
+    ...serializeState(createInitialState(balanced())),
+    currentTurnIndex: 1,
+  });
+  const game = createGame({ world: balanced(), savedState, humanPlayerId: 'p1' });
+
+  assert.equal(game.currentPlayer(), 'p2');
+  assert.equal(game.isHumanTurn(), false);
+});
+
+test('a resumed game lets the AI take the turn it was in the middle of', () => {
+  // reloading on the AI's turn must not leave the board waiting for a player
+  // who is not due to move — `start` has to get the thinking clock going
+  const savedState = reviveState({
+    ...serializeState(createInitialState(balanced())),
+    currentTurnIndex: 1,
+  });
+  const game = createGame({
+    world: balanced(),
+    savedState,
+    humanPlayerId: 'p1',
+    rollDie: alwaysRolls(6),
+  });
+
+  game.start();
+  advance(game, 5);
+
+  assert.notEqual(game.currentPlayer(), 'p2', 'the AI played its turn and passed it on');
 });

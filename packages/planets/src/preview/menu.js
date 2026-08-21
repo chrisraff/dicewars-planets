@@ -10,7 +10,15 @@ import {
 
 const scenarios = document.getElementById('scenarios');
 
-function addScenario({ title, note, stageClass = '', settings, canResume = false, live = false }) {
+function addScenario({
+  title,
+  note,
+  stageClass = '',
+  settings,
+  canResume = false,
+  canContinue = false,
+  live = false,
+}) {
   const section = document.createElement('section');
   section.className = 'scenario';
   section.innerHTML = '<h2></h2><p></p><div class="stage"></div>';
@@ -37,6 +45,7 @@ function addScenario({ title, note, stageClass = '', settings, canResume = false
   const menu = createMenu(host, {
     onStart: (chosen) => report(chosen, 'started'),
     onResume: () => report(menu.settings, 'resumed'),
+    onContinue: () => report(menu.settings, 'continued'),
   });
 
   function report(chosen, action) {
@@ -51,7 +60,7 @@ function addScenario({ title, note, stageClass = '', settings, canResume = false
     ].join('\n');
   }
 
-  menu.show(settings ?? DEFAULT_SETTINGS, { canResume });
+  menu.show(settings ?? DEFAULT_SETTINGS, { canResume, canContinue });
   if (readout) readout.textContent = 'Pick a setup and press the button.';
 }
 
@@ -59,6 +68,15 @@ addScenario({
   title: 'Opening the game',
   note: 'What you get on a first visit: no game to go back to, so the only way on is forward.',
   settings: DEFAULT_SETTINGS,
+});
+
+addScenario({
+  title: 'Returning to a saved game',
+  note: 'What a reload gets you: the game that was in progress is still there, so continuing is '
+    + 'the filled button and the one that has focus. Starting a new one is still right there, '
+    + 'just no longer the thing being offered.',
+  settings: { players: 6 },
+  canContinue: true,
 });
 
 addScenario({
@@ -100,6 +118,14 @@ addScenario({
   stageClass: 'is-phone',
   settings: { players: 8 },
   canResume: true,
+});
+
+addScenario({
+  title: 'A saved game, at phone width',
+  note: 'The same two buttons stacked. Whichever one leads, it is the one the menu focuses.',
+  stageClass: 'is-phone',
+  settings: { players: 4 },
+  canContinue: true,
 });
 
 // --- what the menu knows how to draw --------------------------------------

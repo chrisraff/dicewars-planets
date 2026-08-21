@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { settingRowView, menuView } from '../src/render/menu.js';
+import { settingRowView, menuView, menuActionsView } from '../src/render/menu.js';
 import {
   MENU_SETTINGS,
   DEFAULT_SETTINGS,
@@ -139,4 +139,42 @@ test('the ranges offered are the ones the setting declares', () => {
     seatRow(DEFAULT_SETTINGS).modes.map((mode) => mode.value),
     start.modes.map((mode) => mode.value)
   );
+});
+
+// --- the buttons along the bottom ---------------------------------------
+
+test('a first visit offers one way on, and it leads', () => {
+  const actions = menuActionsView();
+
+  assert.equal(actions.resume.hidden, true, 'there is no game behind this menu');
+  assert.equal(actions.continue.hidden, true, 'and none saved from before');
+  assert.equal(actions.start.label, 'New game');
+  assert.equal(actions.focus, 'start');
+});
+
+test('a saved game is what the menu leads with, and starting over steps aside', () => {
+  const actions = menuActionsView({ canContinue: true });
+
+  assert.equal(actions.continue.hidden, false);
+  assert.equal(actions.start.secondary, true, 'the filled button is the one that continues');
+  assert.equal(actions.focus, 'continue', 'so pressing enter picks the game back up');
+});
+
+test('opened from inside a match, starting again says what it costs', () => {
+  const actions = menuActionsView({ canResume: true });
+
+  assert.equal(actions.resume.hidden, false, 'and there is a way back');
+  assert.equal(
+    actions.start.label,
+    'Start over',
+    'a game is already running — "New game" would not say it is being thrown away'
+  );
+});
+
+test('a match already on screen is never also offered as one to continue', () => {
+  // both at once would be two buttons for the same game, one of them restarting
+  // it from the last save rather than from where it actually is
+  const actions = menuActionsView({ canResume: true, canContinue: false });
+  assert.equal(actions.continue.hidden, true);
+  assert.equal(actions.start.secondary, false, 'so starting over keeps the primary look');
 });

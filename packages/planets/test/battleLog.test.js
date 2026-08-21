@@ -90,3 +90,50 @@ test('a long game drops the oldest entries rather than growing forever', () => {
     'the five most recent survive, in order'
   );
 });
+
+// --- restoring a log with the game it belongs to ------------------------------
+
+test('a restored log still holds the battles it was saved with', () => {
+  const first = createBattleLog();
+  first.record(attackEvent());
+  first.record(attackEvent({ from: 3, to: 4 }));
+
+  const restored = createBattleLog({ entries: first.entries });
+
+  assert.deepEqual(restored.entries, first.entries);
+  assert.deepEqual(restored.latestBattle, first.latestBattle);
+});
+
+test('a restored log numbers new battles above the ones it came back with', () => {
+  // ids are how the history panel tells one entry from another; handing a new
+  // battle an id an old one already has would make two entries the same entry
+  const saved = createBattleLog();
+  saved.record(attackEvent());
+  saved.record(attackEvent());
+
+  const restored = createBattleLog({ entries: saved.entries });
+  const next = restored.record(attackEvent());
+
+  assert.ok(next.id > saved.latest.id);
+  assert.equal(new Set(restored.entries.map((entry) => entry.id)).size, restored.entries.length);
+});
+
+test('a restored log is a copy — playing on does not write back into the save', () => {
+  const saved = createBattleLog();
+  saved.record(attackEvent());
+  const written = saved.entries.map((entry) => ({ ...entry }));
+
+  const restored = createBattleLog({ entries: saved.entries });
+  restored.record(attackEvent({ from: 9, to: 10 }));
+
+  assert.deepEqual(saved.entries, written);
+});
+
+test('a log restored from more entries than it holds keeps the newest', () => {
+  const many = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, kind: 'battle', from: i }));
+  const restored = createBattleLog({ limit: 5, entries: many });
+
+  assert.equal(restored.entries.length, 5);
+  assert.equal(restored.latest.id, 200);
+  assert.equal(restored.record(attackEvent()).id, 201, 'and still numbers on from there');
+});

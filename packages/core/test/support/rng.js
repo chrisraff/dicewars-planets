@@ -1,18 +1,7 @@
-/**
- * A deterministic stand-in for `Math.random`, so a test that involves chance
- * fails the same way twice and a seed can be quoted in a bug report.
- *
- * Numerical Recipes' LCG constants, kept inside 32 bits by `Math.imul`: a
- * plain `s * 1664525` leaves the safe integer range on the first step, after
- * which the low bits are float rounding rather than the sequence.
- */
-export function seededRng(seed = 1) {
-  let state = (seed >>> 0) || 1;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-}
+// `seededRng` is part of the rules package proper — a save rebuilds a world
+// from a seed, so determinism is a shipped promise rather than a test fixture.
+// Re-exported here so a test still reaches every generator through one import.
+export { seededRng } from '../../src/rng.js';
 
 /**
  * A `rollDie` that hands out exactly these faces, in order. Once they run out

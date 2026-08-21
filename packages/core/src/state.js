@@ -87,3 +87,60 @@ export function largestConnectedRegionSize(state, playerId) {
   }
   return best;
 }
+
+// --- saving and restoring ----------------------------------------------------
+
+/**
+ * A state as plain JSON-able data: Maps become entry arrays and the graph
+ * becomes a list of edges.
+ *
+ * The edges are read back out of the graph rather than taken from whatever
+ * world description built it, because those two can differ — `setNeighbors`
+ * exists precisely so a world can rewire itself mid-game, and a save has to
+ * record the board as it stands, not as it was dealt.
+ *
+ * Node and player entries are copied whole rather than field by field, so a
+ * field added to either is carried through a save without this function
+ * needing to hear about it.
+ */
+export function serializeState(state) {
+  const seen = new Set();
+  const edges = [];
+  for (const [id, adjacent] of state.graph.adjacency) {
+    seen.add(id);
+    for (const other of adjacent) {
+      if (!seen.has(other)) edges.push([id, other]); // each edge once, either way round
+    }
+  }
+
+  return {
+    nodes: [...state.nodes].map(([id, node]) => [id, { ...node }]),
+    edges,
+    players: [...state.players].map(([id, player]) => [id, { ...player }]),
+    turnOrder: [...state.turnOrder],
+    currentTurnIndex: state.currentTurnIndex,
+    phase: state.phase,
+    winner: state.winner,
+  };
+}
+
+/**
+ * The inverse of `serializeState` — a state the reducer can carry on from.
+ *
+ * Node order is preserved, not just node identity: reinforcement scatters
+ * across a player's territories, and the order they are visited in is part of
+ * where the dice land.
+ */
+export function reviveState(snapshot) {
+  const nodeIds = snapshot.nodes.map(([id]) => id);
+
+  return {
+    graph: createGraph(nodeIds, snapshot.edges),
+    nodes: new Map(snapshot.nodes.map(([id, node]) => [id, { ...node }])),
+    players: new Map(snapshot.players.map(([id, player]) => [id, { ...player }])),
+    turnOrder: [...snapshot.turnOrder],
+    currentTurnIndex: snapshot.currentTurnIndex,
+    phase: snapshot.phase,
+    winner: snapshot.winner ?? null,
+  };
+}

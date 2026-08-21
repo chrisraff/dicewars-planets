@@ -5,6 +5,7 @@ import { createMenu } from './render/menu.js';
 import { createSession } from './game/session.js';
 import { pointerToNdc } from './render/pickTerritory.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
+import { readSavedGame, writeSavedGame, clearSavedGame } from './game/saveGame.js';
 
 const canvas = document.getElementById('planet-canvas');
 const hudRoot = document.getElementById('hud');
@@ -17,13 +18,19 @@ const pipMaterials = createDiePipMaterials();
 
 let session = null;
 
-function startGame(settings) {
+function startGame(settings, saved = null) {
   session?.dispose();
   session = createSession({
     viewer,
     hudRoot,
     pipMaterials,
     settings,
+    saved,
+    // the session decides what is worth keeping; this is the only place that
+    // knows where it goes. A finished game hands back null and is cleared,
+    // because there is nothing left to come back to.
+    onSave: (save) =>
+      save ? writeSavedGame(window.localStorage, save) : clearSavedGame(window.localStorage),
     onMenu: () => menu.show(session.settings, { canResume: true }),
     onNewGame: () => menu.show(session.settings, { canResume: true }),
   });
@@ -35,12 +42,21 @@ function startGame(settings) {
   menu.hide();
 }
 
+// Read once, before anything can overwrite it: the moment a game starts, the
+// save becomes that game's. This is the only chance to pick up the last one.
+const savedGame = readSavedGame(window.localStorage);
+
 const menu = createMenu(menuRoot, {
-  onStart: startGame,
+  onStart: (settings) => startGame(settings),
   onResume: () => menu.hide(),
+  // a saved game brings its own setup with it — the settings on the menu are
+  // for the new game the player did not ask for
+  onContinue: () => startGame(savedGame.settings, savedGame),
 });
 
-menu.show(resolveSettings({ search: location.search, storage: window.localStorage }));
+menu.show(resolveSettings({ search: location.search, storage: window.localStorage }), {
+  canContinue: Boolean(savedGame),
+});
 
 // --- input ----------------------------------------------------------------
 
