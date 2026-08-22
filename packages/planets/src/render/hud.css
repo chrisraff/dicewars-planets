@@ -9,6 +9,16 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+
+  /* The battle readout's closed button and its open history panel share this
+     cap, so opening one over the other never shifts an edge — and the button
+     no longer changes width battle to battle, which used to send its chevron
+     bouncing left and right along with the dice count.
+     Just the cap, not a full width: the two sit in different positioning
+     schemes (the button in normal flow, the panel absolute over `.hud-battle`
+     with its own padding), so "100%" is a different box for each — each rule
+     turns this into a matching pixel width in whatever way is right for it. */
+  --battle-readout-cap: 21rem;
 }
 
 /* The overlay ignores the pointer as a whole, so dragging anywhere still
@@ -129,12 +139,17 @@
   font: inherit;
   color: inherit;
   pointer-events: auto;
-  /* inline-flex, so a small battle stays small while an eight-on-eight is free
-     to grow out to the full width before it has to give up and go compact */
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  max-width: 100%;
+  /* Fixed rather than shrink-to-fit: the readout used to hug each battle's
+     own content, so the chevron rode along with it — a die or two one turn,
+     a full board the next. A steady width, matching the history panel this
+     opens into, is what keeps that interaction cue from bouncing around.
+     Normal flow, so 100% here is already .hud-battle's *content* box — its
+     own padding is not counted twice the way it is in .battle-history. */
+  width: min(var(--battle-readout-cap), 100%);
+  box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
   padding: 0.3rem 0.5rem;
@@ -147,6 +162,32 @@
 }
 .battle-current:hover { border-color: rgba(255, 255, 255, 0.32); }
 .battle-current.is-empty { display: none; } /* nothing has been fought yet */
+
+/* A grouping element with no box of its own, so `show()` can replace the
+   battle's contents without disturbing the chevron next to it — summary and
+   strip still lay out as direct flex children of `.battle-current` itself. */
+.battle-current-content { display: contents; }
+
+/* The hint that this readout opens into a history: a chevron that flips to
+   point up once it has, reusing `aria-expanded` rather than a second class
+   for the same state. The rotation is on this wrapping span rather than the
+   svg itself — some engines don't reliably transform an outer <svg>. */
+.battle-chevron {
+  display: inline-flex;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  /* Pinned to the trailing edge rather than riding along after the content —
+     the button's own width is now fixed, but the row itself still packs to
+     the start, so without this a short battle would leave the chevron
+     sitting wherever its content happened to end. */
+  margin-left: auto;
+  color: #9a9aa2;
+  transition: transform 160ms ease, color 120ms ease;
+}
+.battle-chevron svg { width: 100%; height: 100%; }
+.battle-current:hover .battle-chevron { color: #e8e8ea; }
+.battle-current[aria-expanded='true'] .battle-chevron { transform: rotate(180deg); }
 
 /* ---- the two readings of a battle -------------------------------------
 
@@ -300,8 +341,11 @@
   left: calc(var(--safe-left) + 0.7rem);
   /* Deliberately narrow: a history row is a scannable summary, so wide
      battles collapse to their compact reading here rather than stretching the
-     panel across the screen. */
-  width: min(21rem, calc(100% - var(--safe-left) - var(--safe-right) - 1.4rem));
+     panel across the screen. Positioned absolutely over .hud-battle, so 100%
+     here is its *padding* box — .hud-battle's own left-and-right padding has
+     to come off too, or this would land wider than .battle-current, which
+     shares the same --battle-readout-cap without needing that subtraction. */
+  width: min(var(--battle-readout-cap), calc(100% - var(--safe-left) - var(--safe-right) - 1.4rem));
   box-sizing: border-box;
   pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -549,6 +593,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hud-player { transition: none; }
+  .battle-chevron { transition: none; }
 }
 
 /* ---- the setup menu ---------------------------------------------------- */

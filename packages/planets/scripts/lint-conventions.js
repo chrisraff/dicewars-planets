@@ -217,11 +217,19 @@ check('the compact reading pins the result and scrolls only the dice', () => {
   return problems;
 });
 
-check('a big battle can use the full width, but the history panel stays narrow', () => {
+check('the battle readout is a fixed width, shared between the button and its history', () => {
+  // one cap, defined once, so the button that opens the panel and the panel
+  // itself can never quietly drift apart — which is also what keeps the
+  // chevron on the button from bouncing around battle to battle. Each rule
+  // still turns the cap into its own width rather than sharing one literal
+  // `width` value, because the button (normal flow) and the panel (absolute
+  // over a padded parent) resolve a bare `100%` against different boxes.
   const problems = [];
-  wants(problems, '.hud-battle', /align-self:\s*stretch/, 'the readout may use it all');
-  wants(problems, '.battle-current', /max-width:\s*100%/, 'up to the width available');
-  wants(problems, '.battle-history', /width:\s*min\(/, 'the panel is deliberately confined');
+  wants(problems, '.hud-battle', /align-self:\s*stretch/, 'the row still spans the top of the screen');
+  wants(problems, ':root', /--battle-readout-cap:\s*21rem/, 'deliberately narrow, not full width');
+  for (const selector of ['.battle-current', '.battle-history']) {
+    wants(problems, selector, /width:\s*min\(var\(--battle-readout-cap\)/, 'must track the shared cap');
+  }
   return problems;
 });
 

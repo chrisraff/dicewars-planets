@@ -116,7 +116,15 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
 
   root.innerHTML = `
     <button class="battle-current" type="button" aria-expanded="false"
-            aria-label="Last battle — open history"></button>
+            aria-label="Last battle — open history">
+      <span class="battle-current-content"></span>
+      <span class="battle-chevron" aria-hidden="true">
+        <svg viewBox="0 0 16 16">
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+    </button>
     <div class="battle-history" hidden>
       <div class="battle-history-head">
         <span>Battle history</span>
@@ -127,6 +135,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   `;
 
   const current = root.querySelector('.battle-current');
+  const currentContent = root.querySelector('.battle-current-content');
   const history = root.querySelector('.battle-history');
   const historyList = root.querySelector('.battle-history-list');
   const closeButton = root.querySelector('.battle-history-close');
@@ -325,12 +334,12 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
     show(entry, { revealed = true } = {}) {
       const view = battleView(entry, { revealed });
       if (!view) {
-        current.replaceChildren();
+        currentContent.replaceChildren();
         current.classList.add('is-empty');
         return;
       }
       current.classList.remove('is-empty');
-      renderBattle(current, view);
+      renderBattle(currentContent, view);
       chooseLayout([current]);
     },
 
