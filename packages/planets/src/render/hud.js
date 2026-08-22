@@ -14,11 +14,6 @@ const rgba = ([r, g, b], alpha) =>
 // doesn't end up flush against the edge of the row looking half cut off.
 const REVEAL_MARGIN = 12; // px
 
-// However many dice were actually earned, the tray only ever shows this many
-// chips before falling back to a "+N" — the same reasoning the battle readout
-// has for going compact, just without a resize to react to.
-const MAX_REINFORCE_CHIPS = 8;
-
 /**
  * Where a horizontally scrolling row needs to be scrolled to for one item to
  * be fully visible — or its current position, unchanged, if the item already
@@ -163,14 +158,14 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       <div class="hud-battle"></div>
     </div>
     <div class="hud-controls">
-      <span class="hud-turn">
-        <i class="hud-dot"></i><span class="hud-turn-text"></span>
-        <span class="hud-reinforce" hidden aria-hidden="true"></span>
-      </span>
-      <span class="hud-buttons">
-        <button class="hud-menu" type="button">Menu</button>
-        <button class="hud-end-turn" type="button">End turn</button>
-      </span>
+      <div class="hud-reinforce" hidden aria-hidden="true"></div>
+      <div class="hud-controls-row">
+        <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
+        <span class="hud-buttons">
+          <button class="hud-menu" type="button">Menu</button>
+          <button class="hud-end-turn" type="button">End turn</button>
+        </span>
+      </div>
     </div>
     <div class="hud-banner" hidden>
       <div class="hud-banner-card">
@@ -189,9 +184,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
   const reinforceTray = root.querySelector('.hud-reinforce');
-  let reinforceChips = []; // shown chips, left to right — popped from the right
-  let reinforceOverflow = 0; // dice folded into the "+N" badge, not their own chip
-  let reinforceMore = null; // the "+N" badge itself, if there is one
+  let reinforceChips = []; // one per die, left to right — popped from the right
   const endTurnButton = root.querySelector('.hud-end-turn');
   const menuButton = root.querySelector('.hud-menu');
   const banner = root.querySelector('.hud-banner');
@@ -322,10 +315,11 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     },
 
     /**
-     * A die chip per die a player just earned, in their color — up to
-     * `MAX_REINFORCE_CHIPS`, with the rest folded into a "+N". Purely a cue
-     * that a payout is landing; it says nothing about where, since that is
-     * what the dice falling onto the planet are for.
+     * A die chip per die a player just earned, in their color, wrapping onto
+     * as many lines as it takes — sitting above the turn/menu/end-turn row
+     * rather than squeezed inside it means a big payout never runs out of
+     * room. Purely a cue that a payout is landing; it says nothing about
+     * where, since that is what the dice falling onto the planet are for.
      */
     showReinforce({ playerId, count }) {
       if (count <= 0) return;
@@ -333,22 +327,11 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       const ink = readableTextColor(color);
 
       reinforceTray.replaceChildren();
-      const shown = Math.min(count, MAX_REINFORCE_CHIPS);
       reinforceChips = [];
-      for (let i = 0; i < shown; i++) {
+      for (let i = 0; i < count; i++) {
         const chip = dieChip({ value: 1 }, color, ink);
         reinforceChips.push(chip);
         reinforceTray.append(chip);
-      }
-
-      reinforceOverflow = count - shown;
-      if (reinforceOverflow > 0) {
-        reinforceMore = document.createElement('span');
-        reinforceMore.className = 'hud-reinforce-more';
-        reinforceMore.textContent = `+${reinforceOverflow}`;
-        reinforceTray.append(reinforceMore);
-      } else {
-        reinforceMore = null;
       }
       reinforceTray.hidden = false;
     },
@@ -356,17 +339,9 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     /**
      * One die has just landed on the planet — peels the tray back by one, so
      * it empties right to left in step with the drops rather than vanishing
-     * all at once. The "+N" badge goes first, since it stands for whichever
-     * dice never got a chip of their own; only once it is gone do the chips
-     * themselves start disappearing.
+     * all at once.
      */
     reinforceDropped() {
-      if (reinforceOverflow > 0) {
-        reinforceOverflow--;
-        if (reinforceOverflow > 0) reinforceMore.textContent = `+${reinforceOverflow}`;
-        else reinforceMore?.remove();
-        return;
-      }
       reinforceChips.pop()?.remove();
     },
 

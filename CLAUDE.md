@@ -17,6 +17,11 @@ node --test packages/planets/test/settings.test.js       # one file
 node --test --test-name-pattern "banked dice" packages/planets/test/*.test.js   # one test
 ```
 
+The user usually already has a dev server running — on 5173 or another
+port — so check for one before starting your own. When previewing or
+verifying a change in a browser, point it at whichever port is already live
+rather than launching a second `npm run dev`.
+
 There is no linter and no build step for tests — they are plain
 `node --test` ESM files with no framework, no transpiler, and no mocking
 library. `npm test` globs `packages/*/test/*.test.js`, so a new test file is
