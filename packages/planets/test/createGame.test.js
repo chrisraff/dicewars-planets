@@ -188,17 +188,44 @@ test('the game ends when one player holds everything, and stops accepting input'
   assert.equal(game.selection, null, 'the board is dead once the game is over');
 });
 
+test('the winning attack fires "over" on its own — nobody has to end their turn to see it', () => {
+  const game = createGame({
+    world: chainWorld([
+      ['a', { owner: 'p1', dice: 8 }],
+      ['b', { owner: 'p2', dice: 1 }],
+      ['c', { owner: 'p1', dice: 8 }],
+      ['d', { owner: 'p2', dice: 1 }],
+    ]),
+    rollDie: alwaysRolls(6),
+  });
+  const winners = [];
+  game.on('over', (w) => winners.push(w));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  assert.equal(winners.length, 0, 'p2 still holds d — the match is not decided yet');
+
+  game.clickTerritory('c');
+  game.clickTerritory('d'); // the last territory p2 has
+  advance(game, 3);
+
+  // decided the instant that attack landed — no endTurn() anywhere in this test
+  assert.deepEqual(winners, ['p1']);
+  assert.ok(game.isOver());
+});
+
 test('a whole game plays itself out without stalling', () => {
-  // both sides on autopilot: the human seat just ends its turn every time
+  // nobody in the human seat, so every player is on autopilot
   const game = createGame({ world: balanced(), humanPlayerId: AUTOPLAY });
-  let turns = 0;
-  game.on('endTurn', () => turns++);
   game.start();
 
   advance(game, 600, 0.05);
 
-  assert.ok(game.isOver(), `expected a winner after ${turns} turns`);
-  assert.ok(turns > 1);
+  // the deciding attack can end the match on the spot, before anyone's turn
+  // ends — so reaching game over is the whole story, not a turn count
+  assert.ok(game.isOver(), 'expected a winner');
+  assert.ok(['p1', 'p2'].includes(game.state.winner));
 });
 
 test('a real generated planet plays through to a winner', () => {

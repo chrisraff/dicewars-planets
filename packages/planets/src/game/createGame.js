@@ -114,7 +114,12 @@ export function createGame({
     pendingEvents = [];
     emit('change', state);
 
-    if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
+    // The winning attack can decide the match on the spot — taking the last
+    // opponent's last territory — and the player who just won shouldn't have
+    // to end their turn to be told that. See `finishReinforce` below for the
+    // same check at the other place a game can end.
+    if (isOver()) emit('over', state.winner);
+    else if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
   }
 
   // Held back exactly the way an attack is: the board should not show

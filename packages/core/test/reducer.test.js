@@ -82,6 +82,23 @@ test('taking a player’s last territory reports them as eliminated', () => {
   assert.equal(events[0].type, 'attack', 'the attack itself still comes first');
 });
 
+test('the winning attack itself ends the game, not the end of the turn after it', () => {
+  // p2 holds only 'b' — the same attack that eliminates them is also the one
+  // that leaves p1 the only player standing, and the match should not have to
+  // wait for someone to end a turn to find that out
+  const state = board();
+  const cornered = { ...state, nodes: new Map(state.nodes).set('d', { owner: 'p1', dice: 1 }) };
+  const { state: next, events } = reduce(cornered, attack('a', 'b'), { rollDie: overwhelming() });
+
+  assert.equal(next.phase, 'gameover');
+  assert.equal(next.winner, 'p1');
+  assert.deepEqual(
+    events.map((e) => e.type),
+    ['attack', 'eliminated', 'gameOver'],
+    'in the order they actually happened'
+  );
+});
+
 test('a player who still holds ground elsewhere is not reported eliminated', () => {
   const { events } = reduce(board(), attack('a', 'b'), { rollDie: overwhelming() });
   assert.equal(events.some((e) => e.type === 'eliminated'), false);

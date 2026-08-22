@@ -52,19 +52,28 @@ export function reduce(state, action, deps = {}) {
       }
       const { nodes, result } = resolveAttack(state.nodes, { from, to }, deps);
       const events = [{ type: 'attack', ...result }];
+      let next = { ...state, nodes };
 
       // Taking a player's last territory knocks them out then and there, in the
       // middle of someone's turn — the only player an attack can ever remove is
-      // the one who just lost the defending territory.
+      // the one who just lost the defending territory. And when that is the
+      // second-to-last player standing, the match is decided in that same
+      // instant.
       if (result.attackerWins && !stillHoldsGround(nodes, result.defenderOwner)) {
         events.push({
           type: 'eliminated',
           playerId: result.defenderOwner,
           by: result.attackerOwner,
         });
+
+        const living = livingPlayerIds(next);
+        if (living.length <= 1) {
+          next = { ...next, phase: 'gameover', winner: living[0] ?? null };
+          events.push({ type: 'gameOver', winner: next.winner });
+        }
       }
 
-      return { state: { ...state, nodes }, events };
+      return { state: next, events };
     }
 
     case 'END_TURN': {
