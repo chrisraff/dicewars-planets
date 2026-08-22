@@ -54,9 +54,12 @@ const menu = createMenu(menuRoot, {
   onContinue: () => startGame(savedGame.settings, savedGame),
 });
 
-menu.show(resolveSettings({ search: location.search, storage: window.localStorage }), {
-  canContinue: Boolean(savedGame),
-});
+// Skip the menu if there is a game in progress.
+if (savedGame) {
+  startGame(savedGame.settings, savedGame);
+} else {
+  menu.show(resolveSettings({ search: location.search, storage: window.localStorage }));
+}
 
 // --- input ----------------------------------------------------------------
 
