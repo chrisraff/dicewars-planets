@@ -78,6 +78,9 @@ export function createSession({
 
   const hud = createHud(hudRoot, { playerColors, playerNames });
   hud.setHistory(battles.entries);
+  // A resumed game brings its history with it, so the readout should show the
+  // last fight already fought rather than sitting empty until the next one.
+  if (battles.latestBattle) hud.showBattle(battles.latestBattle);
 
   const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
 
