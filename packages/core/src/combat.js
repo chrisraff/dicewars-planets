@@ -69,6 +69,12 @@ export function applyReinforcement(state, playerId, { rng = Math.random } = {}) 
     if (node.owner === playerId && node.dice < MAX_DICE_PER_NODE) withRoom.push(id);
   }
 
+  // Which territory each die landed on, one entry per die and in the order
+  // they were placed — a renderer wanting to drop the payout onto the board
+  // one die at a time needs to know where each one actually went, the same
+  // reason an attack carries every individual roll rather than just a total.
+  const landed = [];
+
   while (reserve > 0 && withRoom.length > 0) {
     // `Math.min` because an injected rng is only promised to be in [0, 1] —
     // a generator that can return exactly 1 would otherwise index off the end
@@ -78,6 +84,7 @@ export function applyReinforcement(state, playerId, { rng = Math.random } = {}) 
     const dice = node.dice + 1;
 
     nodes.set(id, { ...node, dice });
+    landed.push(id);
     reserve--;
 
     // full now, so it is out of the running — swap-with-last keeps this O(1)
@@ -92,5 +99,5 @@ export function applyReinforcement(state, playerId, { rng = Math.random } = {}) 
   const players = new Map(state.players);
   players.set(playerId, { ...player, reserve });
 
-  return { state: { ...state, nodes, players }, earned };
+  return { state: { ...state, nodes, players }, earned, landed };
 }

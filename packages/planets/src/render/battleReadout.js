@@ -88,7 +88,9 @@ export function scrollFades({ scrollLeft, scrollWidth, clientWidth }) {
   };
 }
 
-function dieChip({ value }, color, ink) {
+// Exported for the reinforcement tray in the HUD, which shows the same flat
+// die chip for dice that have not been rolled at all — just earned.
+export function dieChip({ value }, color, ink) {
   const chip = document.createElement('span');
   chip.className = value === null ? 'battle-die is-rolling' : 'battle-die';
   chip.style.setProperty('--die-color', rgb(color));

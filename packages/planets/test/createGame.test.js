@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, AI_TIMING, AUTOPLAY } from '../src/game/createGame.js';
 import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
+import { reinforceDuration, MAX_REINFORCE_DURATION } from '../src/render/reinforceTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createInitialState, reviveState, serializeState } from '@dicewars/core';
 import { seededRng, chainWorld, alwaysRolls } from '@dicewars/core/test-support';
@@ -103,10 +104,27 @@ test('ending your turn pays reinforcements and hands play to the AI', () => {
   game.on('endTurn', (e) => earned.push(e));
 
   game.endTurn();
+  advance(game, MAX_REINFORCE_DURATION + 0.05);
 
   assert.equal(earned.length, 1);
   assert.equal(game.currentPlayer(), 'p2');
   assert.ok(!game.isHumanTurn());
+});
+
+test('the board does not change until the reinforcement has finished landing', () => {
+  const game = createGame({ world: balanced() });
+  const before = game.state.nodes.get('a').dice;
+
+  game.endTurn();
+  assert.equal(game.currentPlayer(), 'p1', 'still the reinforcing player, mid-payout');
+  assert.equal(game.state.nodes.get('a').dice, before, 'no dice have landed yet');
+  assert.ok(game.isBusy());
+
+  // exactly one region, so exactly one die — advancing just past its own
+  // landing time (rather than the worst-case cap) keeps this clear of the
+  // AI's own next move, which starts its own busy spell a beat later
+  advance(game, reinforceDuration(1) + 0.05);
+  assert.equal(game.currentPlayer(), 'p2', 'the turn has now actually passed');
 });
 
 test('the human cannot act on the AI’s turn', () => {
@@ -119,6 +137,7 @@ test('the human cannot act on the AI’s turn', () => {
 test('the AI takes its own turn and hands play back', () => {
   const game = createGame({ world: balanced(), rollDie: alwaysRolls(3) });
   game.endTurn();
+  advance(game, MAX_REINFORCE_DURATION + 0.05);
   assert.equal(game.currentPlayer(), 'p2');
 
   advance(game, 10 * (attackDuration(AI_TIMING) + 1));
@@ -160,6 +179,7 @@ test('the game ends when one player holds everything, and stops accepting input'
   game.clickTerritory('d');
   advance(game, 3);
   game.endTurn();
+  advance(game, MAX_REINFORCE_DURATION + 0.05);
 
   assert.deepEqual(winners, ['p1']);
   assert.ok(game.isOver());

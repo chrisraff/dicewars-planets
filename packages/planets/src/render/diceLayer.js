@@ -103,6 +103,7 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
   return {
     group,
     dieSize,
+    geometry,
     standFor: (territoryId) => stands.get(territoryId),
     update(state) {
       for (const stand of stands.values()) {

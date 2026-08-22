@@ -403,6 +403,21 @@
   box-shadow: 0 0 0.5rem rgba(255, 255, 255, 0.35);
   flex: 0 0 auto;
 }
+
+/* The dice a turn just earned, shown next to whose turn it is while they fall
+   onto the planet — gone again the moment the payout actually lands. */
+.hud-reinforce {
+  display: flex;
+  align-items: center;
+  gap: 0.18rem;
+}
+.hud-reinforce[hidden] { display: none; }
+.hud-reinforce-more {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
 .hud-buttons {
   display: flex;
   align-items: center;

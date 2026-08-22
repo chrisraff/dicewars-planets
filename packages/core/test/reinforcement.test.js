@@ -179,6 +179,40 @@ test('dice do not land in the same places every time', () => {
   assert.ok(layouts.size > 1, `every seed produced the same board: ${[...layouts]}`);
 });
 
+test('landed records exactly where each die went, one entry per die', () => {
+  const state = chainState([
+    ['a', { owner: 'p1', dice: 1 }],
+    ['b', { owner: 'p1', dice: 1 }],
+    ['c', { owner: 'p1', dice: 1 }],
+    ['d', { owner: 'p2', dice: 1 }],
+  ]);
+  const { state: next, events } = endP1Turn(state);
+
+  assert.equal(events[0].landed.length, events[0].earned, 'one entry per die actually placed');
+  for (const id of events[0].landed) assert.equal(next.nodes.get(id).owner, 'p1');
+
+  const gains = {};
+  for (const id of events[0].landed) gains[id] = (gains[id] ?? 0) + 1;
+  for (const [id, count] of Object.entries(gains)) {
+    assert.equal(
+      next.nodes.get(id).dice,
+      state.nodes.get(id).dice + count,
+      `${id} gained exactly what landed on it`
+    );
+  }
+});
+
+test('landed only names territories that actually had room, and stops when the bank does', () => {
+  const state = chainState([
+    ['a', { owner: 'p1', dice: 7 }],
+    ['b', { owner: 'p1', dice: 8 }],
+    ['c', { owner: 'p1', dice: 8 }],
+    ['d', { owner: 'p2', dice: 1 }],
+  ]);
+  const { events } = endP1Turn(state);
+  assert.deepEqual(events[0].landed, ['a'], 'only the one territory with room, once');
+});
+
 test('a player with no territory left earns nothing and banks nothing', () => {
   const state = chainState([
     ['a', { owner: 'p2', dice: 1 }],

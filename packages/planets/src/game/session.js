@@ -8,6 +8,7 @@ import { gameSave, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
+import { createReinforceAnimation } from '../render/reinforceAnimation.js';
 import { createCameraFocus } from '../render/cameraFocus.js';
 import { fightCenter } from '../render/cameraFraming.js';
 import { createTerritoryPicker } from '../render/pickTerritory.js';
@@ -81,6 +82,7 @@ export function createSession({
   });
 
   let roll = null; // the attack being animated
+  let reinforceAnim = null; // the end-of-turn payout being animated
   // not stored in a save: the board itself says whether you still hold ground
   let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
 
@@ -153,6 +155,26 @@ export function createSession({
     dice.reroll(event.to, state);
   });
 
+  game.on('reinforce', (event) => {
+    // Deliberately no cameraFocus.lookAt here: reinforcement dice land on
+    // whichever territories they land on, all over the planet, and the drop
+    // is fast enough that swinging the camera to chase it would take longer
+    // than the animation it's chasing. It reads fine off-screen.
+    hud.showReinforce({ playerId: event.playerId, count: event.landed.length });
+    reinforceAnim = {
+      elapsed: 0,
+      dropped: 0, // how many of the HUD's chips have been told their die has landed
+      animation: createReinforceAnimation({ landed: event.landed, dice, materials: pipMaterials }),
+    };
+  });
+
+  game.on('endTurn', () => {
+    // The payout has landed — `change` is about to rebuild every stack it
+    // touched, so the dice animated here have nothing left to do.
+    reinforceAnim = null;
+    hud.hideReinforce();
+  });
+
   game.on('eliminated', (event) => {
     battles.record(event);
     hud.setHistory(battles.entries);
@@ -214,11 +236,22 @@ export function createSession({
         roll.animation.apply(roll.elapsed);
         refreshBoard(pulseAt(roll.elapsed));
       }
+      if (reinforceAnim) {
+        reinforceAnim.elapsed += dt;
+        const started = reinforceAnim.animation.apply(reinforceAnim.elapsed);
+        // the tray peels back in step with the drops themselves, not on its
+        // own timer — one call per die, the moment that die starts falling
+        while (reinforceAnim.dropped < started) {
+          hud.reinforceDropped();
+          reinforceAnim.dropped++;
+        }
+      }
       game.tick(dt);
     },
 
     dispose() {
       roll = null;
+      reinforceAnim = null;
       cameraFocus.dispose();
       viewer.scene.remove(surface.group, dice.group);
       surface.dispose();

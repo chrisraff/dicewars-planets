@@ -69,10 +69,10 @@ export function reduce(state, action, deps = {}) {
 
     case 'END_TURN': {
       const playerId = getCurrentPlayerId(state);
-      const { state: reinforced, earned } = applyReinforcement(state, playerId, deps);
+      const { state: reinforced, earned, landed } = applyReinforcement(state, playerId, deps);
       const advanced = advanceTurn(reinforced);
 
-      const events = [{ type: 'endTurn', playerId, earned }];
+      const events = [{ type: 'endTurn', playerId, earned, landed }];
       if (advanced.phase === 'gameover') {
         events.push({ type: 'gameOver', winner: advanced.winner });
       }

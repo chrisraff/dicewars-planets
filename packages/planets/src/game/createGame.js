@@ -9,6 +9,7 @@ import {
   neighbors,
 } from '@dicewars/core';
 import { attackDuration, DEFAULT_TIMING } from '../render/rollTimeline.js';
+import { reinforceDuration } from '../render/reinforceTimeline.js';
 
 // The AI plays the same animation, just briskly — a computer turn of six
 // attacks at human pace is a long time to sit and watch.
@@ -59,6 +60,9 @@ export function createGame({
   let pending = null; // the resolved-but-not-yet-shown result of an attack
   let pendingEvents = []; // everything else that happened in the same action
   let countdown = 0; // seconds left before `pending` is applied
+  let pendingReinforce = null; // the resolved-but-not-yet-applied end of turn
+  let pendingReinforceEvents = []; // 'endTurn' and, if it applies, 'gameOver'
+  let reinforceCountdown = 0; // seconds left before `pendingReinforce` is applied
   let thinking = 0; // seconds left before the AI's next move
 
   const listeners = new Map();
@@ -68,7 +72,7 @@ export function createGame({
 
   const currentPlayer = () => getCurrentPlayerId(state);
   const isHumanTurn = () => currentPlayer() === humanPlayerId;
-  const isBusy = () => pending !== null;
+  const isBusy = () => pending !== null || pendingReinforce !== null;
   const isOver = () => state.phase === 'gameover';
 
   function timingFor(playerId) {
@@ -113,12 +117,27 @@ export function createGame({
     if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
   }
 
+  // Held back exactly the way an attack is: the board should not show
+  // reinforcement dice — and a save should not record them — before they have
+  // visibly landed. `event` still goes out immediately, so the renderer can
+  // start the drop the moment the payout is known rather than waiting for it.
   function finishTurn() {
-    const { state: next, events } = reduce(state, endTurnAction(), deps);
-    state = next;
-    setSelection(null);
+    const result = reduce(state, endTurnAction(), deps);
+    const event = result.events.find((e) => e.type === 'endTurn');
 
-    for (const event of events) emit(event.type, event);
+    pendingReinforce = result.state;
+    pendingReinforceEvents = result.events;
+    reinforceCountdown = reinforceDuration(event.landed.length);
+    setSelection(null);
+    emit('reinforce', event);
+  }
+
+  function finishReinforce() {
+    state = pendingReinforce;
+    pendingReinforce = null;
+
+    for (const event of pendingReinforceEvents) emit(event.type, event);
+    pendingReinforceEvents = [];
     emit('change', state);
 
     if (isOver()) emit('over', state.winner);
@@ -184,6 +203,12 @@ export function createGame({
       if (pending !== null) {
         countdown -= dt;
         if (countdown <= 0) finishAttack();
+        return;
+      }
+
+      if (pendingReinforce !== null) {
+        reinforceCountdown -= dt;
+        if (reinforceCountdown <= 0) finishReinforce();
         return;
       }
 
