@@ -8,6 +8,8 @@ import { gameSave, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
+import { createCameraFocus } from '../render/cameraFocus.js';
+import { fightCenter } from '../render/cameraFraming.js';
 import { createTerritoryPicker } from '../render/pickTerritory.js';
 import { createHud } from '../render/hud.js';
 import { assignPlayerColors } from '../render/palette.js';
@@ -69,6 +71,8 @@ export function createSession({
   const hud = createHud(hudRoot, { playerColors, playerNames });
   hud.setHistory(battles.entries);
 
+  const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
+
   const pickTerritoryAt = createTerritoryPicker({
     planetMesh: surface.mesh,
     camera: viewer.camera,
@@ -116,6 +120,15 @@ export function createSession({
     // the dice are known already, but they belong on the planet first — show
     // the readout with blank faces so it fills in as the roll lands
     hud.showBattle(battleEntry(event), { revealed: false });
+
+    // The AI attacks wherever it likes, including round the back of the
+    // planet. Its own fights are the ones worth turning for — the player's
+    // are on screen by definition, since they just clicked them.
+    if (game.currentPlayer() !== humanPlayerId) {
+      const attacker = dice.standFor(event.from).normal;
+      const defender = dice.standFor(event.to).normal;
+      cameraFocus.lookAt(fightCenter(attacker, defender));
+    }
 
     roll = {
       event,
@@ -195,6 +208,7 @@ export function createSession({
     },
 
     tick(dt) {
+      cameraFocus.tick(dt);
       if (roll) {
         roll.elapsed += dt;
         roll.animation.apply(roll.elapsed);
@@ -205,6 +219,7 @@ export function createSession({
 
     dispose() {
       roll = null;
+      cameraFocus.dispose();
       viewer.scene.remove(surface.group, dice.group);
       surface.dispose();
       dice.dispose();

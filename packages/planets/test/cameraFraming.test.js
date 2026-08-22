@@ -1,0 +1,169 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  DEFAULT_FRAMING,
+  fightCenter,
+  framingOf,
+  needsRefocus,
+  swingDirection,
+  swingDuration,
+  visibleAngle,
+} from '../src/render/cameraFraming.js';
+import { angleBetween, cross, dot, length, normalize } from '../src/geometry/vec3.js';
+
+// The default camera: 45° vertical field of view, 3.2 out from the middle of
+// a unit planet. `minDistance` is 1.5, which is the interesting other end.
+const HALF_FOV = Math.PI / 8; // half of 45°, i.e. a square viewport
+const FAR = { distance: 3.2, halfFov: HALF_FOV };
+const CLOSE = { distance: 1.5, halfFov: HALF_FOV };
+
+const spherical = (lonDeg, latDeg = 0) => {
+  const lon = (lonDeg * Math.PI) / 180;
+  const lat = (latDeg * Math.PI) / 180;
+  return { x: Math.cos(lat) * Math.sin(lon), y: Math.sin(lat), z: Math.cos(lat) * Math.cos(lon) };
+};
+const FACING = spherical(0); // straight at the camera
+
+/**
+ * Independently: is a point on the planet actually visible from a camera
+ * `distance` out, with a half-angle `halfFov` frustum? Nothing the module
+ * does is reused here — this is a plain ray/lens check, so it can disagree.
+ */
+function reallyVisible({ distance, halfFov }, point) {
+  const camera = { x: 0, y: 0, z: distance };
+  const toPoint = { x: point.x - camera.x, y: point.y - camera.y, z: point.z - camera.z };
+  const facesCamera = dot(point, toPoint) < 0; // the front of the sphere, not the back
+  const offAxis = angleBetween(normalize(toPoint), { x: 0, y: 0, z: -1 });
+  return facesCamera && offAxis <= halfFov;
+}
+
+test('what you can see is capped by the horizon when the planet fits the frame', () => {
+  // 3.2 out, the whole planet is comfortably inside a 45° view, so the only
+  // thing hiding ground is the sphere curving away: acos(1/d).
+  assert.ok(Math.abs(visibleAngle(FAR.distance, FAR.halfFov) - Math.acos(1 / 3.2)) < 1e-9);
+});
+
+test('and by the frame instead once you zoom in past the planet', () => {
+  // Up close the silhouette is wider than the screen, so most of the lit half
+  // is off frame long before it reaches the horizon.
+  assert.ok(visibleAngle(CLOSE.distance, CLOSE.halfFov) < Math.acos(1 / CLOSE.distance) - 0.2);
+  assert.ok(visibleAngle(CLOSE.distance, CLOSE.halfFov) < visibleAngle(FAR.distance, FAR.halfFov),
+    'zooming in shows less of the planet, not more');
+});
+
+test('the edge of the cap is the last point actually on screen, at either zoom', () => {
+  // The claim `visibleAngle` makes but does not itself check: a point just
+  // inside it renders, and a point just outside it does not.
+  for (const view of [FAR, CLOSE]) {
+    const edge = (visibleAngle(view.distance, view.halfFov) * 180) / Math.PI;
+    assert.ok(reallyVisible(view, spherical(edge - 0.5)), `${edge}° - 0.5 should be visible`);
+    assert.ok(!reallyVisible(view, spherical(edge + 0.5)), `${edge}° + 0.5 should not be`);
+  }
+});
+
+test('framing reads 1 dead center, 0 at the edge and negative off screen', () => {
+  const edge = visibleAngle(FAR.distance, FAR.halfFov);
+  assert.equal(framingOf(FACING, FACING, FAR), 1);
+  assert.ok(Math.abs(framingOf(FACING, spherical((edge * 180) / Math.PI), FAR)) < 1e-9);
+  assert.ok(framingOf(FACING, spherical(180), FAR) < 0, 'the far side of the planet');
+});
+
+test('framing keeps getting worse all the way round to the far side', () => {
+  // The projection folds back past the limb — the antipode lands dead center
+  // on screen, behind everything — so reading it off the picture alone would
+  // rank the one place you can see least as the best framed spot there is.
+  let previous = Infinity;
+  for (let deg = 0; deg <= 180; deg += 2) {
+    const framing = framingOf(FACING, spherical(deg), FAR);
+    assert.ok(framing < previous, `${deg}° should be worse framed than ${deg - 2}°`);
+    previous = framing;
+  }
+});
+
+test('framing is measured on the screen, not around the planet', () => {
+  // Half way to the limb in angle is already most of the way out on the disc:
+  // the sphere crams its last few degrees into the outside of the picture,
+  // and a margin stated in angle would quietly tolerate dice seen edge-on.
+  const edge = visibleAngle(FAR.distance, FAR.halfFov);
+  const halfway = framingOf(FACING, spherical((edge * 90) / Math.PI), FAR);
+  assert.ok(halfway < 0.3,
+    `half way to the limb reads ${halfway.toFixed(2)}, not the 0.5 an angle would give it`);
+});
+
+test('the margin is the only thing deciding whether the camera moves', () => {
+  // 20° out on the default view — a little under half way out on screen.
+  const nearside = spherical(20);
+  const framing = framingOf(FACING, nearside, FAR);
+  assert.ok(!needsRefocus(FACING, nearside, FAR, { ...DEFAULT_FRAMING, margin: framing - 0.01 }));
+  assert.ok(needsRefocus(FACING, nearside, FAR, { ...DEFAULT_FRAMING, margin: framing + 0.01 }));
+});
+
+test('a fight in front of the camera is left alone; one round the back is not', () => {
+  assert.ok(!needsRefocus(FACING, FACING, FAR));
+  assert.ok(needsRefocus(FACING, spherical(180), FAR));
+  assert.ok(needsRefocus(FACING, spherical(65), FAR), 'and one out on the limb, seen edge-on');
+});
+
+test('the same fight can need a move zoomed in and not zoomed out', () => {
+  const point = spherical(20);
+  assert.ok(!needsRefocus(FACING, point, FAR));
+  assert.ok(needsRefocus(FACING, point, CLOSE), 'zoomed in, 20° away is off the side of the screen');
+});
+
+test('a fight is framed between its two territories', () => {
+  const center = fightCenter(spherical(-20), spherical(20));
+  assert.ok(Math.abs(length(center) - 1) < 1e-12, 'stays on the sphere');
+  assert.ok(angleBetween(center, spherical(0)) < 1e-9);
+});
+
+test('the swing takes the short way round, however far it has to go', () => {
+  const from = spherical(0);
+  const to = spherical(170); // the long way round is 190°, and would look absurd
+  const path = Array.from({ length: 21 }, (_, i) => swingDirection(from, to, i / 20));
+
+  let travelled = 0;
+  for (let i = 1; i < path.length; i++) travelled += angleBetween(path[i - 1], path[i]);
+  assert.ok(Math.abs(travelled - angleBetween(from, to)) < 1e-6, 'no detour, no overshoot');
+
+  const plane = normalize(cross(from, to));
+  for (const step of path) assert.ok(Math.abs(dot(step, plane)) < 1e-9, 'stays on one great circle');
+});
+
+test('the swing starts where the camera is and ends looking at the target', () => {
+  const from = spherical(0);
+  const to = spherical(120, 30);
+  assert.ok(angleBetween(swingDirection(from, to, 0), from) < 1e-9);
+  assert.ok(angleBetween(swingDirection(from, to, 1), to) < 1e-9);
+});
+
+test('the swing eases in and out rather than starting and stopping dead', () => {
+  const from = spherical(0);
+  const to = spherical(90);
+  const at = (t) => angleBetween(from, swingDirection(from, to, t));
+
+  assert.ok(at(0.1) < 0.1 * at(1), 'still gathering pace');
+  assert.ok(at(0.9) > 0.9 * at(1), 'already settling');
+  for (let t = 0.05; t <= 1; t += 0.05) assert.ok(at(t) > at(t - 0.05), 'and never backs up');
+});
+
+test('a fight on the exact opposite side still turns somewhere', () => {
+  // No unique shortest arc — every direction is equally right, and the one
+  // thing that must not happen is the camera pointing at NaN.
+  const from = spherical(0);
+  const path = [0, 0.5, 1].map((t) => swingDirection(from, spherical(180), t));
+  for (const step of path) assert.ok(Math.abs(length(step) - 1) < 1e-9, `${JSON.stringify(step)}`);
+  assert.ok(angleBetween(path[2], spherical(180)) < 1e-6);
+});
+
+test('a swing is paced by distance, and bounded at both ends', () => {
+  assert.equal(swingDuration(0.01), DEFAULT_FRAMING.minDuration, 'a nudge is not slower than a turn');
+  assert.equal(swingDuration(Math.PI), DEFAULT_FRAMING.maxDuration, 'a half turn is not a whip pan');
+  assert.ok(swingDuration(1.2) > swingDuration(0.9), 'in between, further takes longer');
+});
+
+test('the camera always arrives before the dice it is turning for land', () => {
+  // An AI attack aims for 0.12s and rolls for 0.45s (AI_TIMING); anything the
+  // camera is still doing after that is a swing the player watches instead of
+  // the battle it exists to show.
+  assert.ok(swingDuration(Math.PI) <= 0.12 + 0.45);
+});

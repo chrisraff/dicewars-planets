@@ -175,6 +175,36 @@ less often than it looks: on a default planet, four and six dice never put a
 corner on foreign land at all, and eight manage it about 2% of the time, one
 corner at a time.
 
+The AI plays where it likes, and most of that is round the back of the
+planet, so `cameraFocus.js` swings the orbit camera over to an AI attack that
+isn't in view — along the shortest arc, and never for the player's own
+attacks, which they just clicked. `cameraFraming.js` holds every decision in
+it as pure functions:
+
+- **What can be seen.** `visibleAngle` is how far around the planet from the
+  point facing the camera you can still see. Two things cut it off and the
+  nearer wins: the horizon (`acos(1 / distance)`) and, once you zoom in past
+  the planet, the edge of the frame. Zoomed all the way in, the frame bites at
+  about 12° where the horizon is still 48° away.
+- **How close to the edge is too close.** `framingOf` places a point on a
+  scale of 1 (dead center) to 0 (right on that edge), and
+  `DEFAULT_FRAMING.margin` is the tuning lever: below it, the camera moves.
+  Deliberately measured on the *screen* rather than around the planet, because
+  the limb foreshortens hard — a fight 70% of the way to the horizon in angle
+  is already 91% of the way out on the disc, and a lever stated in angle would
+  quietly tolerate dice seen edge-on. On a default planet, the current 0.2
+  moves the camera for roughly three AI attacks in four and leaves it in
+  motion about a quarter of the time; dropping the lever to 0 (move only when
+  the fight is strictly off screen) only takes that to one in two. Most of the
+  planet is simply not facing you, and no setting changes that — what the
+  lever really trades is how squashed the dice may be when it does hold still.
+
+A swing is paced by distance and capped at 0.55s, which is shorter than an AI
+attack's aim-plus-roll, so the camera has arrived before there is anything to
+read. A hand on the planet cancels it outright — a wheel zoom doesn't, since
+that says nothing about where to look, and the swing keeps whatever distance
+the player lands on.
+
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice
 texture and the flat SVG dice in the battle readout, and `diceStacks.js`

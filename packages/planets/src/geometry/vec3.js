@@ -17,3 +17,9 @@ export const cross = (a, b) => ({
 
 export const centroid = (points) =>
   scale(points.reduce(add), 1 / points.length);
+
+// Great-circle angle between two unit vectors, in radians. atan2 of the
+// cross against the dot rather than acos of the dot alone: acos loses all its
+// precision for nearly-parallel vectors, which is exactly the case anything
+// asking "how far apart are these two directions" cares most about.
+export const angleBetween = (a, b) => Math.atan2(length(cross(a, b)), dot(a, b));

@@ -1,12 +1,10 @@
-import { add, normalize, dot } from '../geometry/vec3.js';
+import { add, angleBetween, normalize } from '../geometry/vec3.js';
 
 // How close a mount point is allowed to get to a cell that isn't part of the
 // territory, as a multiple of the planet's typical cell spacing. Just under
 // one full cell, so a point sitting squarely on a border cell's center still
 // counts as clear, while anything nudged toward the seam does not.
 const DEFAULT_MIN_CLEARANCE = 0.9;
-
-const angleBetween = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
 
 // How far `point` is, in radians, from the nearest cell the territory does
 // not own. Everything here is measured in these terms: where the dice mount,
