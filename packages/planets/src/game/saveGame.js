@@ -21,7 +21,7 @@ export const SAVE_VERSION = 1;
 const STORAGE_KEY = 'dicewars-planets:game';
 
 /** The one shape everything below agrees on. */
-export function gameSave({ seed, settings, humanPlayerId, world, state, battles }) {
+export function gameSave({ seed, settings, humanPlayerId, world, state, battles, camera }) {
   return {
     version: SAVE_VERSION,
     seed,
@@ -30,7 +30,30 @@ export function gameSave({ seed, settings, humanPlayerId, world, state, battles 
     world: worldFingerprint(world),
     state,
     battles,
+    camera,
   };
+}
+
+/**
+ * Where the player left the camera — orbit angle, pitch and zoom are all just
+ * `camera.position`, since the controls never pan the target off the
+ * planet's center. `camera.up` isn't here for the same reason: nothing in
+ * this app ever rotates it away from its default.
+ *
+ * Older saves have no `camera` field at all, which is why this is read as
+ * optional rather than required: a save missing it, or holding numbers a
+ * hand edit broke, simply leaves the camera at wherever the viewer starts.
+ */
+export function cameraSnapshot(camera) {
+  const { x, y, z } = camera.position;
+  return { x, y, z };
+}
+
+export function isUsableCamera(camera) {
+  return Boolean(camera)
+    && Number.isFinite(camera.x)
+    && Number.isFinite(camera.y)
+    && Number.isFinite(camera.z);
 }
 
 /**

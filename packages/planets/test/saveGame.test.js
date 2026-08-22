@@ -9,6 +9,8 @@ import {
   clearSavedGame,
   saveMatchesWorld,
   worldFingerprint,
+  cameraSnapshot,
+  isUsableCamera,
 } from '../src/game/saveGame.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createGame, AUTOPLAY } from '../src/game/createGame.js';
@@ -139,6 +141,30 @@ test('clearing means the next visit gets the menu, not the game before it', () =
   const storage = stored(saveOf(11));
   clearSavedGame(storage);
   assert.equal(readSavedGame(storage), null);
+});
+
+// --- the camera the player left the planet at ---------------------------------
+
+test('the camera is exactly where a save leaves it, angle, pitch and zoom alike', () => {
+  const camera = cameraSnapshot({ position: { x: 1, y: 2.5, z: -3 } });
+  const save = saveOf(11, { camera });
+  const read = readSavedGame(stored(save));
+
+  assert.deepEqual(read.camera, { x: 1, y: 2.5, z: -3 });
+});
+
+test('an old save with no camera in it is still a save worth continuing', () => {
+  // camera wasn't always part of the save shape — reading one written before
+  // it was must not refuse the whole game over one missing field
+  const read = readSavedGame(stored(saveOf(11)));
+  assert.equal(read.camera, undefined);
+});
+
+test('a camera is only usable once its numbers actually are', () => {
+  assert.equal(isUsableCamera({ x: 1, y: 2, z: 3 }), true);
+  assert.equal(isUsableCamera(undefined), false);
+  assert.equal(isUsableCamera({ x: 1, y: 2 }), false, 'z is missing');
+  assert.equal(isUsableCamera({ x: 1, y: NaN, z: 3 }), false, 'a hand-edited save broke a number');
 });
 
 // --- laying a save back onto a planet ----------------------------------------

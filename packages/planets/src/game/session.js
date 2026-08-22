@@ -4,7 +4,7 @@ import { createGame } from './createGame.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
 import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, subdivisionsFor } from './settings.js';
-import { gameSave, saveMatchesWorld } from './saveGame.js';
+import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
@@ -65,6 +65,13 @@ export function createSession({
   });
   const battles = createBattleLog({ entries: restored?.battles });
 
+  // A resumed game puts the camera back where it was left; a fresh one
+  // leaves it wherever the viewer already starts.
+  if (isUsableCamera(restored?.camera)) {
+    viewer.camera.position.set(restored.camera.x, restored.camera.y, restored.camera.z);
+    viewer.controls.update();
+  }
+
   const surface = createPlanetSurface(world, playerColors);
   const dice = createDiceLayer(world, pipMaterials);
   viewer.scene.add(surface.group, dice.group);
@@ -96,6 +103,7 @@ export function createSession({
       world,
       state: serializeState(game.state),
       battles: battles.entries,
+      camera: cameraSnapshot(viewer.camera),
     });
   }
 
