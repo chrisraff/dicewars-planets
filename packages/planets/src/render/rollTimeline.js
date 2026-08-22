@@ -25,18 +25,26 @@ export function attackDuration(timing = DEFAULT_TIMING) {
  *   phase    which beat of the attack we're in
  *   progress 0..1 through that beat
  *   lift     0..1 of the hop height — zero on the ground at both ends
+ *   travel   0..1 of the way from the stack to where the die lands
  *   spin     radians tumbled so far, easing to a stop
  *   settle   0..1 blend from "tumbling" toward the face that was rolled
  *
- * At the end of the roll `lift` is back to 0, `spin` is a whole number of
- * turns and `settle` is exactly 1, so the dice land square on their values
- * with no visible snap.
+ * At the end of the roll `lift` is back to 0, `travel` and `settle` are
+ * exactly 1 and `spin` is a whole number of turns, so the dice come down on
+ * their landing spots showing their values with no visible snap.
  */
 export function sampleAttack(elapsed, timing = DEFAULT_TIMING) {
   const { aim, roll, read } = timing;
 
   if (elapsed < aim) {
-    return { phase: 'aim', progress: clamp01(elapsed / aim), lift: 0, spin: 0, settle: 0 };
+    return {
+      phase: 'aim',
+      progress: clamp01(elapsed / aim),
+      lift: 0,
+      travel: 0,
+      spin: 0,
+      settle: 0,
+    };
   }
 
   const rolling = elapsed - aim;
@@ -46,12 +54,15 @@ export function sampleAttack(elapsed, timing = DEFAULT_TIMING) {
       phase: 'roll',
       progress: p,
       lift: Math.sin(Math.PI * p),
+      // eased at both ends: the dice leave the stack and settle onto the
+      // ground rather than starting and stopping dead
+      travel: smoothstep(0, 1, p),
       spin: TUMBLE_TURNS * 2 * Math.PI * easeOutCubic(p),
       settle: smoothstep(0.55, 1, p),
     };
   }
 
-  const settled = { lift: 0, spin: TUMBLE_TURNS * 2 * Math.PI, settle: 1 };
+  const settled = { lift: 0, travel: 1, spin: TUMBLE_TURNS * 2 * Math.PI, settle: 1 };
   const reading = rolling - roll;
   if (reading < read) {
     return { phase: 'read', progress: clamp01(reading / read), ...settled };

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { findAllDiceMountPoints } from '../world/territoryCenters.js';
+import { findAllDiceGrounds } from '../world/territoryCenters.js';
 import { planDiceStacks, stackColumnCount, PIP_FACE_NORMALS } from './diceStacks.js';
 
 const DIE_SIZE = 0.035;
@@ -60,22 +60,31 @@ export function dicePosition(column, level, columns, dieSize) {
 export function createDiceLayer(world, pipMaterials, options = {}) {
   const { dieSize = DIE_SIZE, rng = Math.random } = options;
   const cellsById = new Map(world.cells.map((c) => [c.id, c]));
-  const mountPoints = findAllDiceMountPoints(world.territories, cellsById);
+  const grounds = findAllDiceGrounds(world.territories, cellsById);
   const geometry = new RoundedBoxGeometry(dieSize, dieSize, dieSize, BEVEL_SEGMENTS, dieSize * 0.12);
 
   const group = new THREE.Group();
   const stands = new Map();
 
   for (const territory of world.territories) {
-    const point = mountPoints.get(territory.id);
-    const normal = new THREE.Vector3(point.x, point.y, point.z).normalize();
+    const { center, radius } = grounds.get(territory.id);
+    const normal = new THREE.Vector3(center.x, center.y, center.z).normalize();
 
     const stand = new THREE.Group();
     stand.position.copy(normal);
     stand.quaternion.copy(surfaceFrame(normal));
     group.add(stand);
 
-    stands.set(territory.id, { id: territory.id, object: stand, normal, dice: 0, meshes: [] });
+    // `groundRadius` is how far from the stand a die can land and still be on
+    // this territory — the roll animation throws the dice out across it.
+    stands.set(territory.id, {
+      id: territory.id,
+      object: stand,
+      normal,
+      groundRadius: radius,
+      dice: 0,
+      meshes: [],
+    });
   }
 
   function rebuild(stand, diceCount) {

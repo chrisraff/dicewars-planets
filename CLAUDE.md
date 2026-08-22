@@ -142,9 +142,38 @@ renderer wants.
 **`src/render/`** — pure decisions are split out from DOM and three.js
 plumbing wherever it is worth testing. `hud.js` exports `playerPanelView`,
 `turnIndicatorView` and `outcomeView` as pure functions and applies them just
-below; `rollTimeline.js` is the animation's timing with no three.js in it at
-all. Modules importable without a DOM are testable, so keep `document` access
-inside functions rather than at module top level.
+below; `rollTimeline.js` is the animation's timing and `diceScatter.js` its
+landing spots, neither with any three.js in it at all. Modules importable
+without a DOM are testable, so keep `document` access inside functions rather
+than at module top level.
+
+Attacking dice don't tumble in place: they are thrown out across the
+territory and land flat, so a roll of eight can be read at a glance instead of
+being stacked inside itself. Two rules make that work, and they meet in
+`diceScatter.js`:
+
+- **How much ground there is.** `territoryCenters.js` `diceGroundRadius` is
+  the largest circle around the mount point that is entirely this territory's
+  land. A cell owns the ground nearest its own center, so stepping `d` from
+  the mount point brings the nearest foreign center `d` closer and pushes the
+  nearest own center `d` away; they meet at `(clearance - home) / 2`. It is a
+  worst-direction bound rather than an average, because a die that strays onto
+  the neighbour is precisely the confusion the dice exist to prevent.
+- **How much room a die needs.** A die that has stopped tumbling is yawed by a
+  whole number of quarter turns, so its footprint is an *axis-aligned* square,
+  and two of them are clear as soon as they're a die apart in x **or** in z.
+  That Chebyshev distance is what the lattice, the jitter cap and the tests
+  are all stated in — keeping circumscribed circles apart instead would cost
+  40% more room and eight dice would no longer fit anywhere.
+
+The pitch shrinks until the pile fits the ground it has, and stops at dice
+touching — past that there is nothing left to give, so a pile that still
+doesn't fit overhangs the border rather than dice landing inside one another.
+Not overlapping is the guarantee; staying inside is the strong preference.
+Because `diceGroundRadius` takes the worst direction, that trade bites far
+less often than it looks: on a default planet, four and six dice never put a
+corner on foreign land at all, and eight manage it about 2% of the time, one
+corner at a time.
 
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice

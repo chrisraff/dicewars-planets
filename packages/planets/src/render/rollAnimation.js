@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { dieTumble } from './diceLayer.js';
+import { scatterDice } from './diceScatter.js';
 import { sampleAttack, attackDuration, DEFAULT_TIMING } from './rollTimeline.js';
 
 const HOP_HEIGHT = 1.4; // in die widths
@@ -15,12 +16,20 @@ function randomAxis(rng) {
 
 // One stack's worth of dice, remembered where they were and told where they
 // have to end up: `rolls[i]` is the face die `i` must be showing when the
-// tumble stops.
-function prepareStack(meshes, rolls, dieSize, rng) {
-  return meshes.map((mesh, i) => ({
+// tumble stops, and `landing` is the patch of ground it comes down on. The
+// dice leave the stack for the throw, so the whole roll is readable at once
+// instead of being hidden inside a pile.
+function prepareStack(stand, rolls, dieSize, rng) {
+  const landings = scatterDice(stand.meshes.length, {
+    dieSize,
+    radius: stand.groundRadius,
+    rng,
+  });
+  return stand.meshes.map((mesh, i) => ({
     mesh,
     restPosition: mesh.position.clone(),
     restQuaternion: mesh.quaternion.clone(),
+    landing: new THREE.Vector3(landings[i].x, landings[i].y, landings[i].z),
     target: dieTumble(rolls[i] ?? 1, Math.floor(rng() * 4)),
     axis: randomAxis(rng),
     hop: dieSize * HOP_HEIGHT * (0.7 + rng() * 0.6), // dice don't all bounce equally
@@ -28,8 +37,9 @@ function prepareStack(meshes, rolls, dieSize, rng) {
 }
 
 /**
- * Plays one attack: both stacks hop, tumble, and come down showing exactly
- * the faces the reducer rolled. Purely visual — it never touches game state.
+ * Plays one attack: both stacks scatter across their own territory, tumble,
+ * and come down showing exactly the faces the reducer rolled. Purely visual —
+ * it never touches game state.
  * The caller ticks it with the seconds elapsed and applies the outcome when
  * `phase` reaches 'done'.
  */
@@ -42,8 +52,8 @@ export function createRollAnimation({
   rng = Math.random,
 }) {
   const dice = [
-    ...prepareStack(attackerStand.meshes, event.attackRolls, dieSize, rng),
-    ...prepareStack(defenderStand.meshes, event.defendRolls, dieSize, rng),
+    ...prepareStack(attackerStand, event.attackRolls, dieSize, rng),
+    ...prepareStack(defenderStand, event.defendRolls, dieSize, rng),
   ];
 
   const tumbling = new THREE.Quaternion();
@@ -60,7 +70,7 @@ export function createRollAnimation({
         spinning.setFromAxisAngle(die.axis, beat.spin);
         tumbling.multiplyQuaternions(spinning, die.restQuaternion);
         die.mesh.quaternion.slerpQuaternions(tumbling, die.target, beat.settle);
-        die.mesh.position.copy(die.restPosition);
+        die.mesh.position.lerpVectors(die.restPosition, die.landing, beat.travel);
         die.mesh.position.y += beat.lift * die.hop;
       }
       return beat;

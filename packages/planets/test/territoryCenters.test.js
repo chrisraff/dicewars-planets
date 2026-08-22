@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   findDiceMountPoint,
-  findAllDiceMountPoints,
+  findAllDiceGrounds,
+  diceGroundRadius,
   estimateCellSpacing,
 } from '../src/world/territoryCenters.js';
 import { generateIcosphereCells } from '../src/geometry/icosphere.js';
@@ -22,6 +23,27 @@ function gridCells(coords, spacing = 0.05) {
       .map((c) => ids.get(key(c)))
       .filter((id) => id !== undefined),
   }));
+}
+
+// `steps` points evenly spaced around the circle of radius `radius` about
+// `center`, projected back onto the sphere.
+function ringAround(center, radius, steps) {
+  const cross = (a, b) => ({
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  });
+  const east = normalize(cross(center, Math.abs(center.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 }));
+  const north = normalize(cross(center, east));
+  return Array.from({ length: steps }, (_, i) => {
+    const a = (2 * Math.PI * i) / steps;
+    const [c, s] = [Math.cos(a) * radius, Math.sin(a) * radius];
+    return normalize({
+      x: center.x + c * east.x + s * north.x,
+      y: center.y + c * east.y + s * north.y,
+      z: center.z + c * east.z + s * north.z,
+    });
+  });
 }
 
 test('uses the projected centroid when it lands within the territory', () => {
@@ -88,9 +110,9 @@ test('every territory gets a mount point', () => {
   const cellsById = new Map(cells.map((c) => [c.id, c]));
   const { territories } = groupIntoTerritories(cells, { rng: seededRng(11) });
 
-  const points = findAllDiceMountPoints(territories, cellsById);
-  assert.equal(points.size, territories.length);
-  for (const t of territories) assert.ok(points.has(t.id));
+  const grounds = findAllDiceGrounds(territories, cellsById);
+  assert.equal(grounds.size, territories.length);
+  for (const t of territories) assert.ok(grounds.has(t.id));
 });
 
 test('rejects a centroid that sits inside the territory but hard against a border', () => {
@@ -148,10 +170,10 @@ test('mount points on a generated planet keep clear of foreign cells', () => {
   const { territories } = groupIntoTerritories(cells, { rng: seededRng(7) });
   const spacing = estimateCellSpacing(cellsById);
 
-  const points = findAllDiceMountPoints(territories, cellsById);
+  const grounds = findAllDiceGrounds(territories, cellsById);
 
   for (const t of territories) {
-    const point = points.get(t.id);
+    const point = grounds.get(t.id).center;
     const members = new Set(t.cellIds);
     let clearance = Infinity;
     for (const cell of cells) {
@@ -163,5 +185,64 @@ test('mount points on a generated planet keep clear of foreign cells', () => {
       clearance >= 0.9 * spacing || onOwnCell,
       `territory ${t.id} (${t.cellIds.length} cells) sits ${(clearance / spacing).toFixed(2)} cells from a foreign cell`
     );
+  }
+});
+
+test('a lone cell gets half the way to its nearest neighbour, and no more', () => {
+  const cells = gridCells([[1, 1], [0, 1], [2, 1], [1, 0], [1, 2]]);
+  const cellsById = new Map(cells.map((c) => [c.id, c]));
+
+  const point = findDiceMountPoint([0], cellsById);
+  const nearest = Math.min(
+    ...[1, 2, 3, 4].map((id) => Math.acos(Math.min(1, dot(point, cells[id].center))))
+  );
+
+  // the mount point is the cell's own center, so the ground reaches exactly
+  // to the seam it shares with whichever neighbour is closest
+  const radius = diceGroundRadius(point, [0], cellsById);
+  assert.ok(Math.abs(radius - nearest / 2) < 1e-9, `${radius} should be half of ${nearest}`);
+});
+
+test('a territory with room around it offers more ground than a hemmed-in one', () => {
+  //  . B .    the plus keeps its whole hub cell and reaches into the four
+  //  D E F    arms; the lone cell has a seam half a cell away in every
+  //  . H .    direction, so it should come out with much the smaller circle.
+  const coords = [
+    [1, 2], [0, 1], [1, 1], [2, 1], [1, 0],
+    [0, 2], [2, 2], [0, 0], [2, 0], [3, 1], [-1, 1],
+  ];
+  const cells = gridCells(coords);
+  const cellsById = new Map(cells.map((c) => [c.id, c]));
+
+  const plus = [0, 1, 2, 3, 4];
+  const roomy = diceGroundRadius(findDiceMountPoint(plus, cellsById), plus, cellsById);
+  const cramped = diceGroundRadius(findDiceMountPoint([2], cellsById), [2], cellsById);
+
+  assert.ok(roomy > cramped * 1.3, `${roomy} should be comfortably more than ${cramped}`);
+});
+
+test('every point on the ground a territory offers is that territory’s own land', () => {
+  // The claim the radius exists to make, checked the hard way: walk the rim
+  // of every territory's circle and ask which cell each spot actually belongs
+  // to. A cell owns the ground nearest its center, so the answer had better
+  // be a cell this territory holds.
+  const cells = generateIcosphereCells(3);
+  const cellsById = new Map(cells.map((c) => [c.id, c]));
+  const { territories } = groupIntoTerritories(cells, { rng: seededRng(7) });
+
+  const grounds = findAllDiceGrounds(territories, cellsById);
+
+  for (const t of territories) {
+    const { center, radius } = grounds.get(t.id);
+    assert.ok(radius > 0, `territory ${t.id} (${t.cellIds.length} cells) has nowhere to roll`);
+
+    const members = new Set(t.cellIds);
+    for (const spot of ringAround(center, radius, 64)) {
+      const nearest = cells.reduce((a, b) => (dot(spot, b.center) > dot(spot, a.center) ? b : a));
+      assert.ok(
+        members.has(nearest.id),
+        `territory ${t.id} would land a die on cell ${nearest.id}, which it does not own`
+      );
+    }
   }
 });

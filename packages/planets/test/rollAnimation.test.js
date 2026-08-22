@@ -73,7 +73,7 @@ test('the dice still read correctly once the animation is over', () => {
   assert.deepEqual(attacker.meshes.map((m) => pipUp(m, attacker)), event.attackRolls);
 });
 
-test('dice leave the stack while rolling and come back down to rest on it', () => {
+test('dice leave the stack while rolling and come down flat on the ground', () => {
   const event = { attackRolls: [4, 4], defendRolls: [3] };
   const { layer, animation } = setup(2, 1, event, 3);
   const attacker = layer.standFor('a');
@@ -85,9 +85,45 @@ test('dice leave the stack while rolling and come back down to rest on it', () =
   });
 
   animation.apply(attackDuration());
-  attacker.meshes.forEach((m, i) => {
-    assert.ok(m.position.distanceTo(resting[i]) < 1e-9, 'and land back on the stack');
-  });
+  for (const mesh of attacker.meshes) {
+    assert.ok(
+      Math.abs(mesh.position.y - layer.dieSize / 2) < 1e-9,
+      'every die comes to rest lying on the ground, not stacked or hovering'
+    );
+  }
+  assert.ok(
+    attacker.meshes.some((m, i) => m.position.distanceTo(resting[i]) > layer.dieSize),
+    'and they have been thrown clear of where they were stacked'
+  );
+});
+
+test('the dice a stack throws land apart, and on their own territory', () => {
+  // Eight against eight is the most dice a single attack ever puts on the
+  // ground. Both territories here are wide open, so there is room for all of
+  // them; how the layout gives way when there isn't is diceScatter's own test.
+  const event = { attackRolls: [1, 2, 3, 4, 5, 6, 1, 2], defendRolls: [6, 5, 4, 3, 2, 1, 6, 5] };
+  const { layer, animation } = setup(8, 8, event, 12);
+  animation.apply(attackDuration());
+
+  for (const id of ['a', 'b']) {
+    const stand = layer.standFor(id);
+    const landed = stand.meshes.map((m) => m.position);
+    const half = layer.dieSize / 2;
+
+    for (const spot of landed) {
+      const corner = Math.hypot(Math.abs(spot.x) + half, Math.abs(spot.z) + half);
+      assert.ok(corner <= stand.groundRadius, `a die overhangs ${id}: ${corner}`);
+    }
+    for (let i = 0; i < landed.length; i++) {
+      for (let j = i + 1; j < landed.length; j++) {
+        const apart = Math.max(
+          Math.abs(landed[i].x - landed[j].x),
+          Math.abs(landed[i].z - landed[j].z)
+        );
+        assert.ok(apart >= layer.dieSize - 1e-12, `dice ${i} and ${j} on ${id} are inside each other`);
+      }
+    }
+  }
 });
 
 test('nothing has moved before the dice are thrown', () => {

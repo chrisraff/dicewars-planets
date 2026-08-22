@@ -8,6 +8,20 @@ const DEFAULT_MIN_CLEARANCE = 0.9;
 
 const angleBetween = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
 
+// How far `point` is, in radians, from the nearest cell the territory does
+// not own. Everything here is measured in these terms: where the dice mount,
+// and how much ground they have once they are thrown.
+export function clearanceAt(point, cellIds, cellsById) {
+  const members = new Set(cellIds);
+  let nearest = Infinity;
+  for (const cell of cellsById.values()) {
+    if (members.has(cell.id)) continue;
+    const d = angleBetween(point, cell.center);
+    if (d < nearest) nearest = d;
+  }
+  return nearest;
+}
+
 // Typical great-circle distance between the centers of two adjacent cells,
 // measured off the cells' own adjacency when they carry it. Cells built by
 // hand (tests) may not, so fall back to the spacing a hexagonal tiling of
@@ -43,22 +57,11 @@ export function findDiceMountPoint(cellIds, cellsById, options = {}) {
     minClearance = DEFAULT_MIN_CLEARANCE,
   } = options;
 
-  const members = new Set(cellIds);
-  const outsiders = [...cellsById.values()].filter((c) => !members.has(c.id));
   const threshold = minClearance * cellSpacing;
-
-  // distance from `point` to the nearest cell the territory doesn't own
-  const clearanceAt = (point) => {
-    let nearest = Infinity;
-    for (const cell of outsiders) {
-      const d = angleBetween(point, cell.center);
-      if (d < nearest) nearest = d;
-    }
-    return nearest;
-  };
+  const clearance = (point) => clearanceAt(point, cellIds, cellsById);
 
   const centroid = normalize(cellIds.map((id) => cellsById.get(id).center).reduce(add));
-  if (clearanceAt(centroid) >= threshold) return centroid;
+  if (clearance(centroid) >= threshold) return centroid;
 
   // Nearest own cell that is itself clear of the border; if the territory is
   // so thin that none of its cells are, use its most-buried cell instead.
@@ -66,7 +69,7 @@ export function findDiceMountPoint(cellIds, cellsById, options = {}) {
     const cell = cellsById.get(id);
     return {
       center: cell.center,
-      clearance: clearanceAt(cell.center),
+      clearance: clearance(cell.center),
       distance: angleBetween(cell.center, centroid),
     };
   });
@@ -76,11 +79,35 @@ export function findDiceMountPoint(cellIds, cellsById, options = {}) {
   return candidates.reduce((a, b) => (b.clearance > a.clearance ? b : a)).center;
 }
 
-export function findAllDiceMountPoints(territories, cellsById, options = {}) {
+/**
+ * How much flat ground the dice have to be thrown across at `point`: the
+ * radius of the largest circle around it that is still all this territory's
+ * land.
+ *
+ * A cell owns the ground nearest its own center, so a spot belongs to the
+ * territory whenever some member center is nearer than every foreign one.
+ * Step `d` away from `point` and the nearest foreign center can only have
+ * come `d` closer than its `clearance`, while the nearest member center can
+ * only have receded `d` beyond its `home` distance — so the two meet at
+ * `d = (clearance - home) / 2`, and every point inside that is safely ours,
+ * whichever direction it lies in. Deliberately the worst direction rather
+ * than the average one: a die that strays onto the neighbour is exactly the
+ * confusion the dice are there to prevent.
+ */
+export function diceGroundRadius(point, cellIds, cellsById) {
+  const clearance = clearanceAt(point, cellIds, cellsById);
+  const home = Math.min(...cellIds.map((id) => angleBetween(point, cellsById.get(id).center)));
+  return Math.max(0, (clearance - home) / 2);
+}
+
+// Every territory's patch of dice ground: `{ center, radius }` per id.
+export function findAllDiceGrounds(territories, cellsById, options = {}) {
   const cellSpacing = options.cellSpacing ?? estimateCellSpacing(cellsById);
-  const points = new Map();
+  const settings = { ...options, cellSpacing };
+  const grounds = new Map();
   for (const t of territories) {
-    points.set(t.id, findDiceMountPoint(t.cellIds, cellsById, { ...options, cellSpacing }));
+    const center = findDiceMountPoint(t.cellIds, cellsById, settings);
+    grounds.set(t.id, { center, radius: diceGroundRadius(center, t.cellIds, cellsById) });
   }
-  return points;
+  return grounds;
 }
