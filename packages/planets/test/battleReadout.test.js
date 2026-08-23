@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FULL_READING_MAX_DICE,
   battleView,
   battleSideView,
+  fitsFullReading,
   historyRowView,
   scrollFades,
 } from '../src/render/battleReadout.js';
@@ -158,4 +160,32 @@ test('the fades follow the scroll all the way across', () => {
   assert.deepEqual(seen.map((f) => `${f.left ? 'L' : '-'}${f.right ? 'R' : '-'}`), [
     '-R', 'LR', 'LR', 'L-',
   ]);
+});
+
+// --- how many dice the full reading is worth showing ------------------------
+
+const sides = (attacker, defender) => ({
+  attacker: { dice: Array(attacker).fill({ value: 1 }) },
+  defender: { dice: Array(defender).fill({ value: 1 }) },
+});
+
+test('the full reading is offered up to the cap on both sides at once', () => {
+  const cap = FULL_READING_MAX_DICE;
+  assert.equal(fitsFullReading(sides(cap, cap)), true, 'the widest full reading there is');
+  assert.equal(fitsFullReading(sides(cap + 1, 1)), false, 'one side over is enough to compact it');
+  assert.equal(fitsFullReading(sides(1, cap + 1)), false, 'either side, not just the attacker');
+});
+
+test('the widest fight there can be is never shown full', () => {
+  // eight is a full territory, so this is the case the cap exists for
+  assert.equal(fitsFullReading(sides(8, 8)), false);
+});
+
+test('the cap is about legibility, not about room', () => {
+  // it is deliberately below what a desktop readout could fit — five dice a
+  // side would still fit and is still refused, because the point where faces
+  // become a row to count comes before the point where they stop fitting.
+  // Width is the other half of the decision and is measured, not counted.
+  assert.ok(FULL_READING_MAX_DICE < 8, 'a rule that only bit at the maximum would never bite');
+  assert.equal(fitsFullReading(sides(5, 1)), false);
 });

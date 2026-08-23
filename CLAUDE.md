@@ -210,6 +210,26 @@ read. A hand on the planet cancels it outright — a wheel zoom doesn't, since
 that says nothing about where to look, and the swing keeps whatever distance
 the player lands on.
 
+A battle has two readings, both built every time and picked between with one
+class (`is-compact`), so switching costs no rebuild. Which one shows is decided
+differently in the two places a battle appears:
+
+- **The history is always compact**, whatever room a row has. A row there is a
+  summary you scan down, and thirty of them read better as thirty identical
+  shapes than as two layouts alternating line to line. It also means a history
+  row is never measured — only its dice strip's edge fades depend on width.
+- **The readout at the top is full only when it earns it**: at most
+  `FULL_READING_MAX_DICE` (four) a side, *and* only if the full reading fits.
+  Width prevails — the dice rule is only ever consulted for a battle that would
+  fit anyway. It is checked first because counting dice is free and skipping the
+  measurement skips a forced reflow.
+
+The cap is about legibility rather than room: five dice a side still fits a
+desktop readout and is still refused, because the point where faces become a row
+to count comes before the point where they stop fitting. `.battle-current` is
+`overflow: hidden`, so a full reading that overruns truncates rather than
+scrolls — which is why the fit is measured rather than hoped for.
+
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice
 texture and the flat SVG dice in the battle readout, and `diceStacks.js`

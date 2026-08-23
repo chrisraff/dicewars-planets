@@ -5,6 +5,22 @@ import { stackSlots, MAX_DICE_PER_STACK } from './diceStacks.js';
 const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
 
 /**
+ * Dice on one side, above which the full reading stops being worth showing.
+ *
+ * Not a width — five dice a side still fits a desktop readout comfortably.
+ * Past about four the faces stop being something you take in at a glance and
+ * become a row to count, which is the moment the stack mark and the total say
+ * more than the faces do. Width is the *other* half of the decision and is
+ * checked separately, in `fitReadout` below.
+ */
+export const FULL_READING_MAX_DICE = 4;
+
+/** Whether a battle is small enough that showing every die is worth doing. */
+export function fitsFullReading(view, max = FULL_READING_MAX_DICE) {
+  return view.attacker.dice.length <= max && view.defender.dice.length <= max;
+}
+
+/**
  * One side of a battle, as display data: a die face per die rolled, in that
  * player's color, followed by their total.
  *
@@ -207,7 +223,9 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
    *
    * Both are built because switching between them then costs a class rather
    * than a rebuild, which is what makes re-measuring on every resize cheap.
-   * `chooseLayout` below is what actually decides.
+   * Which one shows is `is-compact` on the row, and belongs to whoever owns
+   * that row — `fitReadout` for the readout, `setHistory` for a history row,
+   * which is always compact and has nothing to decide.
    */
   function renderBattle(into, view) {
     into.replaceChildren();
@@ -233,25 +251,36 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
     );
 
     into.append(summary, strip);
-    into.classList.remove('is-compact');
   }
 
   /**
-   * Picks full or compact for one row by asking whether the full reading
-   * actually fits: the row is measured with the compact class off, and only
-   * put back on if the contents overrun the space available.
+   * Which of the two readings the readout at the top shows.
    *
-   * Reads and writes are kept in separate passes by the callers below, so
-   * laying out a hundred history rows costs one reflow rather than a hundred.
+   * Two separate things force compact and either one is enough, because they
+   * answer different questions. The battle: past `FULL_READING_MAX_DICE` a
+   * side the faces are a row to count rather than a glance. The room: a full
+   * reading that would be clipped is worse than a compact one that fits,
+   * whatever the dice count says — the readout has `overflow: hidden`, so
+   * overrunning it does not scroll, it truncates.
+   *
+   * Width is what actually prevails: the dice rule is only ever consulted for
+   * a battle that would fit anyway. It is checked first purely because it is
+   * free, and skipping the measurement skips a forced reflow.
    */
-  function chooseLayout(rows) {
-    const list = [...rows].filter(Boolean);
+  function fitReadout() {
+    if (!shownBattle) return;
 
-    for (const row of list) row.classList.remove('is-compact');
-    const overrun = list.map((row) => row.scrollWidth > row.clientWidth + 1);
-    list.forEach((row, i) => row.classList.toggle('is-compact', overrun[i]));
+    const compact = !fitsFullReading(shownBattle) || overrunsFull();
+    current.classList.toggle('is-compact', compact);
+    showFades([current.querySelector('.battle-dice')]);
+  }
 
-    showFades(list.map((row) => row.querySelector('.battle-dice')));
+  // Whether the full reading would be clipped by the room the readout has.
+  // Only answerable with the full reading actually in place, which is why this
+  // takes the class off to look — `fitReadout` above is what puts it back.
+  function overrunsFull() {
+    current.classList.remove('is-compact');
+    return current.scrollWidth > current.clientWidth + 1;
   }
 
   // Fades a strip out over whichever edges it can still be scrolled towards,
@@ -268,8 +297,16 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   }
 
   let openState = false;
+  // The battle the readout is showing. Kept because a resize has to make the
+  // choice in `fitReadout` again without a new battle arriving to prompt it.
+  let shownBattle = null;
 
   const battleRows = () => historyList.querySelectorAll('.battle-row.is-battle');
+
+  // Every history row's dice strip at once — reads first, writes after, so a
+  // hundred rows cost one reflow rather than a hundred.
+  const showHistoryFades = () =>
+    showFades([...battleRows()].map((row) => row.querySelector('.battle-dice')));
 
   // `scroll` does not bubble, but it can be caught on the way down — so one
   // listener here keeps every dice strip's fades current, however many rows
@@ -288,7 +325,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
     current.setAttribute('aria-expanded', String(open));
     if (open) {
       historyList.scrollTop = 0; // the list is newest-first
-      chooseLayout(battleRows()); // rows cannot be measured while hidden
+      showHistoryFades(); // a hidden strip measures as zero, so this waits until now
     }
   }
 
@@ -296,20 +333,23 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   // window. Both observers watch a container whose width comes from outside
   // rather than from the row's own contents: watching a content-sized element
   // would see the layout it just chose and flip back and forth forever.
+  //
+  // Only the readout can change its reading; the history's rows are compact
+  // whatever the width, so all a resize costs there is their fades.
   if (typeof ResizeObserver === 'function') {
-    let queued = false;
-    const remeasure = (rows) => {
-      if (queued) return;
-      queued = true;
+    const queued = new Set();
+    const onNextFrame = (job) => {
+      if (queued.has(job)) return;
+      queued.add(job);
       requestAnimationFrame(() => {
-        queued = false;
-        chooseLayout(rows());
+        queued.delete(job);
+        job();
       });
     };
 
-    new ResizeObserver(() => remeasure(() => [current])).observe(root);
+    new ResizeObserver(() => onNextFrame(fitReadout)).observe(root);
     new ResizeObserver(() => {
-      if (openState) remeasure(battleRows);
+      if (openState) onNextFrame(showHistoryFades);
     }).observe(historyList);
   }
 
@@ -342,6 +382,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
     /** Shows one battle in the readout. `revealed: false` while dice are rolling. */
     show(entry, { revealed = true } = {}) {
       const view = battleView(entry, { revealed });
+      shownBattle = view;
       if (!view) {
         currentContent.replaceChildren();
         current.classList.add('is-empty');
@@ -349,7 +390,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
       }
       current.classList.remove('is-empty');
       renderBattle(currentContent, view);
-      chooseLayout([current]);
+      fitReadout();
     },
 
     /** Rebuilds the history list. Only happens when the log changes, not per frame. */
@@ -370,10 +411,15 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
           item.append(text);
         } else {
           renderBattle(item, row.battle);
+          // Always the compact reading, whatever the row would have room for:
+          // a history row is a summary you scan down, and thirty of them read
+          // better as thirty identical shapes than as two layouts alternating
+          // line to line. It also means a history row is never measured.
+          item.classList.add('is-compact');
         }
         historyList.append(item);
       }
-      if (openState) chooseLayout(battleRows());
+      if (openState) showHistoryFades();
       if (entries.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'battle-row is-empty';

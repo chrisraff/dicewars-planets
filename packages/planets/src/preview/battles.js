@@ -184,24 +184,51 @@ addScenario({
   build: oneBattle('p6', 'p7', [4], [3]),
 });
 
+// The rule's edge, either side of it, so the two are directly comparable —
+// this pair is what to look at to judge where the cap belongs.
+addScenario({
+  title: 'Four a side — the widest full reading',
+  note: 'Right on the cap: every die shown, each side next to its own total. Past this the '
+    + 'faces stop being something you take in at a glance and become a row to count, which is '
+    + 'what the cap is for — it is not about running out of room, and there is room to spare here.',
+  build: oneBattle('p1', 'p2', [6, 5, 4, 3], [2, 4, 6, 1]),
+});
+
+addScenario({
+  title: 'Five against four — one die over',
+  note: 'One more die than the one above, and it flips. Compare the two: the question is whether '
+    + 'the fight above is still readable at a glance and this one is not.',
+  build: oneBattle('p1', 'p2', [6, 5, 4, 3, 2], [2, 4, 6, 1]),
+});
+
+addScenario({
+  title: 'Four a side, in a very narrow column',
+  note: 'The same fight as the cap example, given 240px. Width prevails over the dice rule: the '
+    + 'full reading would be clipped here — the readout has overflow: hidden, so overrunning '
+    + 'truncates rather than scrolls — so it falls back to compact despite being within the cap.',
+  stageClass: 'is-narrow',
+  build: oneBattle('p1', 'p2', [6, 5, 4, 3], [2, 4, 6, 1]),
+});
+
 addScenario({
   title: 'Widest — eight against eight',
-  note: 'The most dice that can ever be shown, since a territory holds at most eight. Given the '
-    + 'room, it spreads out and shows every one of them rather than compacting.',
+  note: 'The most dice that can ever be fought with, since a territory holds at most eight. Far '
+    + 'past four a side, so it is compact however much room it is given — the stack marks and '
+    + 'totals pinned left, the dice scrolling on the right.',
   build: oneBattle('p1', 'p5', [6, 5, 4, 3, 2, 1, 6, 5], [1, 2, 3, 4, 5, 6, 1, 2]),
 });
 
 addScenario({
   title: 'Eight against eight, at phone width',
-  note: 'The same fight in a 360px column. It uses the whole width first; only if that is still '
-    + 'not enough does it fall back to the compact reading — stack mark and total pinned left, '
-    + 'dice scrolling on the right. Narrow the window to watch it switch.',
+  note: 'The same fight in a 360px column — identical to the one above, which is the point: a '
+    + 'fight this size reads the same way everywhere, because the dice count settled it before '
+    + 'any width was measured.',
   stageClass: 'is-phone',
   build: oneBattle('p1', 'p5', [6, 5, 4, 3, 2, 1, 6, 5], [1, 2, 3, 4, 5, 6, 1, 2]),
 });
 
 addScenario({
-  title: 'Forced compact — a very narrow column',
+  title: 'Compact — a very narrow column',
   note: 'The compact reading on its own: the stack mark is two wide and four high, filled from '
     + 'the bottom, exactly how the dice pile up on the planet — so five pips means five dice. '
     + 'The dice strip fades out on whichever side has more dice waiting: right to begin with, '
