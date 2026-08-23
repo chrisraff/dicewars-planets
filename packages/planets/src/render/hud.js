@@ -366,9 +366,15 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     element.style.setProperty('--player-color', rgb(color));
     element.style.setProperty('--player-ink', rgb(ink));
     element.style.setProperty('--player-ink-dim', rgba(ink, 0.62));
+    // The name and count are wrapped rather than sitting directly in the tile
+    // so that the tile can close over them as one, leaving the dot — which is
+    // outside the wrapper, and so survives the collapse — behind.
     element.innerHTML = `
-      <span class="hud-player-name"></span>
-      <span class="hud-player-territories"></span>
+      <span class="hud-player-dot" aria-hidden="true"></span>
+      <span class="hud-player-body">
+        <span class="hud-player-name"></span>
+        <span class="hud-player-territories"></span>
+      </span>
       <span class="hud-player-reserve"></span>
     `;
     element.querySelector('.hud-player-name').textContent = nameOf(playerId);

@@ -161,8 +161,9 @@ addScenario({
 
 addScenario({
   title: 'Late game — players knocked out',
-  note: 'Eliminated players keep their slot, grayed out, rather than vanishing from the row. '
-    + 'Open the history: knockouts are logged alongside the fights that caused them.',
+  note: 'Eliminated players keep their place in the row rather than vanishing from it, but fold '
+    + 'down to a dot in their own color instead of holding a full-width slot. Open the history: '
+    + 'knockouts are logged alongside the fights that caused them.',
   holdings: [31, 0, 0, 9, 0, 4, 0, 0],
   reserves: [17, 0, 0, 2, 0, 0, 0, 0],
   currentIndex: 0,
@@ -177,6 +178,77 @@ addScenario({
     { out: 2, by: 0 },
   ],
 });
+
+// The collapse itself, driven by hand. A transition is the one thing a still
+// cannot show, so this scenario has buttons instead of a fixed board.
+const dropout = document.createElement('section');
+dropout.className = 'scenario';
+dropout.innerHTML = `
+  <h2>Dropping out — the collapse, animated</h2>
+  <p>Knock players out and bring them back to watch a tile fold down to a dot and open again.
+     Three things to judge: that the fold moves from the very first frame rather than sitting
+     still and then lurching, that the row closes up around the gap smoothly, and that the dot
+     keeps that player's own color — it is all that is left saying whose slot it is, so eight
+     knockouts must not give eight identical dots.</p>
+  <div class="stage"></div>
+  <div class="controls"></div>
+`;
+document.getElementById('scenarios').append(dropout);
+
+const DROPOUT_HOLDINGS = [12, 9, 7, 11, 6, 8, 5, 10];
+const dropoutIds = DROPOUT_HOLDINGS.map((_, i) => `p${i + 1}`);
+const knockedOut = new Set();
+
+const dropoutHud = createHud(dropout.querySelector('.stage'), {
+  playerColors: assignPlayerColors(dropoutIds),
+  playerNames: new Map(dropoutIds.map((id, i) => [id, NAMES[i]])),
+});
+const dropoutControls = dropout.querySelector('.controls');
+const dropoutButtons = [];
+
+function paintDropout() {
+  const holdings = DROPOUT_HOLDINGS.map((held, i) => (knockedOut.has(i) ? 0 : held));
+  const { state } = stateFrom({
+    holdings,
+    reserves: [0, 3, 0, 0, 0, 12, 0, 0],
+    // whoever is left — a player who has been knocked out cannot also be the
+    // one whose turn it is, and the row would draw both marks if asked
+    currentIndex: Math.max(0, holdings.findIndex((held) => held > 0)),
+  });
+  dropoutHud.showPlayers(playerStatsFor(state, dropoutIds));
+  dropoutButtons.forEach((button, i) => {
+    button.textContent = knockedOut.has(i) ? `${NAMES[i]} ↩` : NAMES[i];
+  });
+}
+
+for (const [i, name] of NAMES.entries()) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = name;
+  button.addEventListener('click', () => {
+    if (knockedOut.has(i)) knockedOut.delete(i);
+    else knockedOut.add(i);
+    paintDropout();
+  });
+  dropoutButtons.push(button);
+  dropoutControls.append(button);
+}
+
+// The two ends of it: a late game where most of the table has gone, and a
+// clean slate to watch them all open at once.
+for (const [label, out] of [['Knock out five', [1, 2, 4, 6, 7]], ['Everyone back', []]]) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    knockedOut.clear();
+    for (const i of out) knockedOut.add(i);
+    paintDropout();
+  });
+  dropoutControls.append(button);
+}
+
+paintDropout();
 
 addScenario({
   title: 'Game over',
