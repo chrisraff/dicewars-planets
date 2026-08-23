@@ -29,6 +29,33 @@ function stateFrom({ holdings, currentIndex = 0, phase = 'attack', winnerIndex =
   };
 }
 
+// A handful of plausible fights, in the same shape `battleEntry` builds —
+// enough for the replay preview to have something to scrub through.
+function fakeAttacks(playerIds) {
+  const rounds = [
+    { from: 't0', to: 't3', attacker: 3, defender: 2, attackerWins: true },
+    { from: 't3', to: 't6', attacker: 2, defender: 4, attackerWins: false },
+    { from: 't1', to: 't4', attacker: 5, defender: 1, attackerWins: true },
+  ];
+  return rounds.map(({ from, to, attacker, defender, attackerWins }, i) => ({
+    id: i + 1,
+    kind: 'battle',
+    from,
+    to,
+    attacker: {
+      playerId: playerIds[0],
+      rolls: Array.from({ length: attacker }, (_, n) => 1 + ((n + i) % 6)),
+      total: attacker * 3,
+    },
+    defender: {
+      playerId: playerIds[1],
+      rolls: Array.from({ length: defender }, (_, n) => 1 + ((n + i + 1) % 6)),
+      total: defender * 3,
+    },
+    attackerWins,
+  }));
+}
+
 function addScenario({ title, note, stageClass = '', outcome, status, ...board }) {
   const { state, playerIds } = stateFrom(board);
   const playerColors = assignPlayerColors(playerIds);
@@ -63,8 +90,27 @@ function addScenario({ title, note, stageClass = '', outcome, status, ...board }
 
   if (outcome) {
     hud.showOutcome(outcome);
+    const attacks = outcome.canReplay ? fakeAttacks(playerIds) : [];
+
+    hud.onReplaySeek((step) => {
+      hud.showBattle(step > 0 ? attacks[step - 1] : null);
+      hud.setHistory(attacks.slice(0, step));
+      readout.textContent = `replay at step ${step} of ${attacks.length}`;
+    });
+    hud.onReplayClose(() => {
+      hud.hideReplay();
+      hud.showBattle(null); // nothing was shown before the replay in this scenario either
+      hud.setHistory([]);
+      hud.showOutcome(outcome);
+      readout.textContent = 'replay closed — the banner is back';
+    });
+
     hud.onOutcomeAction((action) => {
       readout.textContent = `action fired: ${action}`;
+      if (action === 'replay') {
+        hud.showReplay(attacks.length);
+        return;
+      }
       if (action !== 'newGame') {
         hud.hideOutcome();
         readout.textContent += '  ·  banner dismissed — the board is yours to look at';
@@ -102,6 +148,21 @@ addScenario({
 });
 
 // --- the endings ----------------------------------------------------------
+
+addScenario({
+  title: 'You win, with a replay to watch',
+  note: 'A match with attacks in it offers to watch them again. "Watch replay" docks a track bar '
+    + 'at the bottom, over the planet rather than covering it, and the battle readout above it '
+    + 'follows the track — it shows that step\'s attack, and its history only as far as the track '
+    + 'has gone, not the whole match. In the real game the surface and dice redraw the same way; '
+    + 'there is no planet here, so the log below stands in for that. Closing it brings the banner '
+    + 'back.',
+  holdings: [49, 0, 0, 0, 0, 0],
+  phase: 'gameover',
+  winnerIndex: 0,
+  status: status({ isOver: true, winner: 'p1' }),
+  outcome: { kind: 'over', winner: 'p1', humanPlayerId: 'p1', canReplay: true },
+});
 
 addScenario({
   title: 'You win',

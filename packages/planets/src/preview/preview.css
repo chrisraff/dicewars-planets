@@ -245,3 +245,28 @@ h1 {
   flex-direction: column;
   justify-content: space-between;
 }
+
+/* ---- the replay preview: a real planet under the HUD ------------------- */
+
+/* Taller than a bare HUD stage needs, so the planet behind it has room to
+   actually read. */
+.stage.is-planet {
+  min-height: 26rem;
+}
+.stage.is-planet canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* The only previews with a canvas underneath the HUD host — every other one
+   never needed to let a drag through to anything behind it. hud.css already
+   puts `pointer-events: auto` back on every real control with a bare class
+   selector (`.hud-players`, `.hud-banner`, `.hud-replay-card`, ...), the same
+   way `#hud` does it in the real game; this only has to stop the host itself
+   from swallowing the pointer the way `#hud` doesn't, since a plain class has
+   no such rule of its own. */
+.stage.is-planet .hud-host {
+  pointer-events: none;
+}

@@ -99,6 +99,23 @@ test('a finished game offers a new one, and a way to just look at the board', ()
   assert.equal(primary(view).id, 'newGame');
 });
 
+test('a match nobody ever attacked in has nothing for a replay to show', () => {
+  const view = outcomeView(
+    { kind: 'over', winner: 'p1', humanPlayerId: 'p1', canReplay: false },
+    nameOf
+  );
+  assert.deepEqual(actionIds(view), ['newGame', 'dismiss'], 'no replay action offered');
+});
+
+test('a fought-out match offers to watch the replay, between starting over and looking on', () => {
+  const view = outcomeView(
+    { kind: 'over', winner: 'p1', humanPlayerId: 'p1', canReplay: true },
+    nameOf
+  );
+  assert.deepEqual(actionIds(view), ['newGame', 'replay', 'dismiss']);
+  assert.equal(primary(view).id, 'newGame', 'starting over still leads');
+});
+
 test('being knocked out says who did it and offers to keep watching', () => {
   const view = outcomeView({ kind: 'eliminated', by: 'p3', humanPlayerId: 'p1' }, nameOf);
   assert.equal(view.kind, 'eliminated');

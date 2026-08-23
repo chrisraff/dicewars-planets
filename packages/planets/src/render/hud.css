@@ -560,6 +560,92 @@
 }
 .hud-banner-action.is-primary:hover { background: #fff; }
 
+/* ---- replay ------------------------------------------------------- */
+
+/* The replay is watched on the planet itself — surface and dice are being
+   repainted for whichever step the track is on — so this must never cover
+   it the way the banner does. It docks to the bottom like `.hud-controls`
+   instead, and only its own card takes the pointer: drag anywhere else and
+   you are still orbiting the planet, exactly as ordinary play. */
+.hud-replay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  padding: 0 calc(var(--safe-right) + 0.9rem) calc(var(--safe-bottom) + 0.8rem)
+           calc(var(--safe-left) + 0.9rem);
+  pointer-events: none;
+}
+.hud-replay[hidden] { display: none; }
+
+.hud-replay-card {
+  pointer-events: auto;
+  width: min(30rem, 100%);
+  box-sizing: border-box;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--panel-radius);
+  background: rgba(10, 10, 14, 0.85);
+  box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.hud-replay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+.hud-replay-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.hud-replay-close {
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #cfcfd6;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+}
+.hud-replay-close:hover { color: #fff; }
+
+.hud-replay-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.hud-replay-prev,
+.hud-replay-next,
+.hud-replay-play {
+  font: inherit;
+  font-weight: 600;
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.4rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.hud-replay-prev:hover,
+.hud-replay-next:hover,
+.hud-replay-play:hover { background: rgba(255, 255, 255, 0.18); }
+
+.hud-replay-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: #f2f2f4;
+}
+
 /* ---- narrow screens ---------------------------------------------- */
 
 @media (max-width: 640px) {

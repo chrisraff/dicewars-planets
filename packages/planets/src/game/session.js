@@ -1,7 +1,14 @@
-import { isPlayerAlive, randomSeed, reviveState, seededRng, serializeState } from '@dicewars/core';
+import {
+  isPlayerAlive,
+  randomSeed,
+  reviveState,
+  seededRng,
+  serializeState,
+} from '@dicewars/core';
 import { generatePlanetWorld } from '../world/generateWorld.js';
 import { createGame } from './createGame.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
+import { createReplay, boardAfterAttacks, reservesAfterAttacks, historyThroughStep } from './replay.js';
 import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, subdivisionsFor } from './settings.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
@@ -64,6 +71,19 @@ export function createSession({
     savedState: restored ? reviveState(restored.state) : null,
   });
   const battles = createBattleLog({ entries: restored?.battles });
+  // Every attack and reinforcement recorded since this session opened, for
+  // the replay offered once the game ends — not saved and not restored,
+  // since a finished game's save is cleared the moment it ends and a replay
+  // only ever covers the match still open behind it. `initialNodes` and
+  // `initialReserves` are the board this session actually opened on — the
+  // planet as dealt for a fresh game, or the board a resumed one was picked
+  // back up on — which is what `replay`'s own moves build forward from. A
+  // replay of a resumed match therefore only reaches back to the reload, not
+  // to the game's true start: nothing before that was ever recorded to
+  // rebuild it from.
+  const replay = createReplay();
+  const initialNodes = game.state.nodes;
+  const initialReserves = new Map(playerIds.map((id) => [id, game.state.players.get(id).reserve]));
 
   // A resumed game puts the camera back where it was left; a fresh one
   // leaves it wherever the viewer already starts.
@@ -84,6 +104,15 @@ export function createSession({
 
   const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
 
+  // Swings the camera to a fight between two territories' dice stands.
+  // Returns whatever `cameraFocus.lookAt` returns — whether it actually
+  // started a swing — since a caller may need to wait for it to land.
+  function focusFight(from, to) {
+    const attacker = dice.standFor(from).normal;
+    const defender = dice.standFor(to).normal;
+    return cameraFocus.lookAt(fightCenter(attacker, defender));
+  }
+
   const pickTerritoryAt = createTerritoryPicker({
     planetMesh: surface.mesh,
     camera: viewer.camera,
@@ -95,6 +124,69 @@ export function createSession({
   let reinforceAnim = null; // the end-of-turn payout being animated
   // not stored in a save: the board itself says whether you still hold ground
   let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
+  let lastOutcome = null; // so closing the replay can bring the banner back
+  let pendingReplayStep = null; // a board waiting for the camera to arrive before it shows
+
+  // Repaints the planet as the replay's own board at `step` — surface, dice,
+  // the stats row, the battle readout and its history all drawn from the
+  // reconstructed board and the attacks that got it there, exactly as they
+  // stood at that point in the match rather than as the match eventually
+  // finished. `entry` is that step's own attack, so the readout shows it the
+  // same way it shows the last fight during live play; the history behind it
+  // is truncated to `step` for the same reason — opening it from partway
+  // through the track should not spoil what the track hasn't reached yet.
+  function applyReplayStep(step, entry, nodes) {
+    const atEnd = step >= replay.attacks.length;
+    const players = reservesAfterAttacks(initialReserves, replay.moves, step);
+    surface.refresh({ nodes });
+    dice.update({ nodes });
+    hud.showPlayers(playerStatsFor(
+      { nodes, players, phase: 'gameover', winner: atEnd ? game.state.winner : null },
+      playerIds
+    ));
+    hud.showBattle(entry);
+    hud.setHistory(historyThroughStep(replay.attacks, step));
+  }
+
+  // Live play shows an attack's result while the camera is still swinging to
+  // it, because the dice landing *is* the event — arriving late to a roll
+  // already in progress is the whole point of the swing existing at all. A
+  // replay has no such event to catch up to: the board only ever changes
+  // because the track moved, so revealing it before the camera has actually
+  // arrived just looks like the planet changed for no reason. So here, and
+  // only here, the swing runs first and the board waits for it.
+  function showReplayStep(step) {
+    const nodes = boardAfterAttacks(initialNodes, replay.moves, step);
+    const entry = step > 0 ? replay.attacks[step - 1] : null;
+
+    pendingReplayStep = null; // this seek supersedes whatever was still pending
+
+    if (entry && focusFight(entry.from, entry.to)) {
+      pendingReplayStep = { step, entry, nodes };
+      return; // applied once the swing lands, in tick() below
+    }
+
+    applyReplayStep(step, entry, nodes);
+  }
+
+  function openReplay() {
+    hud.hideOutcome();
+    hud.showReplay(replay.attacks.length);
+  }
+
+  function closeReplay() {
+    hud.hideReplay();
+    pendingReplayStep = null;
+    cameraFocus.cancel();
+    // the replay has been drawing straight into the surface, dice, stats and
+    // the battle readout; put the real, finished match back before the
+    // banner returns
+    dice.update(game.state);
+    refreshBoard();
+    hud.showBattle(battles.latestBattle);
+    hud.setHistory(battles.entries);
+    hud.showOutcome(lastOutcome);
+  }
 
   // What it would take to rebuild this match: the planet as the number it grew
   // from, and everything about the game that no amount of regrowing recovers.
@@ -137,11 +229,7 @@ export function createSession({
     // The AI attacks wherever it likes, including round the back of the
     // planet. Its own fights are the ones worth turning for — the player's
     // are on screen by definition, since they just clicked them.
-    if (game.currentPlayer() !== humanPlayerId) {
-      const attacker = dice.standFor(event.from).normal;
-      const defender = dice.standFor(event.to).normal;
-      cameraFocus.lookAt(fightCenter(attacker, defender));
-    }
+    if (game.currentPlayer() !== humanPlayerId) focusFight(event.from, event.to);
 
     roll = {
       event,
@@ -161,12 +249,14 @@ export function createSession({
     roll = null;
     hud.showBattle(battles.record(event));
     hud.setHistory(battles.entries);
+    replay.record(event);
     // both stacks are still lying on the faces they rolled; stand them back up
     dice.reroll(event.from, state);
     dice.reroll(event.to, state);
   });
 
   game.on('reinforce', (event) => {
+    replay.recordReinforcement(event);
     // Deliberately no cameraFocus.lookAt here: reinforcement dice land on
     // whichever territories they land on, all over the planet, and the drop
     // is fast enough that swinging the camera to chase it would take longer
@@ -189,6 +279,7 @@ export function createSession({
   game.on('eliminated', (event) => {
     battles.record(event);
     hud.setHistory(battles.entries);
+    replay.recordElimination(event);
 
     // Losing your last territory used to pass without a word: the AIs simply
     // played on and nothing said why the board had stopped answering.
@@ -213,14 +304,19 @@ export function createSession({
   game.on('over', (winner) => {
     // the banner stays until the player dismisses it — winning gets a moment
     // rather than being covered by the menu the instant it happens
-    hud.showOutcome({ kind: 'over', winner, humanPlayerId });
+    lastOutcome = { kind: 'over', winner, humanPlayerId, canReplay: replay.attacks.length > 0 };
+    hud.showOutcome(lastOutcome);
   });
 
   hud.onOutcomeAction((action) => {
     if (action === 'newGame') return onNewGame?.();
+    if (action === 'replay') return openReplay();
     hud.hideOutcome(); // 'watch' and 'dismiss' both just get out of the way
     refreshBoard();
   });
+
+  hud.onReplaySeek(showReplayStep);
+  hud.onReplayClose(closeReplay);
 
   hud.onEndTurn(() => {
     game.endTurn();
@@ -242,6 +338,11 @@ export function createSession({
 
     tick(dt) {
       cameraFocus.tick(dt);
+      if (pendingReplayStep && !cameraFocus.isSwinging) {
+        const { step, entry, nodes } = pendingReplayStep;
+        pendingReplayStep = null;
+        applyReplayStep(step, entry, nodes);
+      }
       if (roll) {
         roll.elapsed += dt;
         roll.animation.apply(roll.elapsed);

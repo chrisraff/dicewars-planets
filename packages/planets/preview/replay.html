@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — replay preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Replay</h1>
+      <p class="lede">
+        The replay a fought-out match offers, pre-populated and already open on a real planet —
+        a real <code>createSession</code>, played to the end by itself and dropped straight into
+        its own replay, so what "Watch replay" leads to can be seen without playing a game by
+        hand. The controls work: drag the track, step with ‹ ›, or press ▶, and watch the camera
+        swing to each attack and the surface and dice update once it arrives.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/replay.js"></script>
+  </body>
+</html>

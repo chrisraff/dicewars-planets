@@ -119,7 +119,7 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
  * game simply carries on without you and never says why.
  */
 export function outcomeView(outcome, nameOf = (id) => id) {
-  const { kind, winner = null, humanPlayerId, by = null } = outcome;
+  const { kind, winner = null, humanPlayerId, by = null, canReplay = false } = outcome;
 
   if (kind === 'eliminated') {
     return {
@@ -146,6 +146,9 @@ export function outcomeView(outcome, nameOf = (id) => id) {
         : `${nameOf(winner)} holds every territory.`,
     actions: [
       { id: 'newGame', label: 'New game', primary: true },
+      // only once there is a fight worth watching again — a match nobody ever
+      // attacked in has nothing for a replay to show
+      ...(canReplay ? [{ id: 'replay', label: 'Watch replay', primary: false }] : []),
       { id: 'dismiss', label: 'Look at the board', primary: false },
     ],
   };
@@ -174,6 +177,21 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
         <div class="hud-banner-actions"></div>
       </div>
     </div>
+    <div class="hud-replay" hidden>
+      <div class="hud-replay-card">
+        <div class="hud-replay-head">
+          <span class="hud-replay-title">Replay</span>
+          <button class="hud-replay-close" type="button" aria-label="Close replay">×</button>
+        </div>
+        <div class="hud-replay-transport">
+          <button class="hud-replay-prev" type="button" aria-label="Previous attack">‹</button>
+          <button class="hud-replay-play" type="button" aria-label="Play">▶</button>
+          <button class="hud-replay-next" type="button" aria-label="Next attack">›</button>
+          <input class="hud-replay-track" type="range" min="0" max="0" value="0" step="1"
+                 aria-label="Replay position" />
+        </div>
+      </div>
+    </div>
   `;
 
   const playersRow = root.querySelector('.hud-players');
@@ -192,6 +210,62 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   const bannerDetail = banner.querySelector('.hud-banner-detail');
   const bannerActions = banner.querySelector('.hud-banner-actions');
   let onAction = null;
+
+  const replayOverlay = root.querySelector('.hud-replay');
+  const replayTrack = root.querySelector('.hud-replay-track');
+  const replayPlay = root.querySelector('.hud-replay-play');
+  const REPLAY_STEP_MS = 900;
+  let replayTimer = null;
+  let replaySeekHandler = null;
+  let replayCloseHandler = null;
+
+  function stopReplaying() {
+    if (!replayTimer) return;
+    clearInterval(replayTimer);
+    replayTimer = null;
+    replayPlay.textContent = '▶';
+    replayPlay.setAttribute('aria-label', 'Play');
+  }
+
+  // Moves the track to `step` (clamped) and tells the session to repaint the
+  // board there — the one path every control (drag, the buttons, the timer)
+  // goes through, so the track's value is never out of step with what is on
+  // screen.
+  function paintReplayStep(step) {
+    const max = Number(replayTrack.max);
+    const clamped = Math.max(0, Math.min(max, step));
+    replayTrack.value = String(clamped);
+    replaySeekHandler?.(clamped);
+    return clamped;
+  }
+
+  function seekReplay(step) {
+    stopReplaying();
+    paintReplayStep(step);
+  }
+
+  function startReplaying() {
+    if (Number(replayTrack.value) >= Number(replayTrack.max)) paintReplayStep(0);
+    replayPlay.textContent = '⏸';
+    replayPlay.setAttribute('aria-label', 'Pause');
+    replayTimer = setInterval(() => {
+      const next = paintReplayStep(Number(replayTrack.value) + 1);
+      if (next >= Number(replayTrack.max)) stopReplaying();
+    }, REPLAY_STEP_MS);
+  }
+
+  root.querySelector('.hud-replay-prev').addEventListener('click', () => {
+    seekReplay(Number(replayTrack.value) - 1);
+  });
+  root.querySelector('.hud-replay-next').addEventListener('click', () => {
+    seekReplay(Number(replayTrack.value) + 1);
+  });
+  replayTrack.addEventListener('input', () => seekReplay(Number(replayTrack.value)));
+  replayPlay.addEventListener('click', () => (replayTimer ? stopReplaying() : startReplaying()));
+  root.querySelector('.hud-replay-close').addEventListener('click', () => {
+    stopReplaying();
+    replayCloseHandler?.();
+  });
 
   const nameOf = (playerId) => playerNames.get(playerId) ?? playerId;
   const panels = new Map();
@@ -377,6 +451,38 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
     onOutcomeAction(handler) {
       onAction = handler;
+    },
+
+    /**
+     * Opens the replay over the banner, for `count` recorded attacks. Starts
+     * at step 0 (the board before the first one) and asks the session to
+     * paint it, same as every later step — there is no state here that isn't
+     * also reachable by scrubbing the track back to the start.
+     *
+     * The menu button hides while this is open: the × is the way back to the
+     * outcome screen, and a second way out sitting right next to it is one
+     * too many.
+     */
+    showReplay(count) {
+      stopReplaying();
+      replayTrack.max = String(count);
+      replayOverlay.hidden = false;
+      menuButton.style.visibility = 'hidden';
+      paintReplayStep(0);
+    },
+
+    hideReplay() {
+      stopReplaying();
+      replayOverlay.hidden = true;
+      menuButton.style.visibility = 'visible';
+    },
+
+    onReplaySeek(handler) {
+      replaySeekHandler = handler;
+    },
+
+    onReplayClose(handler) {
+      replayCloseHandler = handler;
     },
   };
 }

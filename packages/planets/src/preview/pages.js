@@ -17,7 +17,8 @@ export const PREVIEW_PAGES = [
     title: 'Endings & knockouts',
     description:
       'Where play stops — winning, losing, and being knocked out of a game that carries on '
-      + 'without you — with the turn indicator each one leaves behind.',
+      + 'without you — with the turn indicator each one leaves behind, and the replay a fought-out '
+      + 'match offers.',
   },
   {
     href: '/preview/hud.html',
@@ -32,5 +33,12 @@ export const PREVIEW_PAGES = [
     description:
       'Every die face on every player color, the readout from a one-on-one up to eight against '
       + 'eight, and the history panel at every length — including past its entry cap.',
+  },
+  {
+    href: '/preview/replay.html',
+    title: 'Replay',
+    description:
+      'A real match played out by itself and dropped straight into its own replay on the actual '
+      + 'planet — surface, dice and camera all live, and at phone width too.',
   },
 ];
