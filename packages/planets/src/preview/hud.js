@@ -144,7 +144,9 @@ addScenario({
 
 addScenario({
   title: 'Eight players',
-  note: 'A full table, including the longest names. Scroll it sideways if it overflows.',
+  note: 'A full table, including the longest names. Narrow the window until it overflows: the '
+    + 'row has no scrollbar, so it fades out over whichever edge it can still be scrolled '
+    + 'towards — the same cue, from the same code, as the dice strip in the readout.',
   holdings: [8, 12, 3, 7, 15, 2, 9, 6],
   reserves: [0, 5, 1, 0, 24, 0, 8, 2],
   currentIndex: 4,
@@ -189,7 +191,9 @@ dropout.innerHTML = `
      Three things to judge: that the fold moves from the very first frame rather than sitting
      still and then lurching, that the row closes up around the gap smoothly, and that the dot
      keeps that player's own color — it is all that is left saying whose slot it is, so eight
-     knockouts must not give eight identical dots.</p>
+     knockouts must not give eight identical dots. On a narrow window this is also where the
+     row's scroll fade earns its keep: folding tiles away changes how much there is left to
+     scroll, so the fade has to settle on the right edges once the animation lands.</p>
   <div class="stage"></div>
   <div class="controls"></div>
 `;
@@ -261,7 +265,9 @@ addScenario({
 
 addScenario({
   title: 'Phone width (360px)',
-  note: 'Eight players in a 360px viewport — the row scrolls sideways rather than shrinking tiles.',
+  note: 'Eight players in a 360px viewport — the row scrolls sideways rather than shrinking '
+    + 'tiles, and fades on the right to say so. Drag it: the fade moves to both edges in the '
+    + 'middle and to the left alone at the end.',
   stageClass: 'is-phone',
   holdings: [8, 12, 3, 7, 15, 2, 9, 6],
   reserves: [0, 5, 1, 0, 24, 0, 8, 2],

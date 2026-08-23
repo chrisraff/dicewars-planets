@@ -1,5 +1,6 @@
 import { readableTextColor } from './palette.js';
 import { createBattleReadout, dieChip } from './battleReadout.js';
+import { showScrollFades } from './scrollFades.js';
 import { MAX_RESERVE } from '../game/playerStats.js';
 
 // The DOM layer over the canvas: the player stats row, whose turn it is, the
@@ -328,6 +329,34 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
   const prefersReducedMotion = () =>
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+  /**
+   * The stats row scrolls sideways at a full table and has no scrollbar to
+   * say so, exactly like the dice strip in the readout below it — so it wears
+   * the same fade over whichever edge it can still be scrolled towards.
+   *
+   * Coalesced to a frame because three things ask for it and one of them
+   * arrives in a flood: a knocked-out tile folding down fires `transitionend`
+   * per property per tile, and every one of them changes how much there is
+   * left to scroll.
+   */
+  let fadesQueued = false;
+  function refreshRowFades() {
+    if (fadesQueued) return;
+    fadesQueued = true;
+    requestAnimationFrame(() => {
+      fadesQueued = false;
+      showScrollFades([playersRow]);
+    });
+  }
+
+  playersRow.addEventListener('scroll', refreshRowFades);
+  playersRow.addEventListener('transitionend', refreshRowFades);
+  // the row's own box, which changes with the window rather than with what is
+  // in it — the contents changing is covered by `showPlayers` below
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(refreshRowFades).observe(playersRow);
+  }
   const coarsePointer = () => window.matchMedia?.('(pointer: coarse)').matches ?? false;
 
   // Brings a panel into view in the stats row. Measured off bounding rects
@@ -419,6 +448,10 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
      * values that actually moved.
      */
     showPlayers(stats) {
+      // this runs every frame while dice are rolling, so the row is only
+      // re-measured when a panel actually wrote something
+      let changed = false;
+
       for (const player of stats) {
         const panel = panelFor(player.id);
         const view = playerPanelView(player);
@@ -430,6 +463,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
         if (panel.shown === view.key) continue;
         panel.shown = view.key;
+        changed = true;
 
         panel.territories.textContent = view.territories;
         panel.reserve.textContent = view.reserve;
@@ -441,6 +475,8 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
           panel.reserve.classList.toggle(name, on);
         }
       }
+
+      if (changed) refreshRowFades();
     },
 
     showTurn(status) {

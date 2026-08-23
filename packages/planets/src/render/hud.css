@@ -47,6 +47,44 @@
   min-height: 0;
 }
 
+/* ---- "there is more this way" ------------------------------------------
+
+   Instead of a scrollbar, a sideways-scrolling strip fades out over whichever
+   edge it can still be scrolled towards: right while there is more waiting
+   off-screen, left once some has been scrolled past, both at once in the
+   middle. `scrollFades.js` decides which; this is what that looks like, once,
+   for the dice strip and the player row alike — each only says how wide it
+   wants the fade, with `--fade`.
+
+   A mask rather than an overlay, because what sits behind either of them is
+   translucent over a moving planet, and there is no solid color to fade into.
+   The mask is anchored to the element, not to its contents, so it stays at
+   the edges while what is inside scrolls under it. */
+.is-faded-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+}
+.is-faded-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+.is-faded-left.is-faded-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+}
+
 /* ---- player stats row ------------------------------------------- */
 
 .hud-players {
@@ -60,6 +98,10 @@
            0.6rem calc(var(--safe-left) + 0.7rem);
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent);
   -webkit-overflow-scrolling: touch;
+  /* wider than the dice strip's: a tile is three times the width of a die, so
+     a fade that reads as "a die is being cut off" is barely a nick out of a
+     tile */
+  --fade: 1.6rem;
 }
 .hud-players::-webkit-scrollbar { display: none; }
 
@@ -279,49 +321,16 @@
   flex: 0 1 auto;
   min-width: 0;
 }
-/* only in compact does the dice strip become its own scrollable space */
+/* only in compact does the dice strip become its own scrollable space — and
+   only then does it have anything to fade over */
 .is-compact .battle-dice {
   flex: 1 1 auto;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-}
-.battle-dice::-webkit-scrollbar { display: none; }
-
-/* Instead of a scrollbar, the strip fades out over whichever edge it can still
-   be scrolled towards: to the right when dice are waiting off-screen, to the
-   left once you have scrolled past some, and both at once in the middle. A
-   mask rather than an overlay, because what sits behind the strip is the
-   readout's own translucent background over a moving planet — there is no
-   solid color to fade into. The mask is anchored to the element, not to its
-   contents, so it stays at the edges while the dice scroll under it. */
-.is-compact .battle-dice {
   --fade: 1.1rem;
 }
-.battle-dice.is-faded-right {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
-}
-.battle-dice.is-faded-left {
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade));
-  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
-}
-.battle-dice.is-faded-left.is-faded-right {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--fade),
-    #000 calc(100% - var(--fade)),
-    transparent
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--fade),
-    #000 calc(100% - var(--fade)),
-    transparent
-  );
-}
+.battle-dice::-webkit-scrollbar { display: none; }
 
 .battle-side {
   display: flex;

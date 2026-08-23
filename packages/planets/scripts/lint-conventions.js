@@ -122,6 +122,17 @@ check('the shared constants have not grown a second copy', () => {
       problems.push(`${name}.js should read stack slots from ./diceStacks.js`);
     }
   }
+  // the dice strip and the player row scroll the same way and have to say so
+  // the same way, or one of them quietly stops matching the other
+  for (const name of ['hud', 'battleReadout']) {
+    const text = read(`../src/render/${name}.js`);
+    if (!/from '\.\/scrollFades\.js'/.test(text)) {
+      problems.push(`${name}.js should take its scroll fades from ./scrollFades.js`);
+    }
+    if (/is-faded-(left|right)['"]/.test(text)) {
+      problems.push(`${name}.js applies the fade classes itself instead of via showScrollFades`);
+    }
+  }
   return problems;
 });
 
@@ -240,14 +251,16 @@ check('the stack mark is two wide and four high, as the dice stack on the planet
   return problems;
 });
 
-check('a scrollable dice strip fades over the edges it can scroll towards', () => {
-  // a mask rather than an overlay: what sits behind the strip is a translucent
-  // panel over a moving planet, so there is no solid color to fade into
+check('a scrollable strip fades over the edges it can scroll towards', () => {
+  // a mask rather than an overlay: what sits behind either strip is a
+  // translucent panel over a moving planet, so there is no solid color to
+  // fade into. Stated once, on bare classes, because the dice strip and the
+  // player row wear the same fade — each only sets its own `--fade` width.
   const problems = [];
   for (const [selector, edges] of [
-    ['.battle-dice.is-faded-right', 1],
-    ['.battle-dice.is-faded-left', 1],
-    ['.battle-dice.is-faded-left.is-faded-right', 2],
+    ['.is-faded-right', 1],
+    ['.is-faded-left', 1],
+    ['.is-faded-left.is-faded-right', 2],
   ]) {
     const rule = ruleFor(selector);
     if (rule === null) {
@@ -256,9 +269,16 @@ check('a scrollable dice strip fades over the edges it can scroll towards', () =
     }
     if (!/mask-image:\s*linear-gradient/.test(rule)) problems.push(`${selector} needs a mask`);
     if (!/-webkit-mask-image/.test(rule)) problems.push(`${selector} needs the prefixed form too`);
+    if (!/var\(--fade\)/.test(rule)) problems.push(`${selector} must take its width from --fade`);
     // the rule is written twice, prefixed and not
     const faded = (rule.match(/transparent/g) ?? []).length / 2;
     if (faded !== edges) problems.push(`${selector} should fade exactly ${edges} edge(s)`);
+  }
+
+  // both strips have to actually ask for one, or the mask collapses to a
+  // `calc(100% - )` with nothing in it and the strip vanishes
+  for (const selector of ['.is-compact .battle-dice', '.hud-players']) {
+    wants(problems, selector, /--fade:/, 'a strip that fades has to say how wide');
   }
   return problems;
 });

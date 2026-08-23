@@ -1,5 +1,6 @@
 import { readableTextColor } from './palette.js';
 import { pipPositions } from './pips.js';
+import { showScrollFades } from './scrollFades.js';
 import { stackSlots, MAX_DICE_PER_STACK } from './diceStacks.js';
 
 const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
@@ -92,25 +93,6 @@ function pipFace(value) {
     svg.append(pip);
   }
   return svg;
-}
-
-/**
- * Which edges of a scrolling strip have more content beyond them — the right
- * while dice are still waiting off-screen, the left once some have been
- * scrolled past, both at once in the middle, and neither when it all fits.
- *
- * The one-pixel tolerance is not fussiness: scrollLeft is fractional on a
- * zoomed or high-DPI display, so a strip scrolled fully to the end lands a
- * hair short of scrollWidth - clientWidth and would keep claiming there was
- * more to the right forever.
- */
-export function scrollFades({ scrollLeft, scrollWidth, clientWidth }) {
-  const furthest = scrollWidth - clientWidth;
-  if (furthest <= 1) return { left: false, right: false };
-  return {
-    left: scrollLeft > 1,
-    right: scrollLeft < furthest - 1,
-  };
 }
 
 // Exported for the reinforcement tray in the HUD, which shows the same flat
@@ -272,7 +254,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
 
     const compact = !fitsFullReading(shownBattle) || overrunsFull();
     current.classList.toggle('is-compact', compact);
-    showFades([current.querySelector('.battle-dice')]);
+    showScrollFades([current.querySelector('.battle-dice')]);
   }
 
   // Whether the full reading would be clipped by the room the readout has.
@@ -281,19 +263,6 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   function overrunsFull() {
     current.classList.remove('is-compact');
     return current.scrollWidth > current.clientWidth + 1;
-  }
-
-  // Fades a strip out over whichever edges it can still be scrolled towards,
-  // so "there are more dice this way" is visible without a scrollbar. Measured
-  // for every strip first and written afterwards, so a whole history costs one
-  // reflow rather than one per row.
-  function showFades(strips) {
-    const present = strips.filter(Boolean);
-    const states = present.map(scrollFades); // all reads
-    present.forEach((strip, i) => {
-      strip.classList.toggle('is-faded-left', states[i].left);
-      strip.classList.toggle('is-faded-right', states[i].right);
-    });
   }
 
   let openState = false;
@@ -306,7 +275,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   // Every history row's dice strip at once — reads first, writes after, so a
   // hundred rows cost one reflow rather than a hundred.
   const showHistoryFades = () =>
-    showFades([...battleRows()].map((row) => row.querySelector('.battle-dice')));
+    showScrollFades([...battleRows()].map((row) => row.querySelector('.battle-dice')));
 
   // `scroll` does not bubble, but it can be caught on the way down — so one
   // listener here keeps every dice strip's fades current, however many rows
@@ -314,7 +283,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   root.addEventListener(
     'scroll',
     (event) => {
-      if (event.target?.classList?.contains('battle-dice')) showFades([event.target]);
+      if (event.target?.classList?.contains('battle-dice')) showScrollFades([event.target]);
     },
     true
   );
