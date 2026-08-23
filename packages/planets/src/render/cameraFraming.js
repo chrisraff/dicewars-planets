@@ -35,7 +35,60 @@ export const DEFAULT_FRAMING = {
   speed: 3.0, // radians per second
   minDuration: 0.25,
   maxDuration: 0.55,
+
+  /**
+   * How much of the planet is allowed to fall outside the frame when the
+   * camera pulls back to take the whole thing in — a fraction of its radius,
+   * off each edge of the narrower screen dimension.
+   *
+   * Deliberately not zero. Framing the silhouette exactly means pulling back
+   * until it touches the edges, which on a phone leaves the planet noticeably
+   * smaller for little benefit.
+   */
+  shave: 0.075,
+
+  // The pull-back's own pacing, same shape as a swing's. Slower, because a
+  // swing is chasing something about to happen while this is only settling —
+  // but the ceiling still clears the 0.25s AI pause plus its first aim, so
+  // the planet has stopped moving before there are dice to read.
+  zoomSpeed: 4.0, // planet radii per second
+  minZoomDuration: 0.3,
+  maxZoomDuration: 0.7,
 };
+
+/**
+ * The narrower half-angle of a perspective frustum, in radians — so "in
+ * frame" means in frame in *both* directions. On a phone held upright that is
+ * the horizontal one, and it is less than half the vertical: this is the
+ * whole reason a planet comfortably framed on a desktop spills off both sides
+ * of a portrait screen.
+ */
+export function narrowHalfFov(fovDegrees, aspect) {
+  const vertical = ((fovDegrees * Math.PI) / 180) / 2;
+  return Math.min(vertical, Math.atan(Math.tan(vertical) * aspect));
+}
+
+/**
+ * How far from the planet's center the camera has to sit for the whole planet
+ * to be in frame, bar `shave` of its radius off each edge.
+ *
+ * The silhouette of a unit sphere seen from `distance` is a circle of angular
+ * radius `asin(1 / distance)` — the tangent cone, where the line of sight
+ * grazes the surface. A perspective projection puts screen offsets in
+ * proportion to `tan` of the angle, so the disc and the frame can be compared
+ * directly in those terms: the frame's half-width is `tan(halfFov)`, the
+ * disc's radius is `tan(asin(1 / distance))`, and letting the disc overrun by
+ * `shave` means the frame covers `1 - shave` of it.
+ *
+ * Solving that for the distance is what this is. Note it grows without bound
+ * as `halfFov` narrows, which is why the caller still clamps it to whatever
+ * the controls will actually allow.
+ */
+export function framingDistance(halfFov, shave = DEFAULT_FRAMING.shave) {
+  const covered = 1 - Math.min(0.95, Math.max(0, shave));
+  const apparent = Math.atan(Math.tan(halfFov) / covered);
+  return 1 / Math.sin(apparent);
+}
 
 /**
  * How far around the planet from the point facing the camera you can still
@@ -157,6 +210,22 @@ export function swingDuration(travel, framing = DEFAULT_FRAMING) {
 // Eased at both ends: the planet takes up the turn and sets it down again,
 // instead of starting and stopping dead.
 const easeSwing = (t) => t * t * (3 - 2 * t);
+
+// A pull-back long enough to read as the camera drawing back rather than as a
+// cut, paced by how far it actually has to travel so a small correction does
+// not take as long as crossing half the zoom range.
+export function zoomDuration(from, to, framing = DEFAULT_FRAMING) {
+  const { zoomSpeed, minZoomDuration, maxZoomDuration } = framing;
+  const travel = Math.abs(to - from);
+  return Math.min(maxZoomDuration, Math.max(minZoomDuration, travel / zoomSpeed));
+}
+
+// The distance `t` of the way (0..1) from `from` to `to`, eased on the same
+// curve a swing is, so a pull-back that happens alongside one moves with it
+// rather than against it.
+export function zoomAlong(from, to, t) {
+  return from + (to - from) * easeSwing(Math.min(1, Math.max(0, t)));
+}
 
 // A point's position in the same two axes an orbiting camera's own controls
 // move on — `lon` swings it round the pole axis (the +Y OrbitControls turns

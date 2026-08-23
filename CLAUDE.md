@@ -210,6 +210,35 @@ read. A hand on the planet cancels it outright — a wheel zoom doesn't, since
 that says nothing about where to look, and the swing keeps whatever distance
 the player lands on.
 
+**How far back the camera sits** is the other half, and it is a phone problem.
+`narrowHalfFov` is the tighter of the two frustum half-angles, because "in
+frame" has to mean in frame in both directions — and on a phone held upright
+the horizontal one is less than half the vertical, so a planet comfortably
+framed on a desktop spills off both sides. `framingDistance` is how far out
+that puts the camera: a unit sphere's silhouette has angular radius
+`asin(1 / distance)`, perspective puts screen offsets in proportion to `tan`,
+so the disc and the frame compare directly as `tan(asin(1/d))` against
+`tan(halfFov)`. `DEFAULT_FRAMING.shave` (0.075 of the radius off each edge)
+is deliberately not zero: the extreme left and right of the disc are limb, seen
+so edge-on that dice there are unreadable anyway, and giving those two slivers
+up buys apparent size everywhere that isn't. A portrait phone opens at about
+4.9 radii against a desktop's 3.2.
+
+It is applied at two moments, both through the same outwards-only rule.
+A session frames the planet the instant it opens, over whatever camera it
+inherited — the viewer's `ROOMY_DISTANCE` default for a fresh game, or the
+camera a save just restored. That second case is the one worth remembering:
+`saveGame` stores where the player left the camera, so without this a phone
+reloading a game in progress restores a distance saved on a wider screen (or
+from before this rule existed) and lands straight back in the view the rule
+exists to prevent. And ending *the player's own* turn pulls back, because the AI
+attacks wherever it likes and the view that suits someone else's turn is the
+one with the whole planet in it. Outwards only — a player already further back
+can already see everything this would, so hauling them in would be taking away
+a view they chose. Any touch of the controls ends a pull-back, including a
+drag; unlike a swing, this one is *about* distance, so a pinch or a wheel
+outranks it.
+
 A battle has two readings, both built every time and picked between with one
 class (`is-compact`), so switching costs no rebuild. Which one shows is decided
 differently in the two places a battle appears:

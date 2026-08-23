@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+// Where the camera starts before anything has looked at the screen it is on.
+// Comfortably outside the planet, and the distance every desktop game has
+// always opened at — a narrow screen needs more, and `cameraFocus.framePlanet`
+// is what works out how much, once there is a session to ask.
+const ROOMY_DISTANCE = 3.2;
+
 // Thin, untested three.js wrapper: black background, planet centered at the
 // origin, orbit controls that let you rotate and zoom but never pan away
 // from the planet. All the pure/testable logic lives elsewhere.
@@ -17,7 +23,7 @@ export function createViewer(canvas) {
   scene.add(keyLight);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, 0, 3.2);
+  camera.position.set(0, 0, ROOMY_DISTANCE);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   // phones report ratios of 3 and up; past 2 the extra pixels cost real frame
@@ -57,6 +63,11 @@ export function createViewer(canvas) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
+
+  // Measured once here rather than waiting for the first frame: `camera.aspect`
+  // is 1 until `resize` has run, and framing the planet is decided from the
+  // aspect — on a phone that is the very number the answer turns on.
+  resize();
 
   function render() {
     resize();

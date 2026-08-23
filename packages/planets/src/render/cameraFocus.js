@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import {
   DEFAULT_FRAMING,
   clusterAim,
+  framingDistance,
+  narrowHalfFov,
   needsRefocus,
   swingDirection,
   swingDuration,
   swingTravel,
+  zoomAlong,
+  zoomDuration,
 } from './cameraFraming.js';
 import { normalize } from '../geometry/vec3.js';
 
@@ -18,13 +22,19 @@ import { normalize } from '../geometry/vec3.js';
  * is and the margin that decides "too close to it"), the camera swings along
  * the shortest arc until the fight is centered.
  *
+ * It also draws the camera back to take the whole planet in (`framePlanet`),
+ * which is the view an AI's turn wants for the same reason: when the next
+ * fight could be anywhere on the sphere, the answer is to be able to see the
+ * sphere.
+ *
  * Thin on purpose: every decision is in `cameraFraming.js`, and all this adds
  * is reading the camera, writing it back, and the dragging rule — the player
  * turning the planet ends the swing on the spot, because a camera fighting
  * the hand on it is worse than a missed battle.
  */
 export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING }) {
-  let swing = null; // { from, to, elapsed, duration }
+  let swing = null; // { from, to, elapsed, duration } — where the camera is looking
+  let zoom = null; // the same, for how far away it is
 
   // Distance and direction are read fresh every frame rather than captured:
   // zooming mid-swing is the player's business and shouldn't be undone by it.
@@ -33,12 +43,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
     return { distance: offset.length(), direction: normalize(offset) };
   };
 
-  // The narrower half-angle of the frustum, so "on screen" means on screen in
-  // both directions — on a phone held upright that is the horizontal one.
-  const halfFov = () => {
-    const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
-    return Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
-  };
+  const halfFov = () => narrowHalfFov(camera.fov, camera.aspect);
 
   const aimAt = (direction, distance) => {
     camera.position
@@ -47,8 +52,11 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
     controls.update();
   };
 
+  // Stop moving the camera at all — both what it is looking at and how far
+  // away it is.
   const cancel = () => {
     swing = null;
+    zoom = null;
   };
 
   const startSwingTo = (to) => {
@@ -61,15 +69,21 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
     };
   };
 
-  // OrbitControls fires `start` for the wheel as well as for a drag, and a
-  // zoom is not a disagreement about where to look — the swing carries on and
-  // simply keeps whatever distance the player lands on. Anything else means a
-  // hand on the planet, and the hand wins. (`state` is OrbitControls' own; if
-  // it ever stops being there, every `start` cancels, which is the safe way
-  // round to be wrong.)
+  // OrbitControls fires `start` for the wheel as well as for a drag, and the
+  // two mean different things to the two animations here.
+  //
+  // A pull-back is *about* distance, so anything the player does to the
+  // controls outranks it — a wheel and a pinch say so outright, and a drag is
+  // a hand on the planet that may be about to pinch as well. A swing is about
+  // direction, so only a drag ends one; a wheel says nothing about where to
+  // look, and the swing carries on and keeps whatever distance the player
+  // lands on. (`state` is OrbitControls' own; if it ever stops being there,
+  // every `start` cancels the swing too, which is the safe way round to be
+  // wrong.)
   const NOT_DRAGGING = -1; // OrbitControls' internal STATE.NONE
   const onControlsStart = () => {
-    if (controls.state !== NOT_DRAGGING) cancel();
+    zoom = null;
+    if (controls.state !== NOT_DRAGGING) swing = null;
   };
   controls.addEventListener('start', onControlsStart);
 
@@ -105,6 +119,39 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
       return true;
     },
 
+    /**
+     * Draw back until the whole planet is in frame — the view someone else's
+     * turn wants, since the AI plays wherever it likes and a fight it picks
+     * could be anywhere on the sphere.
+     *
+     * Outwards only. A player who is already further back than this has a
+     * view of their own choosing that already shows everything this would,
+     * and hauling them in to a standard distance would be taking it away.
+     *
+     * `instant` skips the animation, for opening a page: there is no previous
+     * view to travel from, so animating would only be the planet lurching the
+     * moment it appeared. Returns whether it moved the camera at all.
+     */
+    framePlanet({ instant = false } = {}) {
+      const { direction, distance } = orbit();
+      const target = Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
+      if (distance >= target - 1e-3) return false;
+
+      if (instant) {
+        zoom = null;
+        aimAt(direction, target);
+        return true;
+      }
+
+      zoom = {
+        from: distance,
+        to: target,
+        elapsed: 0,
+        duration: zoomDuration(distance, target, framing),
+      };
+      return true;
+    },
+
     // The camera's own read on itself, for a caller (an AI turn's forward
     // planner) that needs to know where "here" is without duplicating the
     // orbit/fov math above.
@@ -115,17 +162,34 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
 
     cancel,
 
+    // A swing and a pull-back can be running at once — one turns the planet
+    // for the AI's first attack while the other is still drawing back from the
+    // turn that just ended. Both are worked out first and the camera is moved
+    // once, so neither writes a position the other is about to overwrite.
     tick(dt) {
-      if (!swing) return;
-      swing.elapsed += dt;
-      const t = Math.min(1, swing.elapsed / swing.duration);
-      aimAt(swingDirection(swing.from, swing.to, t), orbit().distance);
-      if (t >= 1) swing = null;
+      if (!swing && !zoom) return;
+      let { direction, distance } = orbit();
+
+      if (zoom) {
+        zoom.elapsed += dt;
+        const t = Math.min(1, zoom.elapsed / zoom.duration);
+        distance = zoomAlong(zoom.from, zoom.to, t);
+        if (t >= 1) zoom = null;
+      }
+
+      if (swing) {
+        swing.elapsed += dt;
+        const t = Math.min(1, swing.elapsed / swing.duration);
+        direction = swingDirection(swing.from, swing.to, t);
+        if (t >= 1) swing = null;
+      }
+
+      aimAt(direction, distance);
     },
 
     dispose() {
       controls.removeEventListener('start', onControlsStart);
-      swing = null;
+      cancel();
     },
   };
 }

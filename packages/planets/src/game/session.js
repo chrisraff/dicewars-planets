@@ -118,6 +118,14 @@ export function createSession({
 
   const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
 
+  // Whatever camera this match opened with — the viewer's default, or the one
+  // a save just put back — the planet has to actually fit the screen it is
+  // being played on. Outwards only, exactly as at the end of a turn, so a
+  // player who left themselves zoomed out keeps that; but a distance saved on
+  // a wider screen, or before this rule existed, is corrected rather than
+  // restored faithfully into an unplayable view.
+  cameraFocus.framePlanet({ instant: true });
+
   // Swings the camera to cover as many of the *upcoming* fights as will
   // comfortably fit in one frame, rather than swinging to just the next one
   // — `pairs` is `{from, to}` in the order they're about to be shown,
@@ -314,11 +322,18 @@ export function createSession({
     };
   });
 
-  game.on('endTurn', () => {
+  game.on('endTurn', (event) => {
     // The payout has landed — `change` is about to rebuild every stack it
     // touched, so the dice animated here have nothing left to do.
     reinforceAnim = null;
     hud.hideReinforce();
+
+    // Handing the planet over: the AI attacks wherever it likes, so the view
+    // that suits its turn is the one with the whole planet in it. Only when
+    // the player's own turn is the one ending, and only ever outwards — see
+    // `framePlanet`. It has the AI's think pause plus its first aim to land
+    // in, so it is over before there are dice to read.
+    if (event.playerId === humanPlayerId) cameraFocus.framePlanet();
   });
 
   game.on('eliminated', (event) => {

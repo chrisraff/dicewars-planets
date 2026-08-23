@@ -4,12 +4,16 @@ import {
   DEFAULT_FRAMING,
   clusterAim,
   fightCenter,
+  framingDistance,
   framingOf,
+  narrowHalfFov,
   needsRefocus,
   swingDirection,
   swingDuration,
   swingTravel,
   visibleAngle,
+  zoomAlong,
+  zoomDuration,
 } from '../src/render/cameraFraming.js';
 import { angleBetween, cross, dot, length, normalize } from '../src/geometry/vec3.js';
 
@@ -239,4 +243,83 @@ test('a fight too far away to share a frame is left for its own swing later', ()
     framingOf(aim, distant, FAR) < DEFAULT_FRAMING.margin,
     'the distant fight was not absorbed into this swing'
   );
+});
+
+// --- fitting the whole planet on the screen ---------------------------------
+
+// Two real viewports, both at the app's 45° vertical field of view.
+const PHONE = 390 / 844; // portrait, where the horizontal fov is the tight one
+const DESKTOP = 1440 / 900;
+
+// The apparent radius of the planet's silhouette, as a fraction of the frame's
+// half-width — 1 exactly filling it, above 1 overrunning it. Written from the
+// projection rather than from `framingDistance`, so it is an independent check
+// rather than the same algebra twice.
+const discFill = (distance, halfFov) =>
+  Math.tan(Math.asin(1 / distance)) / Math.tan(halfFov);
+
+test('a portrait phone is framed by its width, a landscape desktop by its height', () => {
+  const vertical = Math.PI / 8;
+  assert.ok(narrowHalfFov(45, PHONE) < vertical, 'upright, the sides are what run out first');
+  assert.equal(narrowHalfFov(45, DESKTOP), vertical, 'wide, the vertical fov is already the tighter');
+});
+
+test('the planet is framed with exactly the shave hanging off each edge', () => {
+  for (const aspect of [PHONE, DESKTOP, 1]) {
+    const halfFov = narrowHalfFov(45, aspect);
+    const fill = discFill(framingDistance(halfFov, 0.075), halfFov);
+    assert.ok(Math.abs(fill - 1 / 0.925) < 1e-9, `aspect ${aspect}: 92.5% of the disc is in frame`);
+  }
+});
+
+test('no shave means the whole silhouette, edge to edge', () => {
+  const halfFov = narrowHalfFov(45, PHONE);
+  assert.ok(Math.abs(discFill(framingDistance(halfFov, 0), halfFov) - 1) < 1e-9);
+});
+
+test('shaving a corner off lets the camera come closer', () => {
+  // the point of the shave: two slivers of limb bought back as apparent size
+  const halfFov = narrowHalfFov(45, PHONE);
+  assert.ok(framingDistance(halfFov, 0.075) < framingDistance(halfFov, 0));
+});
+
+test('a phone has to sit much further back than a desktop for the same view', () => {
+  const phone = framingDistance(narrowHalfFov(45, PHONE), DEFAULT_FRAMING.shave);
+  const desktop = framingDistance(narrowHalfFov(45, DESKTOP), DEFAULT_FRAMING.shave);
+
+  assert.ok(phone > desktop * 1.5, 'which is why a phone opens wrong without this at all');
+  assert.ok(desktop < 3.2, 'and why a desktop, already past that, is left exactly as it was');
+  assert.ok(phone < 8, 'and it still has to be a distance the controls will allow');
+});
+
+test('the planet never ends up behind the camera or inside it', () => {
+  for (let aspect = 0.3; aspect <= 3; aspect += 0.1) {
+    const distance = framingDistance(narrowHalfFov(45, aspect), DEFAULT_FRAMING.shave);
+    assert.ok(distance > 1, `aspect ${aspect.toFixed(1)}: outside the surface`);
+    assert.ok(Number.isFinite(distance), `aspect ${aspect.toFixed(1)}: a real distance`);
+  }
+});
+
+// --- pacing the pull-back ---------------------------------------------------
+
+test('a pull-back is paced by how far it goes, within bounds', () => {
+  const { minZoomDuration, maxZoomDuration, zoomSpeed } = DEFAULT_FRAMING;
+  assert.equal(zoomDuration(3, 3.01), minZoomDuration, 'a nudge does not crawl');
+  assert.equal(zoomDuration(1.5, 8), maxZoomDuration, 'the whole range does not drag');
+  assert.equal(zoomDuration(2, 2 + zoomSpeed * 0.5), 0.5, 'and in between, its own speed');
+});
+
+test('it is over before the AI has anything to show', () => {
+  // 0.25s of think pause plus ~0.57s of aim and roll before the first dice
+  // land — the pull-back has to have stopped by then or the planet is still
+  // moving under a battle being read
+  assert.ok(DEFAULT_FRAMING.maxZoomDuration < 0.25 + 0.57);
+});
+
+test('a pull-back starts and ends where it says, and eases in between', () => {
+  assert.equal(zoomAlong(1.5, 4.9, 0), 1.5);
+  assert.equal(zoomAlong(1.5, 4.9, 1), 4.9);
+  assert.equal(zoomAlong(1.5, 4.9, 0.5), (1.5 + 4.9) / 2, 'symmetric about the middle');
+  assert.ok(zoomAlong(1.5, 4.9, 0.1) - 1.5 < (4.9 - 1.5) * 0.1, 'eased in, not linear');
+  assert.equal(zoomAlong(1.5, 4.9, 2), 4.9, 'and it cannot overshoot');
 });
