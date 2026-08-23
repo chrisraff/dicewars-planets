@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — first-turn prompt preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>First-turn prompt</h1>
+      <p class="lede">
+        The one-off panel that tells somebody who has never played what to
+        actually do with the planet. In a real game it appears once and is
+        remembered in <code>localStorage</code>, which is exactly why it is
+        here: every state below is a real <code>createHud</code> running the
+        real <code>attackHintView</code>, so you can look at it without
+        clearing anything. The × works — press it and the log under the stage
+        says so; "Show it again" puts it back.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/hints.js"></script>
+  </body>
+</html>

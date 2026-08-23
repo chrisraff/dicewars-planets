@@ -39,6 +39,11 @@ export const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange
  * `settings` has already been normalized by the time it gets here — the menu
  * and `resolveSettings` are the two places raw values are parsed.
  *
+ * `attackHintSeen` says whether this player has already been told how to
+ * attack, and `onAttackHintSeen` is called the once when they have been —
+ * same division as `onSave`: the session decides when a hint has done its job,
+ * the page decides where that fact is written down.
+ *
  * `saved` resumes a match rather than dealing a new one, and `onSave` is
  * handed the state to write after every move — or `null` once the game is
  * over, since a finished game is not one to come back to. Storage itself stays
@@ -51,9 +56,11 @@ export function createSession({
   pipMaterials,
   settings,
   saved = null,
+  attackHintSeen = false,
   onNewGame,
   onMenu,
   onSave,
+  onAttackHintSeen,
 }) {
   const playerIds = playerIdsFor(settings);
   const playerNames = new Map(playerIds.map((id, i) => [id, PLAYER_NAMES[i]]));
@@ -136,6 +143,10 @@ export function createSession({
   // not stored in a save: the board itself says whether you still hold ground
   let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
   let lastOutcome = null; // so closing the replay can bring the banner back
+  // The one-off prompt for somebody who has never played. It has done its job
+  // the moment either happens: they dismiss it, or they attack — having just
+  // done the thing it describes, being told again next game would be noise.
+  let hintSeen = attackHintSeen;
   let pendingReplayStep = null; // a board waiting for the camera to arrive before it shows
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
@@ -216,6 +227,12 @@ export function createSession({
     });
   }
 
+  function hintDone() {
+    if (hintSeen) return;
+    hintSeen = true;
+    onAttackHintSeen?.();
+  }
+
   function refreshBoard(pulse = 1) {
     const marks = highlightsFor({
       selection: game.selection,
@@ -233,6 +250,13 @@ export function createSession({
       humanEliminated,
       canAct: game.isHumanTurn() && !game.isBusy(),
     });
+    hud.showHint({
+      seen: hintSeen,
+      humanPlayerId, // the prompt names the color you are, so it has to know
+      isHumanTurn: game.isHumanTurn(),
+      isOver: game.isOver(),
+      humanEliminated,
+    });
   }
 
   game.on('attack', ({ event, timing, upcoming }) => {
@@ -246,6 +270,7 @@ export function createSession({
     // is this attack plus whatever's already queued behind it this turn, so
     // a run of nearby attacks gets one swing instead of one each.
     if (game.currentPlayer() !== humanPlayerId) focusFights(upcoming);
+    else hintDone(); // they have just done the thing the prompt describes
 
     roll = {
       event,
@@ -337,6 +362,11 @@ export function createSession({
 
   hud.onReplaySeek(showReplayStep);
   hud.onReplayClose(closeReplay);
+
+  hud.onHintDismiss(() => {
+    hintDone();
+    refreshBoard();
+  });
 
   hud.onEndTurn(() => {
     game.endTurn();

@@ -6,6 +6,7 @@ import { createSession } from './game/session.js';
 import { pointerToNdc } from './render/pickTerritory.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
 import { readSavedGame, writeSavedGame, clearSavedGame } from './game/saveGame.js';
+import { ATTACK_HINT, markHintSeen, readSeenHints } from './game/hints.js';
 
 const canvas = document.getElementById('planet-canvas');
 const hudRoot = document.getElementById('hud');
@@ -17,6 +18,10 @@ const viewer = createViewer(canvas);
 const pipMaterials = createDiePipMaterials();
 
 let session = null;
+// Whether this player has already been shown how to attack. Held here rather
+// than re-read per game, so dismissing it in one match settles it for the next
+// one too — the write is only there to settle it for the next *visit*.
+let attackHintSeen = readSeenHints(window.localStorage).has(ATTACK_HINT);
 
 function startGame(settings, saved = null) {
   session?.dispose();
@@ -26,11 +31,16 @@ function startGame(settings, saved = null) {
     pipMaterials,
     settings,
     saved,
+    attackHintSeen,
     // the session decides what is worth keeping; this is the only place that
     // knows where it goes. A finished game hands back null and is cleared,
     // because there is nothing left to come back to.
     onSave: (save) =>
       save ? writeSavedGame(window.localStorage, save) : clearSavedGame(window.localStorage),
+    onAttackHintSeen: () => {
+      attackHintSeen = true;
+      markHintSeen(window.localStorage, ATTACK_HINT);
+    },
     onMenu: () => menu.show(session.settings, { canResume: true }),
     onNewGame: () => menu.show(session.settings, { canResume: true }),
   });

@@ -28,6 +28,13 @@ export const PREVIEW_PAGES = [
       + 'table, players knocked out, game over, and at phone and very-narrow widths.',
   },
   {
+    href: '/preview/hints.html',
+    title: 'First-turn prompt',
+    description:
+      'The one-off panel that tells a first-time player how to attack — both wordings, at phone '
+      + 'width, over a payout, and every state where it correctly says nothing at all.',
+  },
+  {
     href: '/preview/battles.html',
     title: 'Battle readout & history',
     description:

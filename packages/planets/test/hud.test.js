@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_RESERVE } from '@dicewars/core';
-import { playerPanelView, scrollLeftToReveal } from '../src/render/hud.js';
+import {
+  attackHintText,
+  attackHintView,
+  playerPanelView,
+  scrollLeftToReveal,
+} from '../src/render/hud.js';
 import {
   DEFAULT_PLAYER_COLORS,
   readableTextColor,
@@ -158,4 +163,69 @@ test('it only ever moves the row by the minimum needed', () => {
   assert.ok(moves.slice(0, 4).every((m) => m === 0), 'the first four panels are already visible');
   assert.ok(moves.every((m) => m >= 0), 'walking forwards never scrolls backwards');
   assert.equal(scrollLeft, 480 - 300, 'and ends up at the far end of the row');
+});
+
+// --- the first-turn prompt --------------------------------------------------
+
+const firstTurn = (over = {}) => ({
+  seen: false,
+  isHumanTurn: true,
+  isOver: false,
+  humanEliminated: false,
+  coarsePointer: false,
+  playerName: 'Red',
+  ...over,
+});
+const sentence = (status) => attackHintText(attackHintView(status));
+
+test('a first-time player is told, in one sentence, both halves of the only move', () => {
+  const text = sentence(firstTurn());
+  assert.match(text, /your red territories/, 'pick one of yours first');
+  assert.match(text, /neighboring enemy/, 'then an adjacent enemy — not any enemy');
+});
+
+test('the prompt names the color the player is', () => {
+  // "one of your territories" is not actionable until you know which of the
+  // eight colors on the planet is yours, and nothing else on screen says so
+  // to somebody who has never played
+  const view = attackHintView(firstTurn({ playerName: 'Purple' }));
+  assert.equal(view.color, 'purple', 'set apart from the sentence so it can be shown in color');
+  assert.match(attackHintText(view), /one of your purple territories/);
+});
+
+test('the color is the one word held apart, and the sentence still reads whole', () => {
+  const view = attackHintView(firstTurn({ playerName: 'Cyan' }));
+  assert.equal(view.before, 'Click one of your ', 'a space before it');
+  assert.equal(attackHintText(view), 'Click one of your cyan territories, then click a neighboring enemy to attack.');
+});
+
+test('with no color to name, the sentence closes over the gap', () => {
+  // rather than "one of your  territories" with a hole where a name should be
+  const view = attackHintView(firstTurn({ playerName: null }));
+  assert.equal(view.color, null);
+  assert.equal(attackHintText(view), 'Click one of your territories, then click a neighboring enemy to attack.');
+});
+
+test('the prompt is worded for the thing the player is actually using', () => {
+  // being told to click on a phone is small, but it makes the rest of the
+  // sentence less believable — and this is the one sentence that has to land
+  assert.match(sentence(firstTurn({ coarsePointer: true })), /^Tap .* then tap /);
+  assert.match(sentence(firstTurn({ coarsePointer: false })), /^Click .* then click /);
+});
+
+test('it is said once and then never again', () => {
+  assert.equal(attackHintView(firstTurn({ seen: true })), null);
+});
+
+test('there is nothing to say when there is no turn to say it about', () => {
+  // each of these is advice you could not act on, which is worse than silence
+  assert.equal(attackHintView(firstTurn({ isHumanTurn: false })), null, 'an opponent is playing');
+  assert.equal(attackHintView(firstTurn({ humanEliminated: true })), null, 'you are out');
+  assert.equal(attackHintView(firstTurn({ isOver: true })), null, 'the game is decided');
+});
+
+test('a game already over outranks its own turn indicator still pointing at you', () => {
+  // a finished game never moves its turn index off the winner, so "is it my
+  // turn" answers yes long after there is anything to do
+  assert.equal(attackHintView(firstTurn({ isHumanTurn: true, isOver: true })), null);
 });

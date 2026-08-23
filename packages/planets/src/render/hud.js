@@ -111,6 +111,54 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
 }
 
 /**
+ * The prompt a first-time player gets on their turn, or `null` when there is
+ * nothing worth saying.
+ *
+ * Dice Wars has exactly one move in it and no way to discover it: the planet
+ * looks like something to rotate, so a player who has never seen the game
+ * turns it over, finds nothing to press, and never learns that a territory is
+ * the button. One sentence fixes that, and only ever needs saying once —
+ * `seen` is answered by `hints.js` from storage, so the second game says
+ * nothing.
+ *
+ * It is only ever advice about the turn you are taking, so every state where
+ * there is no such turn — an opponent playing, a game already decided, a
+ * player knocked out of one — is silence rather than an instruction you cannot
+ * follow. `coarsePointer` is the one thing this cannot work out for itself:
+ * telling somebody on a phone to click is the sort of small wrongness that
+ * makes the rest of the sentence less believable.
+ *
+ * The sentence comes back in three pieces because one word of it — the color
+ * the player is — has to be set in that color, and a first-timer needs it
+ * more than anything else here: "one of your territories" is only actionable
+ * once you know which of the eight colors on the planet is yours. `playerName`
+ * is already a color name (`PLAYER_NAMES` is the palette in order), so naming
+ * it and coloring it are the same word. Without one, the sentence closes over
+ * the gap rather than being left with a hole in it.
+ */
+export function attackHintView(status) {
+  const { seen = false, isHumanTurn = false, coarsePointer = false, playerName = null } = status;
+  const { isOver = false, humanEliminated = false } = status;
+
+  if (seen || isOver || humanEliminated || !isHumanTurn) return null;
+
+  const press = coarsePointer ? 'Tap' : 'Click';
+  const then = `, then ${press.toLowerCase()} a neighboring enemy to attack.`;
+
+  if (!playerName) return { color: null, before: `${press} one of your territories`, after: then };
+  return {
+    color: playerName.toLowerCase(),
+    before: `${press} one of your `,
+    after: ` territories${then}`,
+  };
+}
+
+/** The whole sentence as one string — for tests, and for anything reading it. */
+export function attackHintText(view) {
+  return `${view.before}${view.color ?? ''}${view.after}`;
+}
+
+/**
  * The banner that interrupts play, and what it offers to do next.
  *
  * Winning is the point of the whole game, so it gets the screen to itself
@@ -161,6 +209,10 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       <div class="hud-battle"></div>
     </div>
     <div class="hud-controls">
+      <div class="hud-hint" role="status" hidden>
+        <p class="hud-hint-text"></p>
+        <button class="hud-hint-close" type="button" aria-label="Dismiss">×</button>
+      </div>
       <div class="hud-reinforce" hidden aria-hidden="true"></div>
       <div class="hud-controls-row">
         <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
@@ -201,6 +253,10 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   });
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
+  const hint = root.querySelector('.hud-hint');
+  const hintText = root.querySelector('.hud-hint-text');
+  const hintClose = root.querySelector('.hud-hint-close');
+  let hintShown = null; // so a repaint doesn't rebuild the sentence, or re-announce it
   const reinforceTray = root.querySelector('.hud-reinforce');
   let reinforceChips = []; // one per die, left to right — popped from the right
   const endTurnButton = root.querySelector('.hud-end-turn');
@@ -272,6 +328,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
   const prefersReducedMotion = () =>
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const coarsePointer = () => window.matchMedia?.('(pointer: coarse)').matches ?? false;
 
   // Brings a panel into view in the stats row. Measured off bounding rects
   // rather than offsetLeft, which is relative to whichever ancestor happens to
@@ -386,6 +443,55 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       turnText.textContent = view.text;
       endTurnButton.disabled = view.endTurn !== 'ready';
       endTurnButton.style.visibility = view.endTurn === 'hidden' ? 'hidden' : 'visible';
+    },
+
+    /**
+     * The first-timer's prompt, or nothing — `attackHintView` decides, from
+     * the same kind of status object `showTurn` takes. The pointer and the
+     * player's name are filled in here because they are facts about the
+     * browser and about this HUD rather than about the game, and both are left
+     * overridable so a preview can show every wording and every color without
+     * a device or a match for each.
+     *
+     * The color name is a chip rather than tinted text: a player color *as
+     * ink* on this panel lands around 4:1, which is under AA for a sentence
+     * this size, while the same color as a background under
+     * `readableTextColor` is the pairing the stats row already proves legible
+     * across the whole palette.
+     */
+    showHint(status) {
+      const view = attackHintView({
+        coarsePointer: coarsePointer(),
+        playerName: playerNames.get(status.humanPlayerId) ?? null,
+        ...status,
+      });
+
+      const key = view ? `${status.humanPlayerId}/${attackHintText(view)}` : null;
+      if (key === hintShown) return;
+      hintShown = key;
+
+      hint.hidden = view === null;
+      if (!view) {
+        hintText.replaceChildren();
+        return;
+      }
+
+      const parts = [view.before];
+      if (view.color) {
+        const color = playerColors.get(status.humanPlayerId) ?? [0.5, 0.5, 0.5];
+        const chip = document.createElement('b');
+        chip.className = 'hud-hint-color';
+        chip.textContent = view.color;
+        chip.style.setProperty('--player-color', rgb(color));
+        chip.style.setProperty('--player-ink', rgb(readableTextColor(color)));
+        parts.push(chip);
+      }
+      parts.push(view.after);
+      hintText.replaceChildren(...parts);
+    },
+
+    onHintDismiss(handler) {
+      hintClose.addEventListener('click', handler);
     },
 
     /**
