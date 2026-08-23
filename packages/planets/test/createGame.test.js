@@ -111,6 +111,56 @@ test('ending your turn pays reinforcements and hands play to the AI', () => {
   assert.ok(!game.isHumanTurn());
 });
 
+test('ending your turn without attacking is recorded as a pass', () => {
+  const game = createGame({ world: balanced() });
+  const reinforcements = [];
+  game.on('reinforce', (e) => reinforcements.push(e));
+
+  game.endTurn();
+
+  assert.equal(reinforcements.length, 1);
+  assert.equal(reinforcements[0].playerId, 'p1');
+  assert.equal(reinforcements[0].passed, true);
+});
+
+test('ending your turn after attacking is not a pass, even though the attack is long since resolved', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const reinforcements = [];
+  game.on('reinforce', (e) => reinforcements.push(e));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, attackDuration(DEFAULT_TIMING) + 0.05); // the roll has to land first
+  game.endTurn();
+
+  assert.equal(reinforcements[0].passed, false);
+});
+
+test('a pass is per turn — attacking on the next one is not tainted by passing the last', () => {
+  const w = chainWorld([
+    ['a', { owner: 'p1', dice: 4 }],
+    ['b', { owner: 'p2', dice: 1 }], // one die: never a legal attacker, so the AI always just passes
+    ['c', { owner: 'p2', dice: 1 }], // p2's other ground — losing 'b' must not end the game mid-test
+  ]);
+  const game = createGame({ world: w, rollDie: alwaysRolls(6) });
+  const reinforcements = [];
+  game.on('reinforce', (e) => reinforcements.push(e));
+
+  game.endTurn(); // p1 passes on purpose
+  advance(game, 5); // the payout lands, then the AI takes (and passes) its own turn
+
+  game.clickTerritory('a');
+  game.clickTerritory('b'); // p1 attacks on their second turn
+  advance(game, attackDuration(DEFAULT_TIMING) + 0.05);
+  game.endTurn();
+  advance(game, 5);
+
+  const p1Turns = reinforcements.filter((e) => e.playerId === 'p1');
+  assert.equal(p1Turns.length, 2);
+  assert.equal(p1Turns[0].passed, true, 'the first turn really was a pass');
+  assert.equal(p1Turns[1].passed, false, 'passing once does not stick to the next turn');
+});
+
 test('the board does not change until the reinforcement has finished landing', () => {
   const game = createGame({ world: balanced() });
   const before = game.state.nodes.get('a').dice;

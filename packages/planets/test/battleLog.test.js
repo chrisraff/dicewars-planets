@@ -44,6 +44,14 @@ test('eliminations are recorded too, with who did it', () => {
   assert.deepEqual([entry.playerId, entry.by], ['p2', 'p1']);
 });
 
+test('a pass is recorded too, with who passed', () => {
+  const log = createBattleLog();
+  const entry = log.record({ type: 'passed', playerId: 'p1' });
+
+  assert.equal(entry.kind, 'passed');
+  assert.equal(entry.playerId, 'p1');
+});
+
 test('events with nothing to say are ignored', () => {
   const log = createBattleLog();
   assert.equal(log.record({ type: 'endTurn', playerId: 'p1', earned: 3 }), null);

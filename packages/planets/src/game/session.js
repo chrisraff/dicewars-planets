@@ -257,6 +257,10 @@ export function createSession({
 
   game.on('reinforce', (event) => {
     replay.recordReinforcement(event);
+    if (event.passed) {
+      battles.record({ type: 'passed', playerId: event.playerId });
+      hud.setHistory(battles.entries);
+    }
     // Deliberately no cameraFocus.lookAt here: reinforcement dice land on
     // whichever territories they land on, all over the planet, and the drop
     // is fast enough that swinging the camera to chase it would take longer

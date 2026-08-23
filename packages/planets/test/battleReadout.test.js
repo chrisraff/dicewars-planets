@@ -91,6 +91,16 @@ test('history rows fall back to raw ids when there are no names', () => {
   assert.equal(row.text, 'p2 knocked out by p1');
 });
 
+test('a pass renders as a line of text too, dotted in the passing player\'s color', () => {
+  const names = new Map([['p1', 'Red']]);
+  const nameOf = (id) => names.get(id) ?? id;
+
+  const row = historyRowView({ id: 9, kind: 'passed', playerId: 'p1' }, nameOf);
+  assert.equal(row.kind, 'passed');
+  assert.equal(row.text, 'Red passed');
+  assert.equal(row.playerId, 'p1');
+});
+
 test('a battle logged from a real attack event draws correctly end to end', () => {
   const log = createBattleLog();
   const recorded = log.record({

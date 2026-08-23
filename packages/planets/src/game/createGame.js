@@ -64,6 +64,12 @@ export function createGame({
   let pendingReinforceEvents = []; // 'endTurn' and, if it applies, 'gameOver'
   let reinforceCountdown = 0; // seconds left before `pendingReinforce` is applied
   let thinking = 0; // seconds left before the AI's next move
+  // Whether the current player has attacked since their turn began — not a
+  // core rule, just what tells `finishTurn` whether this player passed. Reset
+  // the moment the next player's turn actually starts (`finishReinforce`),
+  // not when `endTurn` is merely requested, since reinforcement is still this
+  // player's own turn finishing up.
+  let attackedThisTurn = false;
 
   const listeners = new Map();
   const emit = (name, payload) => {
@@ -101,6 +107,7 @@ export function createGame({
     // belongs after the roll that did it, not before
     pendingEvents = result.events.filter((e) => e.type !== 'attack');
     countdown = attackDuration(beats);
+    attackedThisTurn = true;
     setSelection(null);
     emit('attack', { event, timing: beats });
   }
@@ -134,12 +141,13 @@ export function createGame({
     pendingReinforceEvents = result.events;
     reinforceCountdown = reinforceDuration(event.landed.length);
     setSelection(null);
-    emit('reinforce', event);
+    emit('reinforce', { ...event, passed: !attackedThisTurn });
   }
 
   function finishReinforce() {
     state = pendingReinforce;
     pendingReinforce = null;
+    attackedThisTurn = false; // this player's turn is over; the next one starts clean
 
     for (const event of pendingReinforceEvents) emit(event.type, event);
     pendingReinforceEvents = [];

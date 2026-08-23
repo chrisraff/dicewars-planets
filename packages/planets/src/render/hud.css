@@ -403,7 +403,8 @@
   white-space: nowrap;
 }
 .battle-row + .battle-row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
-.battle-row.is-elimination {
+.battle-row.is-elimination,
+.battle-row.is-passed {
   font-size: 0.78rem;
   color: #b9b9c2;
 }

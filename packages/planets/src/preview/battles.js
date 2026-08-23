@@ -42,13 +42,20 @@ function attackEvent({ attacker, defender, attack, defend }) {
 
 const roll = (count, rng) => Array.from({ length: count }, () => 1 + Math.floor(rng() * 6));
 
-// Plays plausible fights into a log: stack sizes vary, and players drop out
-// along the way, so eliminations land among the battles the way they do in a
-// real game rather than all bunched at the end.
+// Plays plausible fights into a log: stack sizes vary, players drop out along
+// the way, and every so often somebody just ends their turn — so passes and
+// eliminations land among the battles the way they do in a real game, rather
+// than every round being a fight or all bunched at the end.
 function playInto(log, { rounds, playerIds, rng }) {
   const living = [...playerIds];
   for (let i = 0; i < rounds; i++) {
     if (living.length < 2) break;
+
+    if (rng() < 0.1) {
+      const passer = Math.floor(rng() * living.length);
+      log.record({ type: 'passed', playerId: living[passer] });
+      continue;
+    }
 
     const a = Math.floor(rng() * living.length);
     let d = Math.floor(rng() * living.length);

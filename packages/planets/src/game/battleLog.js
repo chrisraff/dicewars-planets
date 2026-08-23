@@ -76,6 +76,12 @@ export function createBattleLog({ limit = DEFAULT_LIMIT, entries: restored = [] 
         return push({ kind: 'elimination', playerId: event.playerId, by: event.by });
       }
 
+      // A turn that ended without a single attack — worth a line of its own,
+      // the same way an elimination is, since neither one has dice to show.
+      if (event.type === 'passed') {
+        return push({ kind: 'passed', playerId: event.playerId });
+      }
+
       return null;
     },
   };

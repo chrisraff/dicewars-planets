@@ -32,8 +32,9 @@ export function battleView(entry, { revealed = true } = {}) {
 
 /**
  * A history row. Battles render as the same two-sided readout; eliminations
- * render as a line of text, since there were no dice involved in them —
- * they're the consequence of the battle logged just above.
+ * and passes render as a line of text, since neither one has dice involved —
+ * an elimination is the consequence of the battle logged just above, and a
+ * pass never had a battle to begin with.
  */
 export function historyRowView(entry, nameOf = (id) => id) {
   if (entry.kind === 'elimination') {
@@ -42,6 +43,14 @@ export function historyRowView(entry, nameOf = (id) => id) {
       kind: 'elimination',
       playerId: entry.playerId,
       text: `${nameOf(entry.playerId)} knocked out by ${nameOf(entry.by)}`,
+    };
+  }
+  if (entry.kind === 'passed') {
+    return {
+      id: entry.id,
+      kind: 'passed',
+      playerId: entry.playerId,
+      text: `${nameOf(entry.playerId)} passed`,
     };
   }
   return { id: entry.id, kind: 'battle', battle: battleView(entry) };
@@ -351,7 +360,7 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
         const item = document.createElement('li');
         item.className = `battle-row is-${row.kind}`;
 
-        if (row.kind === 'elimination') {
+        if (row.kind === 'elimination' || row.kind === 'passed') {
           const dot = document.createElement('i');
           dot.className = 'battle-row-dot';
           dot.style.background = rgb(colorOf(row.playerId));
