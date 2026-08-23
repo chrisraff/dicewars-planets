@@ -4,8 +4,9 @@ import {
   needsRefocus,
   swingDirection,
   swingDuration,
+  swingTravel,
 } from './cameraFraming.js';
-import { angleBetween, normalize } from '../geometry/vec3.js';
+import { normalize } from '../geometry/vec3.js';
 
 /**
  * Turns the planet under the orbit camera to bring something into view.
@@ -80,7 +81,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
         from: direction,
         to,
         elapsed: 0,
-        duration: swingDuration(angleBetween(direction, to), framing),
+        duration: swingDuration(swingTravel(direction, to), framing),
       };
       return true;
     },

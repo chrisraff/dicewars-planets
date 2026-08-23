@@ -1,5 +1,4 @@
-import { add, angleBetween, cross, normalize } from '../geometry/vec3.js';
-import { rotationAroundAxis } from '../geometry/rotation.js';
+import { add, angleBetween, normalize } from '../geometry/vec3.js';
 
 /**
  * When a fight the player isn't looking at is worth turning the camera for,
@@ -121,24 +120,85 @@ export function swingDuration(travel, framing = DEFAULT_FRAMING) {
 // instead of starting and stopping dead.
 const easeSwing = (t) => t * t * (3 - 2 * t);
 
+// A point's position in the same two axes an orbiting camera's own controls
+// move on — `lon` swings it round the pole axis (the +Y OrbitControls turns
+// the planet on), `lat` tilts it between the poles. Matches three.js' own
+// `Spherical` (`theta`/`phi`), just named for what a camera swing actually
+// does with each one.
+function lonLatOf(point) {
+  return { lon: Math.atan2(point.x, point.z), lat: Math.asin(Math.max(-1, Math.min(1, point.y))) };
+}
+
+function pointAt(lon, lat) {
+  const cosLat = Math.cos(lat);
+  return { x: cosLat * Math.sin(lon), y: Math.sin(lat), z: cosLat * Math.cos(lon) };
+}
+
+// The shorter way from `a` to `b` around a circle — 350° short of a full turn
+// back to 10° is a 20° step, not a 340° one the long way round.
+const shortestTurn = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+
+// `rawT` (0..1), not eased — `swingDirection` eases the pace, `swingTravel`
+// below samples the shape, and both walk the same underlying curve.
+function pointAlong(a, b, rawT) {
+  const start = lonLatOf(a);
+  const end = lonLatOf(b);
+  return pointAt(
+    start.lon + shortestTurn(start.lon, end.lon) * rawT,
+    start.lat + (end.lat - start.lat) * rawT
+  );
+}
+
 /**
- * The view direction `t` of the way (0..1) from `from` to `to`, along the
- * shortest path — the great circle through both, which is the one arc that
- * doesn't take the long way round the planet.
+ * The view direction `t` of the way (0..1) from `from` to `to`, moving in
+ * longitude and latitude — the two axes the orbit controls themselves turn
+ * on — rather than along the great circle between them.
  *
- * Exactly antipodal, every arc is equally short and equally correct, so any
- * perpendicular axis will do; what matters is that it doesn't come out NaN.
+ * The great circle is the mathematically shortest path, but it is not the
+ * one a hand on the controls would ever produce: two fights at the same high
+ * latitude but far apart in longitude sit on a great circle that bulges up
+ * toward whichever pole is nearer, so the "shortest" swing between them
+ * drags that pole across the middle of the screen — a lurch that reads as a
+ * glitch, not a turn. Moving lon and lat independently instead holds
+ * latitude roughly steady and lets longitude carry the turn, which is what
+ * dragging the controls to get from one to the other would actually look
+ * like.
  */
 export function swingDirection(from, to, t) {
   const a = normalize(from);
   const b = normalize(to);
-  const angle = angleBetween(a, b);
-  if (angle < 1e-9) return b;
+  if (angleBetween(a, b) < 1e-9) return b;
 
-  const axis =
-    angle > Math.PI - 1e-6
-      ? normalize(cross(a, Math.abs(a.x) < 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 }))
-      : normalize(cross(a, b));
+  return pointAlong(a, b, easeSwing(Math.min(1, Math.max(0, t))));
+}
 
-  return rotationAroundAxis(axis, angle * easeSwing(Math.min(1, Math.max(0, t))))(a);
+// How many segments `swingTravel` samples the path in — cheap, and only ever
+// run once per swing, not per frame.
+const TRAVEL_SAMPLES = 16;
+
+/**
+ * How far a swing from `from` to `to` actually moves the camera, walking the
+ * same lon/lat path `swingDirection` animates rather than the straight-line
+ * distance between the endpoints. The two only agree on the equator — away
+ * from it the lon/lat path can be the longer route (see `swingDirection`),
+ * and pacing a swing that dips or bulges by the distance "as the crow flies"
+ * moves it too fast for how far it is actually travelling.
+ *
+ * Sampled rather than integrated: this path has no closed-form length, and a
+ * swing is triggered at most a few times a second — nowhere near a spot that
+ * needs to be fast.
+ */
+export function swingTravel(from, to) {
+  const a = normalize(from);
+  const b = normalize(to);
+  if (angleBetween(a, b) < 1e-9) return 0;
+
+  let travel = 0;
+  let previous = a;
+  for (let i = 1; i <= TRAVEL_SAMPLES; i++) {
+    const next = pointAlong(a, b, i / TRAVEL_SAMPLES);
+    travel += angleBetween(previous, next);
+    previous = next;
+  }
+  return travel;
 }

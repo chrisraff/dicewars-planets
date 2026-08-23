@@ -7,6 +7,7 @@ import {
   needsRefocus,
   swingDirection,
   swingDuration,
+  swingTravel,
   visibleAngle,
 } from '../src/render/cameraFraming.js';
 import { angleBetween, cross, dot, length, normalize } from '../src/geometry/vec3.js';
@@ -127,6 +128,41 @@ test('the swing takes the short way round, however far it has to go', () => {
 
   const plane = normalize(cross(from, to));
   for (const step of path) assert.ok(Math.abs(dot(step, plane)) < 1e-9, 'stays on one great circle');
+});
+
+test('the swing holds latitude steady instead of bulging toward a pole', () => {
+  // Two fights at the same high latitude, most of the way round in
+  // longitude. The great circle between them is the mathematically shortest
+  // path, but it bulges up toward the pole to get there — the "jumps poles"
+  // swing this exists to avoid, even though neither fight is anywhere near
+  // one. Moving lon/lat independently should hold 70° steady throughout.
+  const from = spherical(0, 70);
+  const to = spherical(170, 70);
+  const path = Array.from({ length: 21 }, (_, i) => swingDirection(from, to, i / 20));
+
+  for (const step of path) {
+    const lat = (Math.asin(Math.max(-1, Math.min(1, step.y))) * 180) / Math.PI;
+    assert.ok(Math.abs(lat - 70) < 1e-6, `stayed at 70° latitude, not ${lat.toFixed(3)}°`);
+  }
+});
+
+test('swingTravel matches the direct distance on the equator, where the two paths agree', () => {
+  const from = spherical(0);
+  const to = spherical(170);
+  assert.ok(Math.abs(swingTravel(from, to) - angleBetween(from, to)) < 1e-9);
+});
+
+test('off the equator, holding latitude costs more distance than the great circle it replaces', () => {
+  // The same pair the "bulging toward a pole" test above uses: holding 70°
+  // steady is a longer way round than the great circle that cuts across
+  // toward the pole to get there, so pacing the swing by the direct distance
+  // would move it faster than it is actually travelling.
+  const from = spherical(0, 70);
+  const to = spherical(170, 70);
+  assert.ok(
+    swingTravel(from, to) > angleBetween(from, to) * 1.2,
+    'the lon/lat path is meaningfully longer than "as the crow flies"'
+  );
 });
 
 test('the swing starts where the camera is and ends looking at the target', () => {
