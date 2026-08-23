@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   DEFAULT_FRAMING,
+  clusterAim,
   needsRefocus,
   swingDirection,
   swingDuration,
@@ -50,6 +51,16 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
     swing = null;
   };
 
+  const startSwingTo = (to) => {
+    const { direction, distance } = orbit();
+    swing = {
+      from: direction,
+      to,
+      elapsed: 0,
+      duration: swingDuration(swingTravel(direction, to), framing),
+    };
+  };
+
   // OrbitControls fires `start` for the wheel as well as for a drag, and a
   // zoom is not a disagreement about where to look — the swing carries on and
   // simply keeps whatever distance the player lands on. Anything else means a
@@ -76,14 +87,30 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
       const { direction, distance } = orbit();
       if (!needsRefocus(direction, point, { distance, halfFov: halfFov() }, framing)) return false;
 
-      const to = normalize(point);
-      swing = {
-        from: direction,
-        to,
-        elapsed: 0,
-        duration: swingDuration(swingTravel(direction, to), framing),
-      };
+      startSwingTo(normalize(point));
       return true;
+    },
+
+    /**
+     * Like `lookAt`, but given the upcoming moves in the order they're about
+     * to be shown rather than just the next one — see `clusterAim` for how
+     * much of that run ends up framed in one swing instead of several.
+     */
+    lookAtCluster(points) {
+      const { direction, distance } = orbit();
+      const aim = clusterAim(points, direction, { distance, halfFov: halfFov() }, framing);
+      if (aim === null) return false;
+
+      startSwingTo(aim);
+      return true;
+    },
+
+    // The camera's own read on itself, for a caller (an AI turn's forward
+    // planner) that needs to know where "here" is without duplicating the
+    // orbit/fov math above.
+    currentView() {
+      const { direction, distance } = orbit();
+      return { direction, distance, halfFov: halfFov() };
     },
 
     cancel,

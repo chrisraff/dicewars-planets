@@ -1,4 +1,4 @@
-import { add, angleBetween, normalize } from '../geometry/vec3.js';
+import { add, angleBetween, centroid, normalize } from '../geometry/vec3.js';
 
 /**
  * When a fight the player isn't looking at is worth turning the camera for,
@@ -107,6 +107,44 @@ export function needsRefocus(viewDirection, point, view, framing = DEFAULT_FRAMI
 export function fightCenter(from, to) {
   const middle = add(normalize(from), normalize(to));
   return angleBetween(from, to) < Math.PI - 1e-6 ? normalize(middle) : normalize(from);
+}
+
+/**
+ * Where to aim to show as many of the *upcoming* `points` at once as will
+ * comfortably fit, instead of swinging to just the next one and then
+ * swinging again moments later for its neighbor. `points` is in the order
+ * they're about to be shown, starting with the one that's about to trigger
+ * a swing.
+ *
+ * Returns `null` exactly when `lookAt`/`needsRefocus` would: `points[0]` is
+ * already framed, so there is nothing to do. Otherwise it grows an accepted
+ * set one point at a time — generalizing `fightCenter`'s "average, then
+ * normalize" from two points to however many keep fitting — and stops the
+ * moment a candidate would push some already-accepted point out past the
+ * margin. A point three moves out that's nowhere near this cluster should
+ * never widen the aim just because it happens to be next in line; stopping
+ * at the first rejection (rather than skipping over it) is what keeps that
+ * from happening.
+ */
+export function clusterAim(points, viewDirection, view, framing = DEFAULT_FRAMING) {
+  if (points.length === 0) return null;
+  if (!needsRefocus(viewDirection, points[0], view, framing)) return null;
+
+  let accepted = [points[0]];
+  let aim = normalize(points[0]);
+
+  for (let i = 1; i < points.length; i++) {
+    const candidate = [...accepted, points[i]];
+    const candidateAim = normalize(centroid(candidate));
+    const allFramed = candidate.every(
+      (p) => framingOf(candidateAim, p, view) >= framing.margin
+    );
+    if (!allFramed) break;
+    accepted = candidate;
+    aim = candidateAim;
+  }
+
+  return aim;
 }
 
 // A swing long enough to read as the planet turning rather than as a cut,

@@ -7,6 +7,7 @@ import {
 } from '@dicewars/core';
 import { generatePlanetWorld } from '../world/generateWorld.js';
 import { createGame } from './createGame.js';
+import { orderAiTurnForCamera } from './aiTurnOrder.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
 import { createReplay, boardAfterAttacks, reservesAfterAttacks, historyThroughStep } from './replay.js';
 import { playerStatsFor } from './playerStats.js';
@@ -69,6 +70,12 @@ export function createSession({
     world,
     humanPlayerId,
     savedState: restored ? reviveState(restored.state) : null,
+    // Reorders an AI's turn for display so nearby attacks show back to back
+    // instead of swinging the camera once per attack — `dice` isn't built
+    // yet at this point in construction, but this is only ever *called*
+    // later, once it is (see createGame.js's takeAiTurn).
+    orderAiTurn: (moves) =>
+      orderAiTurnForCamera(moves, (id) => dice.standFor(id).normal, cameraFocus.currentView()),
   });
   const battles = createBattleLog({ entries: restored?.battles });
   // Every attack and reinforcement recorded since this session opened, for
@@ -104,13 +111,17 @@ export function createSession({
 
   const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
 
-  // Swings the camera to a fight between two territories' dice stands.
-  // Returns whatever `cameraFocus.lookAt` returns — whether it actually
+  // Swings the camera to cover as many of the *upcoming* fights as will
+  // comfortably fit in one frame, rather than swinging to just the next one
+  // — `pairs` is `{from, to}` in the order they're about to be shown,
+  // starting with whichever one is about to trigger the swing. Returns
+  // whatever `cameraFocus.lookAtCluster` returns — whether it actually
   // started a swing — since a caller may need to wait for it to land.
-  function focusFight(from, to) {
-    const attacker = dice.standFor(from).normal;
-    const defender = dice.standFor(to).normal;
-    return cameraFocus.lookAt(fightCenter(attacker, defender));
+  function focusFights(pairs) {
+    const points = pairs.map(({ from, to }) =>
+      fightCenter(dice.standFor(from).normal, dice.standFor(to).normal)
+    );
+    return cameraFocus.lookAtCluster(points);
   }
 
   const pickTerritoryAt = createTerritoryPicker({
@@ -161,7 +172,10 @@ export function createSession({
 
     pendingReplayStep = null; // this seek supersedes whatever was still pending
 
-    if (entry && focusFight(entry.from, entry.to)) {
+    // Looks ahead through every attack still to come, not just this one, so
+    // a run of nearby fights gets one swing instead of several — the replay
+    // order is never reordered (unlike a live AI turn), only clustered.
+    if (entry && focusFights(replay.attacks.slice(step - 1))) {
       pendingReplayStep = { step, entry, nodes };
       return; // applied once the swing lands, in tick() below
     }
@@ -221,15 +235,17 @@ export function createSession({
     });
   }
 
-  game.on('attack', ({ event, timing }) => {
+  game.on('attack', ({ event, timing, upcoming }) => {
     // the dice are known already, but they belong on the planet first — show
     // the readout with blank faces so it fills in as the roll lands
     hud.showBattle(battleEntry(event), { revealed: false });
 
     // The AI attacks wherever it likes, including round the back of the
     // planet. Its own fights are the ones worth turning for — the player's
-    // are on screen by definition, since they just clicked them.
-    if (game.currentPlayer() !== humanPlayerId) focusFight(event.from, event.to);
+    // are on screen by definition, since they just clicked them. `upcoming`
+    // is this attack plus whatever's already queued behind it this turn, so
+    // a run of nearby attacks gets one swing instead of one each.
+    if (game.currentPlayer() !== humanPlayerId) focusFights(upcoming);
 
     roll = {
       event,

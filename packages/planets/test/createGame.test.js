@@ -5,7 +5,7 @@ import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { reinforceDuration, MAX_REINFORCE_DURATION } from '../src/render/reinforceTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createInitialState, reviveState, serializeState } from '@dicewars/core';
-import { seededRng, chainWorld, alwaysRolls } from '@dicewars/core/test-support';
+import { seededRng, chainWorld, alwaysRolls, boardOf } from '@dicewars/core/test-support';
 
 // A four-territory chain: p1 (human) holds a and c, the AI holds b and d.
 const balanced = () =>
@@ -363,4 +363,123 @@ test('a resumed game lets the AI take the turn it was in the middle of', () => {
   advance(game, 5);
 
   assert.notEqual(game.currentPlayer(), 'p2', 'the AI played its turn and passed it on');
+});
+
+// --- reordering an AI turn for display (orderAiTurn) ------------------------
+
+// p1's two attackers each reach one of p2's two territories, and neither
+// shares a territory with the other — so they're free to be shown in either
+// order. p3 sits untouched, so wiping out p2 doesn't also end the game (which
+// would force the deciding move to stay last regardless of orderAiTurn).
+function twoFrontsWorld() {
+  return {
+    nodeIds: ['a1', 'a2', 'x', 'y', 'z'],
+    edges: [['a1', 'x'], ['a2', 'y']],
+    playerIds: ['p1', 'p2', 'p3'],
+    assignments: [
+      ['a1', { owner: 'p1', dice: 4 }],
+      ['a2', { owner: 'p1', dice: 4 }],
+      ['x', { owner: 'p2', dice: 1 }],
+      ['y', { owner: 'p2', dice: 1 }],
+      ['z', { owner: 'p3', dice: 2 }],
+    ],
+  };
+}
+
+// Always attacks a1 -> x first, then a2 -> y, then stops — true order is
+// fixed, regardless of what orderAiTurn goes on to do with it for display.
+function twoFrontsStrategy() {
+  let calls = 0;
+  return () => {
+    calls += 1;
+    if (calls === 1) return { from: 'a1', to: 'x' };
+    if (calls === 2) return { from: 'a2', to: 'y' };
+    return null;
+  };
+}
+
+test('an AI turn plays out identically whether or not it is reordered for display', () => {
+  // fixed, so the two runs draw the same reinforcement-placement sequence —
+  // otherwise an unseeded Math.random would make the boards differ for a
+  // reason that has nothing to do with reordering
+  const outcomeOf = (orderAiTurn) => {
+    const game = createGame({
+      world: twoFrontsWorld(),
+      humanPlayerId: AUTOPLAY,
+      strategy: twoFrontsStrategy(),
+      rollDie: alwaysRolls(6),
+      rng: seededRng(1),
+      orderAiTurn,
+    });
+    game.start();
+    advance(game, 10);
+    return boardOf(game.state);
+  };
+
+  const unordered = outcomeOf((moves) => moves);
+  const reversed = outcomeOf((moves) => [...moves].reverse());
+  assert.deepEqual(reversed, unordered, 'display order must never change the actual outcome');
+});
+
+test('reordering independent moves recomputes elimination off the board as shown, not the true order', () => {
+  const game = createGame({
+    world: twoFrontsWorld(),
+    humanPlayerId: AUTOPLAY,
+    strategy: twoFrontsStrategy(),
+    rollDie: alwaysRolls(6),
+    // shows a2 -> y before a1 -> x — the reverse of the true, planned order
+    orderAiTurn: (moves) => [...moves].reverse(),
+  });
+
+  let resolvedCount = 0;
+  const eliminatedAtResolvedCount = [];
+  game.on('resolved', () => { resolvedCount += 1; });
+  game.on('eliminated', (e) => eliminatedAtResolvedCount.push({ count: resolvedCount, event: e }));
+
+  game.start();
+  advance(game, 10);
+
+  assert.equal(resolvedCount, 2, 'both attacks landed');
+  assert.deepEqual(eliminatedAtResolvedCount.map((e) => e.count), [2],
+    'p2 is wiped out by whichever move actually empties the board second, not whichever move was ' +
+    'second in the true, unshown order');
+  assert.equal(eliminatedAtResolvedCount[0].event.playerId, 'p2');
+  assert.equal(game.state.nodes.get('x').owner, 'p1');
+  assert.equal(game.state.nodes.get('y').owner, 'p1');
+});
+
+test('the terminal, game-ending move of a turn is never reordered ahead of anything else', () => {
+  // Same two independent fronts, but only p1 and p2 this time — taking p2's
+  // second territory ends the whole match on the spot, so it must stay last
+  // even though orderAiTurn asks for the opposite order.
+  const world = {
+    nodeIds: ['a1', 'a2', 'x', 'y'],
+    edges: [['a1', 'x'], ['a2', 'y']],
+    playerIds: ['p1', 'p2'],
+    assignments: [
+      ['a1', { owner: 'p1', dice: 4 }],
+      ['a2', { owner: 'p1', dice: 4 }],
+      ['x', { owner: 'p2', dice: 1 }],
+      ['y', { owner: 'p2', dice: 1 }],
+    ],
+  };
+
+  const game = createGame({
+    world,
+    humanPlayerId: AUTOPLAY,
+    strategy: twoFrontsStrategy(),
+    rollDie: alwaysRolls(6),
+    orderAiTurn: (moves) => [...moves].reverse(),
+  });
+
+  const winners = [];
+  game.on('over', (w) => winners.push(w));
+
+  game.start();
+  advance(game, 10);
+
+  assert.deepEqual(winners, ['p1']);
+  assert.ok(game.isOver());
+  assert.equal(game.state.nodes.get('x').owner, 'p1');
+  assert.equal(game.state.nodes.get('y').owner, 'p1');
 });

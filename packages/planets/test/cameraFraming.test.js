@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_FRAMING,
+  clusterAim,
   fightCenter,
   framingOf,
   needsRefocus,
@@ -202,4 +203,40 @@ test('the camera always arrives before the dice it is turning for land', () => {
   // camera is still doing after that is a swing the player watches instead of
   // the battle it exists to show.
   assert.ok(swingDuration(Math.PI) <= 0.12 + 0.45);
+});
+
+test('clusterAim leaves a comfortably framed run alone, same as needsRefocus', () => {
+  assert.equal(clusterAim([], FACING, FAR), null);
+  assert.equal(clusterAim([spherical(10)], FACING, FAR), null);
+});
+
+test('clusterAim swings to a lone fight round the back, same as fightCenter would for one point', () => {
+  const target = spherical(150);
+  const aim = clusterAim([target], FACING, FAR);
+  assert.ok(angleBetween(aim, target) < 1e-9);
+});
+
+test('two nearby upcoming fights are pulled into one aim that frames them both', () => {
+  const first = spherical(150);
+  const second = spherical(160);
+  const aim = clusterAim([first, second], FACING, FAR);
+
+  assert.ok(aim !== null);
+  assert.ok(framingOf(aim, first, FAR) >= DEFAULT_FRAMING.margin, 'the first fight is still well framed');
+  assert.ok(framingOf(aim, second, FAR) >= DEFAULT_FRAMING.margin, 'so is the second');
+});
+
+test('a fight too far away to share a frame is left for its own swing later', () => {
+  const first = spherical(150);
+  const second = spherical(160); // close enough to join
+  const distant = spherical(150 + 150); // nowhere near either
+
+  const aim = clusterAim([first, second, distant], FACING, FAR);
+
+  assert.ok(framingOf(aim, first, FAR) >= DEFAULT_FRAMING.margin);
+  assert.ok(framingOf(aim, second, FAR) >= DEFAULT_FRAMING.margin);
+  assert.ok(
+    framingOf(aim, distant, FAR) < DEFAULT_FRAMING.margin,
+    'the distant fight was not absorbed into this swing'
+  );
 });

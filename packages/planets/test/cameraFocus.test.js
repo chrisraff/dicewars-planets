@@ -103,6 +103,38 @@ test('touching the planet ends the swing on the spot', () => {
   assert.deepEqual(camera.position.toArray(), grabbed.toArray(), 'the camera stopped fighting back');
 });
 
+test('lookAtCluster leaves an already-framed run alone, same as lookAt', () => {
+  const { camera, focus } = setup();
+  const before = camera.position.clone();
+
+  assert.equal(focus.lookAtCluster([FRONT]), false);
+  play(focus);
+  assert.deepEqual(camera.position.toArray(), before.toArray());
+});
+
+test('lookAtCluster swings to cover more than just the very next point', () => {
+  const { camera, focus } = setup();
+  const near = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3).normalize();
+
+  assert.equal(focus.lookAtCluster([BACK, near]), true);
+  play(focus);
+
+  // Landing exactly on BACK would mean `near` was ignored; landing exactly
+  // on `near` would mean BACK was ignored. The cluster aim sits somewhere
+  // between the two, framing both from one swing.
+  const landed = direction(camera);
+  assert.ok(landed.angleTo(BACK) > 1e-6);
+  assert.ok(landed.angleTo(near) > 1e-6);
+});
+
+test('currentView reports where the camera is actually looking', () => {
+  const { camera, focus } = setup();
+  const view = focus.currentView();
+
+  assert.ok(Math.abs(view.distance - 3.2) < 1e-9);
+  assert.ok(direction(camera).angleTo(new THREE.Vector3(view.direction.x, view.direction.y, view.direction.z)) < 1e-9);
+});
+
 test('a disposed focus stops steering, so an old match cannot drive the next one', () => {
   const { camera, focus } = setup();
   focus.lookAt(BACK);

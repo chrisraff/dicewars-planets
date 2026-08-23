@@ -44,6 +44,10 @@ export function createGame({
   strategy = createSimpleStrategy(),
   timing = DEFAULT_TIMING,
   aiTiming = AI_TIMING,
+  // How an AI's turn, once fully worked out, gets reordered for *display* —
+  // identity by default, so nothing changes unless a renderer opts in with
+  // something camera-aware (see game/aiTurnOrder.js).
+  orderAiTurn = (moves) => moves,
   rollDie,
   rng,
 } = {}) {
@@ -64,6 +68,10 @@ export function createGame({
   let pendingReinforceEvents = []; // 'endTurn' and, if it applies, 'gameOver'
   let reinforceCountdown = 0; // seconds left before `pendingReinforce` is applied
   let thinking = 0; // seconds left before the AI's next move
+  // The current AI turn, fully worked out and reordered for display, one
+  // entry played per takeAiTurn() call — null between turns, built fresh the
+  // moment a turn starts. See planAiTurnMoves/orderAiTurn below.
+  let aiQueue = null;
   // Whether the current player has attacked since their turn began — not a
   // core rule, just what tells `finishTurn` whether this player passed. Reset
   // the moment the next player's turn actually starts (`finishReinforce`),
@@ -97,8 +105,14 @@ export function createGame({
     return [...neighbors(state.graph, from)].filter((to) => isLegalAttack(state, from, to));
   }
 
-  function beginAttack(from, to) {
-    const result = reduce(state, attack(from, to), deps);
+  // `rollDie`, given, overrides the real dice for this one attack — how a
+  // queued AI move (already rolled once, during planning) gets redisplayed
+  // without rolling twice. `upcoming` is this move plus whatever's still
+  // queued behind it, for a renderer building a camera cluster rather than
+  // swinging to just this one spot.
+  function performAttack(from, to, rollDie, upcoming = [{ from, to }]) {
+    const localDeps = rollDie ? { ...deps, rollDie } : deps;
+    const result = reduce(state, attack(from, to), localDeps);
     const event = result.events.find((e) => e.type === 'attack');
     const beats = timingFor(currentPlayer());
 
@@ -109,7 +123,42 @@ export function createGame({
     countdown = attackDuration(beats);
     attackedThisTurn = true;
     setSelection(null);
-    emit('attack', { event, timing: beats });
+    emit('attack', { event, timing: beats, upcoming });
+  }
+
+  // A one-shot rollDie that replays exactly the faces a planned move already
+  // rolled during planAiTurnMoves. Redisplaying a queued move can be against
+  // a different board than the true simulation left it on — see
+  // aiTurnOrder.js — so the win/lose outcome has to be pinned to what was
+  // actually rolled, while reduce() itself is left to freshly (and
+  // correctly) decide elimination/game-over off the board as it stands now.
+  function replayRoll(values) {
+    let i = 0;
+    return () => values[i++];
+  }
+
+  // Works out the rest of this AI's turn ahead of the display, using the
+  // real dice/rng exactly once and in true order — reordering only ever
+  // changes what gets *shown* first, never what happens or how much
+  // randomness the match consumes. Stops the moment a move ends the game
+  // outright: nothing can legally follow that one, live or planned, so it's
+  // tagged `terminal` rather than left for orderAiTurn to (mis)place.
+  function planAiTurnMoves(fromState, playerId) {
+    const moves = [];
+    let current = fromState;
+    for (;;) {
+      const move = strategy(current, playerId);
+      if (!move) break;
+      const result = reduce(current, attack(move.from, move.to), deps);
+      const event = result.events.find((e) => e.type === 'attack');
+      moves.push({ from: move.from, to: move.to, event });
+      current = result.state;
+      if (current.phase === 'gameover') {
+        moves[moves.length - 1].terminal = true;
+        break;
+      }
+    }
+    return moves;
   }
 
   function finishAttack() {
@@ -158,9 +207,27 @@ export function createGame({
   }
 
   function takeAiTurn() {
-    const move = strategy(state, currentPlayer());
-    if (move) beginAttack(move.from, move.to);
-    else finishTurn();
+    if (aiQueue === null) {
+      const moves = planAiTurnMoves(state, currentPlayer());
+      // the terminal move (if any) can never be reordered — the whole game
+      // is over the instant it lands, so it has to stay last
+      const terminal = moves.length > 0 && moves[moves.length - 1].terminal ? moves.pop() : null;
+      aiQueue = orderAiTurn(moves, currentPlayer());
+      if (terminal) aiQueue.push(terminal);
+    }
+
+    if (aiQueue.length === 0) {
+      aiQueue = null;
+      finishTurn();
+      return;
+    }
+
+    const next = aiQueue.shift();
+    const rollDie = replayRoll([...next.event.attackRolls, ...next.event.defendRolls]);
+    performAttack(next.from, next.to, rollDie, [
+      { from: next.from, to: next.to },
+      ...aiQueue.map(({ from, to }) => ({ from, to })),
+    ]);
   }
 
   return {
@@ -195,7 +262,7 @@ export function createGame({
       if (territoryId === null || territoryId === undefined) return setSelection(null);
 
       if (selection !== null && isLegalAttack(state, selection, territoryId)) {
-        return beginAttack(selection, territoryId);
+        return performAttack(selection, territoryId);
       }
 
       const node = state.nodes.get(territoryId);
