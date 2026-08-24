@@ -165,6 +165,7 @@ export function createSession({
   // done the thing it describes, being told again next game would be noise.
   let hintSeen = attackHintSeen;
   let pendingReplayStep = null; // a board waiting for the camera to arrive before it shows
+  let replayFight = null; // the fight the replay is stopped on, throbbing as a live one does
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -177,7 +178,14 @@ export function createSession({
   function applyReplayStep(step, entry, nodes) {
     const atEnd = step >= replay.attacks.length;
     const players = replay.playersAt(step);
-    surface.refresh({ nodes });
+    // The board a replay draws is a board mid-match, so the fight it stopped
+    // on is marked the way a live one is — attacker held dark, defender
+    // glowing. Without it the readout names a pair of territories that the
+    // planet gives no way of finding, on a board where nothing is moving to
+    // point at them. It throbs from here on out (see tick), so a step that
+    // took a camera swing to reach isn't a still frame when it lands.
+    replayFight = entry ? { entry, nodes, elapsed: 0 } : null;
+    paintReplayBoard(nodes, entry, pulseAt(0));
     dice.update({ nodes });
     poles.settle({ nodes });
     hud.showPlayers(playerStatsFor(
@@ -186,6 +194,14 @@ export function createSession({
     ));
     hud.showBattle(entry);
     hud.setHistory(replay.historyAt(step));
+  }
+
+  // The planet as some replay step left it, with that step's fight marked.
+  // Only the surface — dice, stats and the readout have nothing per-frame in
+  // them, so they are drawn once by `applyReplayStep` and left alone.
+  function paintReplayBoard(nodes, entry, pulse) {
+    const marks = highlightsFor({ attack: entry && { from: entry.from, to: entry.to }, pulse });
+    surface.refresh({ nodes }, (territoryId) => marks.get(territoryId) ?? null);
   }
 
   // Live play shows an attack's result while the camera is still swinging to
@@ -220,6 +236,7 @@ export function createSession({
   function closeReplay() {
     hud.hideReplay();
     pendingReplayStep = null;
+    replayFight = null;
     cameraFocus.cancel();
     // the replay has been drawing straight into the surface, dice, stats and
     // the battle readout; put the real, finished match back before the
@@ -455,6 +472,10 @@ export function createSession({
         pendingReplayStep = null;
         applyReplayStep(step, entry, nodes);
       }
+      if (replayFight) {
+        replayFight.elapsed += dt;
+        paintReplayBoard(replayFight.nodes, replayFight.entry, pulseAt(replayFight.elapsed));
+      }
       if (roll) {
         roll.elapsed += dt;
         roll.animation.apply(roll.elapsed);
@@ -476,6 +497,7 @@ export function createSession({
     dispose() {
       roll = null;
       reinforceAnim = null;
+      replayFight = null;
       cameraFocus.dispose();
       viewer.scene.remove(surface.group, dice.group, poles.group);
       surface.dispose();

@@ -5,10 +5,21 @@ import { SELECTION_COLOR, WHITE } from './palette.js';
 // against every player color and makes the pale dice on top of it pop; the
 // enemies it could hit get a light lift, so the two never read as the same
 // kind of mark.
+//
+// A fight in progress is marked with that same pair of meanings rather than a
+// second vocabulary: the attacker is held dark exactly as a picked-up
+// territory is — it *is* a picked-up territory, whoever picked it up — and the
+// defender takes the lift, pulsed. That keeps the player's own attack looking
+// continuous (the territory they darkened by selecting it stays dark while its
+// dice are thrown), and it gives an AI attack the same read, which is the one
+// place the mark was missing: nobody watching a computer's turn saw which
+// territory the dice belonged to until they landed.
+const HELD = { color: SELECTION_COLOR, amount: 0.72 };
+
 export const HIGHLIGHT = {
-  selected: { color: SELECTION_COLOR, amount: 0.72 },
+  selected: HELD,
+  attacker: HELD,
   target: { color: WHITE, amount: 0.18 },
-  attacker: { color: WHITE, amount: 0.5 },
   defender: { color: WHITE, amount: 0.5 },
 };
 
@@ -18,8 +29,10 @@ export const HIGHLIGHT = {
  * up when are readable in one place instead of scattered through the render
  * loop.
  *
- * `pulse` (0..1) throbs the two territories in a fight so it's obvious which
- * pair the dice on screen belong to.
+ * `pulse` (0..1) throbs the *defender* of a fight so it's obvious which pair
+ * the dice on screen belong to. The attacker doesn't throb: its ground is
+ * where its dice are being thrown, and a mark that exists partly to make pale
+ * dice legible has no business fading out from under them.
  */
 export function highlightsFor({ selection = null, targets = [], attack = null, pulse = 1 } = {}) {
   const marks = new Map();
@@ -28,7 +41,7 @@ export function highlightsFor({ selection = null, targets = [], attack = null, p
   if (selection !== null) marks.set(selection, HIGHLIGHT.selected);
 
   if (attack) {
-    marks.set(attack.from, { ...HIGHLIGHT.attacker, amount: HIGHLIGHT.attacker.amount * pulse });
+    marks.set(attack.from, HIGHLIGHT.attacker);
     marks.set(attack.to, { ...HIGHLIGHT.defender, amount: HIGHLIGHT.defender.amount * pulse });
   }
   return marks;

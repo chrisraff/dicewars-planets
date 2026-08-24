@@ -30,10 +30,24 @@ test('a fight lights up both sides and nothing else', () => {
   assert.deepEqual(marks.get('b'), HIGHLIGHT.defender);
 });
 
-test('the pulse dims the fight without ever switching it off', () => {
+test('the attacker in a fight is marked exactly as a picked-up territory is', () => {
+  // whoever is attacking, human or AI, holds that territory to attack with —
+  // one mark for one meaning, so an AI turn reads the way your own does
+  assert.deepEqual(HIGHLIGHT.attacker, HIGHLIGHT.selected);
+});
+
+test('the pulse throbs the defender without ever switching it off', () => {
   const dim = highlightsFor({ attack: { from: 'a', to: 'b' }, pulse: 0.3 });
-  assert.ok(dim.get('a').amount < HIGHLIGHT.attacker.amount);
-  assert.ok(dim.get('a').amount > 0);
+  assert.ok(dim.get('b').amount < HIGHLIGHT.defender.amount);
+  assert.ok(dim.get('b').amount > 0);
+});
+
+test('the attacker holds steady through the throb', () => {
+  // its dice are being thrown across that ground; a mark that makes them
+  // legible must not fade out from under them
+  const bright = highlightsFor({ attack: { from: 'a', to: 'b' }, pulse: 1 });
+  const dim = highlightsFor({ attack: { from: 'a', to: 'b' }, pulse: 0.3 });
+  assert.equal(dim.get('a').amount, bright.get('a').amount);
 });
 
 test('the pulse is a smooth throb that stays visible throughout', () => {
