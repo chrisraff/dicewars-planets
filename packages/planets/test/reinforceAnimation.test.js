@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { createDiceLayer } from '../src/render/diceLayer.js';
 import { createReinforceAnimation } from '../src/render/reinforceAnimation.js';
 import { reinforceDuration, dieStart } from '../src/render/reinforceTimeline.js';
+import { PIP_FACE_NORMALS } from '../src/render/diceStacks.js';
 import { seededRng } from '@dicewars/core/test-support';
 
 const world = {
@@ -25,7 +26,10 @@ function setup(counts, landed, seed = 1) {
     nodes: new Map(Object.entries(counts).map(([id, dice]) => [id, { owner: 'p1', dice }])),
   });
   const animation = createReinforceAnimation({ landed, dice: layer, materials });
-  return { layer, animation };
+  const settle = (counts2) => layer.update({
+    nodes: new Map(Object.entries(counts2).map(([id, dice]) => [id, { owner: 'p1', dice }])),
+  });
+  return { layer, animation, settle };
 }
 
 // The animation adds its temporary dice straight into the stand, alongside
@@ -95,12 +99,91 @@ test('a die slides into place without tumbling', () => {
   const { layer, animation } = setup({ a: 0, b: 0 }, ['a']);
   const stand = layer.standFor('a');
   const [drop] = fallingMeshes(stand);
-  const identity = drop.quaternion.clone();
+  // compared component by component rather than with angleTo, which is
+  // 2*acos(|dot|) and turns the last bit of a unit quaternion into ~3e-8 of
+  // angle. Nothing here should be rewriting the rotation at all, so exact is
+  // the right standard.
+  const landing = drop.quaternion.clone();
 
   for (const t of [0, reinforceDuration(1) / 2, reinforceDuration(1)]) {
     animation.apply(t);
-    assert.ok(drop.quaternion.angleTo(identity) < 1e-9, 'orientation never changes, unlike a rolled die');
+    assert.deepEqual(
+      drop.quaternion.toArray(),
+      landing.toArray(),
+      'orientation never changes, unlike a rolled die'
+    );
   }
+});
+
+// --- which way up a dropped die lands ---------------------------------------
+
+// Which numbered face a die is actually showing: the pip face whose own
+// normal, once the die is turned, points away from the planet.
+function faceUp(mesh) {
+  const up = new THREE.Vector3(0, 1, 0);
+  for (const [value, normal] of Object.entries(PIP_FACE_NORMALS)) {
+    const turned = new THREE.Vector3(normal.x, normal.y, normal.z).applyQuaternion(mesh.quaternion);
+    if (turned.dot(up) > 0.999) return Number(value);
+  }
+  return null;
+}
+
+const attitudes = (meshes) => meshes.map((mesh) => mesh.quaternion.toArray());
+
+test('a die lands already standing the way the rebuild will leave it', () => {
+  // it used to land at the identity rotation — a 2, every time — and then
+  // visibly turn the moment `dice.update` replaced it with the real stack
+  const { layer, animation, settle } = setup({ a: 2, b: 0 }, ['a']);
+  const stand = layer.standFor('a');
+
+  animation.apply(reinforceDuration(1));
+  const landed = attitudes(fallingMeshes(stand));
+
+  settle({ a: 3, b: 0 }); // what the game does the instant the payout is over
+  assert.deepEqual(attitudes([stand.meshes[2]]), landed, 'no snap when the real die arrives');
+});
+
+test('every die of a multi-die payout agrees with its rebuilt counterpart', () => {
+  const { layer, animation, settle } = setup({ a: 1, b: 0 }, ['a', 'a', 'a', 'a', 'a']);
+  const stand = layer.standFor('a');
+
+  animation.apply(reinforceDuration(5));
+  const landed = attitudes(fallingMeshes(stand));
+
+  settle({ a: 6, b: 0 });
+  assert.deepEqual(attitudes(stand.meshes.slice(1)), landed, 'including across a new column');
+});
+
+test('the die left on top still shows how many its column holds', () => {
+  // the drop takes the whole layout from the rebuild, so this is really a
+  // check that the layout it took is the one for the *finished* pile
+  const { layer, animation } = setup({ a: 2, b: 0 }, ['a']);
+  const stand = layer.standFor('a');
+
+  animation.apply(reinforceDuration(1));
+  assert.equal(faceUp(fallingMeshes(stand)[0]), 3, 'three dice in the column, so a three on top');
+});
+
+test('a payout that starts a second column tops that one at one', () => {
+  const { layer, animation } = setup({ a: 3, b: 0 }, ['a', 'a']);
+  const stand = layer.standFor('a');
+
+  animation.apply(reinforceDuration(2));
+  const [fourth, fifth] = fallingMeshes(stand);
+  assert.equal(faceUp(fourth), 4, 'fills the first column');
+  assert.equal(faceUp(fifth), 1, 'and the next die is alone on a fresh one');
+});
+
+test('a reroll re-tumbles rather than honouring a plan left over from a payout', () => {
+  // reroll exists to stand dice back up after a battle has left them lying on
+  // the faces they rolled, so it is the one caller that must never reuse a
+  // reserved layout
+  const { layer } = setup({ a: 4, b: 0 }, ['a']);
+  const stand = layer.standFor('a');
+  const before = attitudes(stand.meshes);
+
+  layer.reroll('a', { nodes: new Map([['a', { owner: 'p1', dice: 4 }]]) });
+  assert.notDeepEqual(attitudes(stand.meshes), before, 'the stack was actually re-thrown');
 });
 
 test('apply reports how many dice have started falling, one more with each die', () => {

@@ -102,14 +102,32 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
       groundRadius: radius,
       dice: 0,
       meshes: [],
+      reserved: null,
     });
+  }
+
+  /**
+   * The layout to build this stack from: the one already reserved for exactly
+   * this many dice, or a fresh one.
+   *
+   * Reserving exists for the reinforcement drop, which has to know how a die
+   * will end up standing *before* the rebuild that stands it there — see
+   * `planFor`. A reservation is single-use: whatever rebuilds next either
+   * takes it or throws it away, so a stale plan can never quietly outlive the
+   * payout it was made for.
+   */
+  function layoutFor(stand, diceCount) {
+    const reserved = stand.reserved;
+    stand.reserved = null;
+    if (reserved && reserved.count === diceCount) return reserved.slots;
+    return planDiceStacks(diceCount, rng);
   }
 
   function rebuild(stand, diceCount) {
     stand.object.clear();
     const columns = stackColumnCount(diceCount);
     stand.dice = diceCount;
-    stand.meshes = planDiceStacks(diceCount, rng).map(({ column, level, pipUp, spin }) => {
+    stand.meshes = layoutFor(stand, diceCount).map(({ column, level, pipUp, spin }) => {
       const mesh = new THREE.Mesh(geometry, pipMaterials);
       mesh.position.copy(dicePosition(column, level, columns, dieSize));
       mesh.quaternion.copy(dieTumble(pipUp, spin));
@@ -123,6 +141,25 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
     dieSize,
     geometry,
     standFor: (territoryId) => stands.get(territoryId),
+
+    /**
+     * How this territory's dice will be standing once it holds `diceCount` —
+     * planned now and held for the rebuild that follows, so the two agree.
+     *
+     * The reinforcement drop is the caller. A die is dropped by the animation
+     * and then replaced a frame later by the real rebuild, and the two used to
+     * disagree about which way up it was: the die landed, and then visibly
+     * turned. Asking here first means it lands already standing the way it
+     * will be left, because it is the same plan both times.
+     */
+    planFor(territoryId, diceCount) {
+      const stand = stands.get(territoryId);
+      if (!stand) return [];
+      if (!stand.reserved || stand.reserved.count !== diceCount) {
+        stand.reserved = { count: diceCount, slots: planDiceStacks(diceCount, rng) };
+      }
+      return stand.reserved.slots;
+    },
     update(state) {
       for (const stand of stands.values()) {
         const node = state.nodes.get(stand.id);
@@ -137,6 +174,9 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
     reroll(territoryId, state) {
       const stand = stands.get(territoryId);
       if (!stand) return;
+      // a reroll is a deliberate re-tumble, so it is the one thing that must
+      // never honour a plan reserved for standing dice back up unchanged
+      stand.reserved = null;
       const node = state.nodes.get(territoryId);
       rebuild(stand, node ? node.dice : 0);
     },
