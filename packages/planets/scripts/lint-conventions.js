@@ -122,6 +122,18 @@ check('the shared constants have not grown a second copy', () => {
       problems.push(`${name}.js should read stack slots from ./diceStacks.js`);
     }
   }
+  // Whether a dice tower is in the pole marker's way is decided from the same
+  // column spacing the dice are actually placed with. A second copy of that
+  // number is how the answer and the dice drift apart.
+  {
+    const text = read('../src/render/poleMarkers.js');
+    if (!/stackHalfWidth/.test(text)) {
+      problems.push('poleMarkers.js should measure a stack with diceLayer.js stackHalfWidth');
+    }
+    if (/COLUMN_GAP|1\.06/.test(text)) {
+      problems.push('poleMarkers.js has the dice column spacing inlined');
+    }
+  }
   // the dice strip and the player row scroll the same way and have to say so
   // the same way, or one of them quietly stops matching the other
   for (const name of ['hud', 'battleReadout']) {

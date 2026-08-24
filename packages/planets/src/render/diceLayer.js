@@ -3,7 +3,9 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { findAllDiceGrounds } from '../world/territoryCenters.js';
 import { planDiceStacks, stackColumnCount, PIP_FACE_NORMALS } from './diceStacks.js';
 
-const DIE_SIZE = 0.035;
+// The die's edge length, in planet radii. Exported because the pole markers
+// are sized and stood up in dice — what they have to clear is a dice tower.
+export const DIE_SIZE = 0.035;
 const BEVEL_SEGMENTS = 3;
 const COLUMN_GAP = 1.06; // column spacing, in die widths
 
@@ -45,6 +47,22 @@ export function dicePosition(column, level, columns, dieSize) {
     dieSize * (0.5 + level),
     0
   );
+}
+
+/**
+ * How far a stack of `diceCount` reaches sideways from its stand: the
+ * outermost column's center, plus half a die.
+ *
+ * The same `COLUMN_GAP` the dice are actually placed with, deliberately —
+ * this is what the pole marker asks to find out whether a tower is really in
+ * its way, and a second copy of the spacing is exactly how the answer and the
+ * dice would drift apart. A die that has stopped tumbling is yawed by a whole
+ * number of quarter turns, so its footprint is an axis-aligned square and half
+ * an edge is the true reach, not half a diagonal.
+ */
+export function stackHalfWidth(diceCount, dieSize = DIE_SIZE) {
+  const columns = stackColumnCount(diceCount);
+  return ((columns - 1) / 2) * dieSize * COLUMN_GAP + dieSize / 2;
 }
 
 /**

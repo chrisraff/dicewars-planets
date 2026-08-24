@@ -15,6 +15,7 @@ import { playerIdsFor, resolveStartSeat, subdivisionsFor } from './settings.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
+import { createPoleMarkers } from '../render/poleMarkers.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
 import { createReinforceAnimation } from '../render/reinforceAnimation.js';
 import { createCameraFocus } from '../render/cameraFocus.js';
@@ -108,7 +109,15 @@ export function createSession({
 
   const surface = createPlanetSurface(world, playerColors);
   const dice = createDiceLayer(world, pipMaterials);
-  viewer.scene.add(surface.group, dice.group);
+  // Something fixed to read the planet's turn against. It stands on the
+  // ground, and steps up onto a dice tower at the pole rather than being cut
+  // by one — which is what it needs the die size and the stands for.
+  const poles = createPoleMarkers({
+    dieSize: dice.dieSize,
+    stands: world.nodeIds.map((id) => dice.standFor(id)),
+  });
+  poles.settle(game.state);
+  viewer.scene.add(surface.group, dice.group, poles.group);
 
   const hud = createHud(hudRoot, { playerColors, playerNames });
   hud.setHistory(battles.entries);
@@ -170,6 +179,7 @@ export function createSession({
     const players = reservesAfterAttacks(initialReserves, replay.moves, step);
     surface.refresh({ nodes });
     dice.update({ nodes });
+    poles.settle({ nodes });
     hud.showPlayers(playerStatsFor(
       { nodes, players, phase: 'gameover', winner: atEnd ? game.state.winner : null },
       playerIds
@@ -215,6 +225,7 @@ export function createSession({
     // the battle readout; put the real, finished match back before the
     // banner returns
     dice.update(game.state);
+    poles.settle(game.state);
     refreshBoard();
     hud.showBattle(battles.latestBattle);
     hud.setHistory(battles.entries);
@@ -351,6 +362,7 @@ export function createSession({
 
   game.on('change', (state) => {
     dice.update(state);
+    poles.settle(state); // a tower may have grown or gone at a pole
     refreshBoard();
     // Every change, rather than on a timer or on the way out of the page:
     // `change` is the only moment the board moves, a pagehide handler is not
@@ -430,9 +442,10 @@ export function createSession({
       roll = null;
       reinforceAnim = null;
       cameraFocus.dispose();
-      viewer.scene.remove(surface.group, dice.group);
+      viewer.scene.remove(surface.group, dice.group, poles.group);
       surface.dispose();
       dice.dispose();
+      poles.dispose();
       hudRoot.replaceChildren();
     },
   };

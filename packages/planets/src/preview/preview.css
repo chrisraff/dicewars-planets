@@ -249,8 +249,12 @@ h1 {
 /* ---- the replay preview: a real planet under the HUD ------------------- */
 
 /* Taller than a bare HUD stage needs, so the planet behind it has room to
-   actually read. */
+   actually read — and positioned, because the canvas inside is absolute and
+   would otherwise size itself against the page. `.is-hud` happens to supply
+   that too, but a planet stage needs it whether or not there is a HUD over
+   it. */
 .stage.is-planet {
+  position: relative;
   min-height: 26rem;
 }
 .stage.is-planet canvas {

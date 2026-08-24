@@ -42,6 +42,14 @@ export const PREVIEW_PAGES = [
       + 'eight, and the history panel at every length — including past its entry cap.',
   },
   {
+    href: '/preview/poles.html',
+    title: 'Pole markers',
+    description:
+      'The reference cone at each pole on a live planet — every knob on a slider, the head-on '
+      + 'and edge-on extremes a button away, and a full dice tower on the pole to check it '
+      + 'against.',
+  },
+  {
     href: '/preview/replay.html',
     title: 'Replay',
     description:
