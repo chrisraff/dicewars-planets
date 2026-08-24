@@ -1,3 +1,5 @@
+import { createExpertStrategy, createSimpleStrategy } from '@dicewars/core';
+
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 
@@ -34,6 +36,19 @@ export const SETTING_DEFINITIONS = [
       const count = MIN_PLAYERS + i;
       return { value: count, label: String(count) };
     }),
+  },
+  {
+    key: 'difficulty',
+    label: 'Difficulty',
+    help: 'Normal takes the best fight in front of it. Hard plays for the reinforcement its '
+      + 'largest region earns — and will cut yours in half to take that away from you.',
+    kind: 'choice',
+    default: 'normal',
+    available: true,
+    choices: [
+      { value: 'normal', label: 'Normal' },
+      { value: 'hard', label: 'Hard' },
+    ],
   },
   {
     key: 'start',
@@ -117,9 +132,18 @@ function normalizeOne(setting, raw, context) {
     return clamp(Math.round(seat), 1, context.players);
   }
 
+  const allowed = setting.choices.map((choice) => choice.value);
+  if (allowed.includes(raw)) return raw;
+
+  // A choice can be named rather than numbered — difficulty is `normal` or
+  // `hard` — and there is nothing sensible to round a name to, so anything
+  // that is not one of them is simply the default. Numbers are clamped
+  // instead: a planet size from a build that offered more of them should land
+  // on the nearest one this build has rather than on nothing.
+  if (allowed.some((value) => typeof value !== 'number')) return setting.default;
+
   const value = Number(raw);
   if (!Number.isFinite(value)) return setting.default;
-  const allowed = setting.choices.map((choice) => choice.value);
   return clamp(Math.round(value), Math.min(...allowed), Math.max(...allowed));
 }
 
@@ -249,4 +273,19 @@ export function playerIdsFor({ players }) {
  */
 export function subdivisionsFor({ size }) {
   return size;
+}
+
+/**
+ * The opponent these (normalized) settings ask for.
+ *
+ * The strategies themselves live in core, which knows nothing about menus;
+ * this is only the mapping from the word a player picked to one of them, and
+ * it lives here so that the choice and what the choice *means* sit together.
+ *
+ * A fresh strategy per call rather than a shared one: `createSimpleStrategy`
+ * closes over its own tie-breaking generator, and two matches should not be
+ * drawing from the same one.
+ */
+export function strategyFor({ difficulty }) {
+  return difficulty === 'hard' ? createExpertStrategy() : createSimpleStrategy();
 }

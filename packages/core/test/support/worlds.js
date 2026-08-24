@@ -19,6 +19,25 @@ export function chainState(assignments, { playerIds = ['p1', 'p2'], turnOrder } 
   });
 }
 
+/**
+ * A board with a shape: core's own `[nodeId, { owner, dice }]` assignments,
+ * plus the edges between them written out.
+ *
+ * A chain covers the rules tests, which mostly want adjacency to be obvious.
+ * What it cannot say is "this territory has something behind it" — a hub with
+ * several neighbours, a border post with a second rival at its back — and that
+ * is most of what an AI has opinions about.
+ */
+export function graphState(assignments, edges, { playerIds = ['p1', 'p2'], turnOrder } = {}) {
+  return createInitialState({
+    nodeIds: assignments.map(([id]) => id),
+    edges,
+    playerIds,
+    assignments,
+    turnOrder,
+  });
+}
+
 /** The same chain as a plain world description, for consumers of core. */
 export function chainWorld(assignments, { playerIds = ['p1', 'p2'] } = {}) {
   const nodeIds = assignments.map(([id]) => id);

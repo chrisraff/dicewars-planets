@@ -41,6 +41,9 @@ export function createGame({
   world,
   savedState = null,
   humanPlayerId = world.playerIds[0],
+  // The opponent, for a caller that has no opinion. A real match always has
+  // one: the session picks from the difficulty setting (`strategyFor`), and
+  // this matches what it picks on Normal.
   strategy = createSimpleStrategy(),
   timing = DEFAULT_TIMING,
   aiTiming = AI_TIMING,

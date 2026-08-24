@@ -11,7 +11,7 @@ import { orderAiTurnForCamera } from './aiTurnOrder.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
 import { createReplay, boardAfterAttacks, reservesAfterAttacks, historyThroughStep } from './replay.js';
 import { playerStatsFor } from './playerStats.js';
-import { playerIdsFor, resolveStartSeat, subdivisionsFor } from './settings.js';
+import { playerIdsFor, resolveStartSeat, strategyFor, subdivisionsFor } from './settings.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
@@ -78,6 +78,9 @@ export function createSession({
     world,
     humanPlayerId,
     savedState: restored ? reviveState(restored.state) : null,
+    // A resumed game brings its own settings with it, so the difficulty a
+    // match was started on is the one it is finished on.
+    strategy: strategyFor(settings),
     // Reorders an AI's turn for display so nearby attacks show back to back
     // instead of swinging the camera once per attack — `dice` isn't built
     // yet at this point in construction, but this is only ever *called*

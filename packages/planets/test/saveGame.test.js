@@ -82,6 +82,15 @@ test('a game written down comes back the same game', () => {
   assert.deepEqual(read.state, save.state);
 });
 
+test('a match saved on Hard is resumed on Hard', () => {
+  // A save carries its whole setup, and `readSavedGame` normalizes it on the
+  // way back out — so a difficulty the normalizer did not recognise would
+  // quietly downgrade the opponent halfway through a game rather than fail
+  // anywhere visible.
+  const save = saveOf(11, { settings: normalizeSettings({ players: 3, difficulty: 'hard' }) });
+  assert.equal(readSavedGame(stored(save)).settings.difficulty, 'hard');
+});
+
 test('there is nothing to continue when nothing was ever saved', () => {
   assert.equal(readSavedGame(fakeStorage()), null);
 });

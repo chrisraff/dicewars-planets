@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { graphState } from '@dicewars/core/test-support';
 import {
   SETTING_DEFINITIONS,
   MENU_SETTINGS,
@@ -17,6 +18,7 @@ import {
   settingDefinition,
   resolveStartSeat,
   seatsInRange,
+  strategyFor,
 } from '../src/game/settings.js';
 
 // A stand-in for localStorage, and one that refuses to co-operate.
@@ -196,6 +198,76 @@ test('every size the setting lists is one the generator could build', () => {
   // cannot make a planet should not be sitting in the list waiting
   for (const { value } of settingDefinition('size').choices) {
     assert.ok(Number.isInteger(value) && value >= 1, `subdivision ${value} is not buildable`);
+  }
+});
+
+// --- who you are playing against -------------------------------------------
+
+test('a difficulty is chosen by name, and an unknown one is simply the default', () => {
+  // the other choices in the list are numbers, which get rounded and clamped
+  // onto the nearest one offered. There is no nearest `hard`, so anything that
+  // is not one of the names on the menu falls back rather than landing
+  // somewhere arbitrary.
+  assert.equal(normalizeSettings({ difficulty: 'hard' }).difficulty, 'hard');
+  assert.equal(normalizeSettings({ difficulty: 'normal' }).difficulty, 'normal');
+  for (const nonsense of ['brutal', 'HARD', 2, '', null, undefined, {}]) {
+    assert.equal(
+      normalizeSettings({ difficulty: nonsense }).difficulty,
+      DEFAULT_SETTINGS.difficulty,
+      `${JSON.stringify(nonsense)} is not a difficulty`
+    );
+  }
+});
+
+test('a numbered option still rounds and clamps, which naming must not have broken', () => {
+  assert.equal(normalizeSettings({ players: '5.6' }).players, 6);
+  assert.equal(normalizeSettings({ players: 99 }).players, MAX_PLAYERS);
+});
+
+test('the difficulty travels in a link and comes back out of one', () => {
+  assert.equal(settingsToQuery({ ...DEFAULT_SETTINGS, difficulty: 'hard' }), '?difficulty=hard');
+  assert.equal(resolveSettings({ search: '?difficulty=hard' }).difficulty, 'hard');
+  assert.equal(
+    settingsToQuery({ ...DEFAULT_SETTINGS, difficulty: 'normal' }),
+    '',
+    'the default setup still has a plain URL'
+  );
+});
+
+test('the two difficulties really are two different opponents', () => {
+  // Named rather than identified: on this board the two strategies disagree.
+  // 'far' can take 'spoils' with eight dice against one, which is the biggest
+  // advantage anywhere on the map and what Normal goes for. 'join' is the only
+  // thing between two regions of two, so taking it triples what the player
+  // earns each turn — which is what Hard is able to see.
+  const board = graphState(
+    [
+      ['a1', { owner: 'p1', dice: 1 }],
+      ['a2', { owner: 'p1', dice: 4 }],
+      ['join', { owner: 'p2', dice: 1 }],
+      ['b1', { owner: 'p1', dice: 1 }],
+      ['b2', { owner: 'p1', dice: 1 }],
+      ['far', { owner: 'p1', dice: 8 }],
+      ['spoils', { owner: 'p2', dice: 1 }],
+    ],
+    [['a1', 'a2'], ['a2', 'join'], ['join', 'b1'], ['b1', 'b2'], ['far', 'spoils']]
+  );
+
+  assert.deepEqual(
+    strategyFor({ difficulty: 'hard' })(board, 'p1'),
+    { from: 'a2', to: 'join' },
+    'Hard plays for the reinforcement'
+  );
+  assert.deepEqual(
+    strategyFor({ difficulty: 'normal' })(board, 'p1'),
+    { from: 'far', to: 'spoils' },
+    'Normal takes the fattest advantage in front of it'
+  );
+});
+
+test('every setup names an opponent, including one that names no difficulty', () => {
+  for (const settings of [normalizeSettings({}), normalizeSettings({ difficulty: 'hard' })]) {
+    assert.equal(typeof strategyFor(settings), 'function');
   }
 });
 

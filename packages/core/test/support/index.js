@@ -2,4 +2,4 @@
 // (planets reaches these through the `@dicewars/core/test-support` export, so
 // there is one seeded generator in the repo rather than one per test file).
 export { seededRng, rollsOf, alwaysRolls } from './rng.js';
-export { chainState, chainWorld, boardOf, withReserve } from './worlds.js';
+export { chainState, chainWorld, graphState, boardOf, withReserve } from './worlds.js';

@@ -75,6 +75,53 @@ as well as the totals, because the renderer lands the dice on their actual
 values. `ATTACK` also emits `eliminated` when it takes a player's last
 territory.
 
+`src/ai/` holds the opponents. One interface throughout — a **strategy** is
+`(state, playerId) -> { from, to } | null`, called again after every attack and
+returning null to end the turn — because that is the shape the classic
+dicewars-js AIs were written in, and `wrapLegacyAi` has to bridge to it anyway.
+Three are shipped, weakest first:
+
+- `createSimpleStrategy` — takes the biggest dice advantage on offer.
+- `createDefensiveStrategy` — the classic `ai_defensive`, translated. Attacks
+  only where it expects to keep what it wins.
+- `createExpertStrategy` — prices every attack as an expected change in the
+  value of the position and takes the best while any is worth making. It beats
+  either of the others about three games in four, measured over 360
+  six-player games with the seats rotated so turn order cancels out. Costs
+  about 0.4ms per AI turn on a default planet, against 0.05ms for the simple
+  one — nothing, next to a frame.
+
+The `difficulty` setting picks between the first and the last: Normal is
+`createSimpleStrategy`, Hard is `createExpertStrategy`, and `strategyFor` in
+`settings.js` is the whole of the mapping. The defensive one is not offered —
+it is the translated legacy AI, kept because it is a second opinion to measure
+against, and it is weaker than Normal anyway. A save carries its settings, so
+a match started on Hard is finished on Hard.
+
+`battleOdds.js` is shared ground: the exact chance an attack of *a* dice beats
+a defence of *d*, as whole numbers of ways divided once at the end, so a battle
+that cannot be lost is exactly 1. Dice difference is a poor stand-in for it —
+"one die up" runs from 84% down to 67% across the range.
+
+Two things about the expert are worth knowing before touching it. Its
+`EXPERT_WEIGHTS` were found by playing rather than derived, and they pull
+against each other hard: `denial` at 0 was harmless until `relief` moved and
+then cost thirty points, so a retune wants re-measuring against the whole set
+rather than one weight at a time. And what made the difference between "loses
+to the defensive AI" and "beats it three to one" was not the search — it was
+two structural terms. It counts what a capture does to the *opponent's* largest
+region, not only its own; and it judges what its territories can survive
+against the dice they will have *after* end-of-turn reinforcement, which is the
+term that stops it sprawling into ground too thin to hold.
+
+Anyone tempted to tidy the defensive one: its counter-attack test compares the
+strongest rival to the attacker's dice, though a winner garrisons the prize
+with `dice - 1`. That off-by-one is load-bearing. Closing it takes the AI from
+winning 23 games in 100 to winning 1 — at this scale a single die is most of
+the margin, so it refuses nearly every fight, and reinforcement being paid on
+the largest connected region makes refusing to grow a slow way to lose. The
+module says so too, next to the line.
+
 ## Planets: generation, game, render
 
 **`src/geometry/`** builds a Goldberg polyhedron: subdivide an icosahedron,
@@ -136,6 +183,12 @@ renderer wants.
   the planet's subdivision count, sits). The menu and its preview render from
   `MENU_SETTINGS`, which is `SETTING_DEFINITIONS` minus the hidden ones;
   everything else in the pipeline still sees all of them.
+
+  A choice's values are usually numbers, and `normalizeSettings` rounds and
+  clamps those onto the nearest one offered — so a planet size from a build
+  that had more of them lands somewhere rather than nowhere. They can also be
+  names (`difficulty` is `normal`/`hard`), and there is no nearest `hard`, so
+  those normalize by membership and anything else is simply the default.
 
   Settings are parsed **once, at the edge** — `resolveSettings` for the page,
   the menu for anything the player picks, `readSavedGame` for a game being

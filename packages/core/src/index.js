@@ -17,4 +17,11 @@ export { attack, endTurn, updateAdjacency } from './actions.js';
 export { reduce, isLegalAttack } from './reducer.js';
 export { runAiTurn } from './ai/runAiTurn.js';
 export { createSimpleStrategy, legalAttacksFor } from './ai/simpleStrategy.js';
+export {
+  createDefensiveStrategy,
+  defensiveMovesFor,
+  DEFENSIVE_TUNING,
+} from './ai/defensiveStrategy.js';
+export { createExpertStrategy, expertMovesFor, EXPERT_WEIGHTS } from './ai/expertStrategy.js';
+export { winProbability } from './ai/battleOdds.js';
 export { wrapLegacyAi } from './ai/legacyAdapter.js';
