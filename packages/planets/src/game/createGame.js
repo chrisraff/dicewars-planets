@@ -6,6 +6,8 @@ import {
   isLegalAttack,
   getCurrentPlayerId,
   createSimpleStrategy,
+  surrenderedPlayerIds,
+  livingPlayerIds,
   neighbors,
 } from '@dicewars/core';
 import { attackDuration, DEFAULT_TIMING } from '../render/rollTimeline.js';
@@ -35,11 +37,13 @@ export const AUTOPLAY = Symbol('autoplay');
  *
  * `savedState` resumes a match instead of dealing a new one. Nothing else
  * changes: the same world still has to be supplied, because it is the planet
- * that board was fought over.
+ * that board was fought over. `playedOn` comes back with it — a player who
+ * has already waved the surrender away is not asked again after a reload.
  */
 export function createGame({
   world,
   savedState = null,
+  playedOn: startPlayedOn = false,
   humanPlayerId = world.playerIds[0],
   // The opponent, for a caller that has no opinion. A real match always has
   // one: the session picks from the difficulty setting (`strategyFor`), and
@@ -81,6 +85,11 @@ export function createGame({
   // not when `endTurn` is merely requested, since reinforcement is still this
   // player's own turn finishing up.
   let attackedThisTurn = false;
+  // Whether the player has been offered the match, and whether they turned it
+  // down. Refusing is final: somebody who said they would rather finish the
+  // job should not be asked again every turn while they do it.
+  let surrenderOffered = false;
+  let playedOn = startPlayedOn;
 
   const listeners = new Map();
   const emit = (name, payload) => {
@@ -197,6 +206,10 @@ export function createGame({
   }
 
   function finishReinforce() {
+    // whose turn this was — read before the queue is cleared, since the
+    // surrender below is only ever judged at the end of the player's own
+    const endedTurnOf = pendingReinforceEvents.find((e) => e.type === 'endTurn')?.playerId ?? null;
+
     state = pendingReinforce;
     pendingReinforce = null;
     attackedThisTurn = false; // this player's turn is over; the next one starts clean
@@ -205,8 +218,41 @@ export function createGame({
     pendingReinforceEvents = [];
     emit('change', state);
 
-    if (isOver()) emit('over', state.winner);
-    else if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
+    if (isOver()) return emit('over', state.winner);
+
+    if (endedTurnOf === humanPlayerId) offerSurrender();
+    if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
+  }
+
+  /**
+   * Every opponent left has given the game up, so the player is told they
+   * have won it — while the game itself carries on underneath, untouched.
+   *
+   * Nothing here changes a rule or a piece of state: `phase` is still
+   * `attack`, the AIs go on playing exactly as they were, and "play on" is
+   * only a matter of not putting the banner up again. That is deliberate. A
+   * surrender is an opinion about the position rather than an outcome of it,
+   * and one the player is entitled to disagree with — which they cannot do if
+   * the match has already been ended underneath them.
+   *
+   * Judged once a turn, at the end of the player's own, because that is the
+   * one moment the board is settled and the player is looking at it: mid-way
+   * through an AI's run of attacks is neither.
+   */
+  function offerSurrender() {
+    if (playedOn || surrenderOffered || humanPlayerId === AUTOPLAY) return;
+
+    const living = livingPlayerIds(state);
+    if (!living.includes(humanPlayerId)) return;
+
+    const rivals = living.filter((id) => id !== humanPlayerId);
+    if (rivals.length === 0) return; // the game is about to be won outright anyway
+
+    const surrendered = surrenderedPlayerIds(state);
+    if (!rivals.every((id) => surrendered.has(id))) return;
+
+    surrenderOffered = true;
+    emit('surrendered', { playerId: humanPlayerId, surrendered: rivals });
   }
 
   function takeAiTurn() {
@@ -244,6 +290,17 @@ export function createGame({
     isHumanTurn,
     isBusy,
     isOver,
+
+    /** Whether the player has already refused a surrender this match. */
+    get playedOn() {
+      return playedOn;
+    },
+
+    /** Refuses one: the match runs to a real finish and is never offered again. */
+    playOn() {
+      playedOn = true;
+    },
+
     legalTargets,
     currentPlayer,
 

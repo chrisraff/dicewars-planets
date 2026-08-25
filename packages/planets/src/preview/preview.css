@@ -73,6 +73,11 @@ h1 {
   border-radius: 0.5rem;
   padding: 0.6rem 0;
 }
+.scenario > .scenario-actions {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+}
+
 .stage.is-phone {
   width: 360px;
   max-width: 100%;
@@ -225,9 +230,9 @@ h1 {
   color: #75757e;
 }
 
-/* The one control on the storage preview — page furniture, not an exhibit, so
-   it is styled here rather than borrowed from the game's own buttons. */
-.perf-run {
+/* A preview's own control — page furniture, not an exhibit, so it is styled
+   here rather than borrowed from the game's own buttons. */
+.preview-button {
   font: inherit;
   color: #8fb8ff;
   background: none;
@@ -236,7 +241,7 @@ h1 {
   cursor: pointer;
   text-decoration: underline;
 }
-.perf-run:disabled {
+.preview-button:disabled {
   color: #55555e;
   cursor: default;
 }

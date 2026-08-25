@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { turnIndicatorView, outcomeView } from '../src/render/hud.js';
+import { turnIndicatorView, outcomeView, SURRENDER_DETAIL } from '../src/render/hud.js';
 
 const names = new Map([['p1', 'Red'], ['p2', 'Blue'], ['p3', 'Yellow']]);
 const nameOf = (id) => names.get(id) ?? id;
@@ -116,6 +116,33 @@ test('a fought-out match offers to watch the replay, between starting over and l
   assert.equal(primary(view).id, 'newGame', 'starting over still leads');
 });
 
+test('winning because everyone gave up still reads as winning', () => {
+  const view = outcomeView({ kind: 'surrendered', humanPlayerId: 'p1' }, nameOf);
+  assert.equal(view.kind, 'won', 'it wears the same face as any other win');
+  assert.equal(view.title, 'You win');
+  assert.equal(view.playerId, 'p1');
+});
+
+test('a win by surrender does not claim the whole planet, because it is not yours', () => {
+  // the board is typically a quarter still in play when this goes up — the
+  // one banner in the game whose wording has to survive being read against
+  // the planet behind it
+  const view = outcomeView({ kind: 'surrendered', humanPlayerId: 'p1' }, nameOf);
+  const outright = outcomeView({ kind: 'over', winner: 'p1', humanPlayerId: 'p1' }, nameOf);
+
+  assert.notEqual(view.detail, outright.detail);
+  assert.equal(view.detail, SURRENDER_DETAIL);
+});
+
+test('a win by surrender offers to play on, in place of looking at the board', () => {
+  // dismissing this banner and carrying on with the match are the same act,
+  // so there is no separate way to just look
+  const view = outcomeView({ kind: 'surrendered', humanPlayerId: 'p1', canReplay: true }, nameOf);
+
+  assert.deepEqual(actionIds(view), ['newGame', 'replay', 'playOn']);
+  assert.equal(primary(view).id, 'newGame');
+});
+
 test('being knocked out says who did it and offers to keep watching', () => {
   const view = outcomeView({ kind: 'eliminated', by: 'p3', humanPlayerId: 'p1' }, nameOf);
   assert.equal(view.kind, 'eliminated');
@@ -136,6 +163,7 @@ test('every banner offers a way out of itself', () => {
     outcomeView({ kind: 'over', winner: 'p2', humanPlayerId: 'p1' }, nameOf),
     outcomeView({ kind: 'over', winner: null, humanPlayerId: 'p1' }, nameOf),
     outcomeView({ kind: 'eliminated', by: 'p2', humanPlayerId: 'p1' }, nameOf),
+    outcomeView({ kind: 'surrendered', humanPlayerId: 'p1' }, nameOf),
   ];
   for (const view of banners) {
     assert.ok(view.actions.length >= 2, `${view.kind} needs more than one way on`);

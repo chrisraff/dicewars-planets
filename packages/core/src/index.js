@@ -24,4 +24,5 @@ export {
 } from './ai/defensiveStrategy.js';
 export { createExpertStrategy, expertMovesFor, EXPERT_WEIGHTS } from './ai/expertStrategy.js';
 export { winProbability } from './ai/battleOdds.js';
+export { surrenderedPlayerIds, SURRENDER_TUNING } from './ai/surrender.js';
 export { wrapLegacyAi } from './ai/legacyAdapter.js';

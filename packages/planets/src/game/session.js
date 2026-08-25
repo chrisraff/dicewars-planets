@@ -79,6 +79,8 @@ export function createSession({
     world,
     humanPlayerId,
     savedState: restored ? reviveState(restored.state) : null,
+    // a player who already waved a surrender away is not asked again
+    playedOn: restored?.playedOn ?? false,
     // A resumed game brings its own settings with it, so the difficulty a
     // match was started on is the one it is finished on.
     strategy: strategyFor(settings),
@@ -240,6 +242,7 @@ export function createSession({
       world,
       state: serializeState(game.state),
       replay: serializeReplay(replay),
+      playedOn: game.playedOn,
       camera: cameraSnapshot(viewer.camera),
     });
   }
@@ -382,6 +385,15 @@ export function createSession({
     onSave?.(snapshot());
   });
 
+  // Every opponent left has given up. The match is not over — the board says
+  // so, and the AIs play on — but there is nothing left in it to decide, so
+  // the player is offered the win now rather than the twenty turns of mopping
+  // up that would otherwise stand between them and it.
+  game.on('surrendered', () => {
+    lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
+    hud.showOutcome(lastOutcome);
+  });
+
   game.on('over', (winner) => {
     // the banner stays until the player dismisses it — winning gets a moment
     // rather than being covered by the menu the instant it happens
@@ -391,7 +403,17 @@ export function createSession({
   hud.onOutcomeAction((action) => {
     if (action === 'newGame') return onNewGame?.();
     if (action === 'replay') return openReplay();
-    hud.hideOutcome(); // 'watch' and 'dismiss' both just get out of the way
+
+    if (action === 'playOn') {
+      // Refused for good, and written down straight away rather than left for
+      // the next `change`: a reload in between would otherwise open on the
+      // banner the player has just declined.
+      game.playOn();
+      lastOutcome = null;
+      onSave?.(snapshot());
+    }
+
+    hud.hideOutcome(); // 'watch', 'dismiss' and 'playOn' all just get out of the way
     refreshBoard();
   });
 

@@ -160,6 +160,14 @@ export function attackHintText(view) {
 }
 
 /**
+ * What a won-by-surrender banner says under the title. Kept up here as a
+ * constant because it is the one line in the game that has to be honest about
+ * an ending the board has not actually reached: the planet is *not* all yours
+ * when this goes up — a quarter of it is typically still in play.
+ */
+export const SURRENDER_DETAIL = 'Your rivals have surrendered.';
+
+/**
  * The banner that interrupts play, and what it offers to do next.
  *
  * Winning is the point of the whole game, so it gets the screen to itself
@@ -179,6 +187,24 @@ export function outcomeView(outcome, nameOf = (id) => id) {
       actions: [
         { id: 'watch', label: 'Spectate', primary: true },
         { id: 'newGame', label: 'New game', primary: false },
+      ],
+    };
+  }
+
+  // Won because everyone else gave up rather than because the board ran out.
+  // It reads as a win — it is one — but the way out of the banner is "play
+  // on" rather than "look at the board": the match is still there to be
+  // finished, and dismissing this is the same act as carrying on with it.
+  if (kind === 'surrendered') {
+    return {
+      kind: 'won',
+      playerId: humanPlayerId,
+      title: 'You win',
+      detail: SURRENDER_DETAIL,
+      actions: [
+        { id: 'newGame', label: 'New game', primary: true },
+        ...(canReplay ? [{ id: 'replay', label: 'Watch replay', primary: false }] : []),
+        { id: 'playOn', label: 'Play on', primary: false },
       ],
     };
   }

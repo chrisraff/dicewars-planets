@@ -29,7 +29,9 @@ export const SAVE_VERSION = 2;
 const STORAGE_KEY = 'dicewars-planets:game';
 
 /** The one shape everything below agrees on. */
-export function gameSave({ seed, settings, humanPlayerId, world, state, replay, camera }) {
+export function gameSave({
+  seed, settings, humanPlayerId, world, state, replay, camera, playedOn = false,
+}) {
   return {
     version: SAVE_VERSION,
     seed,
@@ -39,6 +41,10 @@ export function gameSave({ seed, settings, humanPlayerId, world, state, replay, 
     state,
     replay,
     camera,
+    // Whether a surrender has already been waved away. Read as optional
+    // rather than required, so a save written before this existed simply
+    // means "not yet asked" instead of being refused as damaged.
+    playedOn,
   };
 }
 

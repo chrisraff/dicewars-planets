@@ -165,6 +165,18 @@ addScenario({
 });
 
 addScenario({
+  title: 'You win — everyone else gave up',
+  note: 'The board behind this one is the point: the planet is not yours, and it is not going to '
+    + 'be for another twenty turns of mopping up. Every opponent left is beaten past the point of '
+    + 'a comeback, so the win is offered now — and because the match really is still running, the '
+    + 'way out of the banner is "Play on" rather than "Look at the board". Note the stats row '
+    + 'behind it still shows four players holding ground.',
+  holdings: [34, 6, 5, 4, 0, 0],
+  status: status(),
+  outcome: { kind: 'surrendered', humanPlayerId: 'p1', canReplay: true },
+});
+
+addScenario({
   title: 'You win',
   note: 'The banner has the screen to itself until you dismiss it — the menu no longer opens over '
     + 'the top the instant the game ends. "Look at the board" clears it and leaves the final planet.',

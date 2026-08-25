@@ -98,6 +98,45 @@ it is the translated legacy AI, kept because it is a second opinion to measure
 against, and it is weaker than Normal anyway. A save carries its settings, so
 a match started on Hard is finished on Hard.
 
+`surrender.js` is neither a strategy nor a rule. `surrenderedPlayerIds(state)` is
+everyone left with no way back into the game: behind on **both** total dice —
+the army they have — and largest connected region — the income they are going
+to get, since reinforcement is paid on it — by `SURRENDER_TUNING`'s factor of
+four. Neither measure works alone. Region on its own is wrong often enough to
+call one game in three for the wrong player, because a third of the planet in
+four disconnected clumps looks feeble and is not. Dice on its own is fooled by
+a board no AI plays but a person might: stacks piled eight deep on a handful
+of territories, a huge army earning almost nothing.
+
+What makes it safe to end a game on is that **the leader can never be in the
+set** — `dice * ratio <= dice` is false at any ratio above one for anybody
+still holding a die — so a field where every opponent has surrendered is one
+where the player left standing leads both the army and the income. That part
+is construction, not measurement.
+
+The ratio itself was measured: 700 seeded games across 2 to 8 players and both
+difficulties, each replayed once per seat to ask whether that seat would have
+been handed a match it was not going to win. Quote that rate per **firing**
+rather than per seat — the seats it never speaks up for are not evidence of
+anything.
+
+The thing to know before touching the number is that **tightening it does not
+stop the game being called, only delays it**. A sixth fires on 694 seats and a
+quarter on 695, all but identical; what changes is when.
+
+| ratio | wrong | fires at | earliest | saves | board held | opponents left |
+|-------|-------|----------|----------|-------|------------|----------------|
+| 1/4   | 1     | 73%      | 17%      | 71s   | 79%        | 2              |
+| 1/5   | 0     | 79%      | 32%      | 51s   | 83%        | 2              |
+| 1/6   | 0     | 84%      | 32%      | 42s   | 86%        | 1              |
+
+Both misfires found at a quarter share a shape — they fire while the field is
+still full, on a player who is wide rather than deep — and neither fires at a
+sixth. `preview/surrender.html` stands on one of them and is the record of why
+the number is what it is. A further guard on how many players are left was
+considered and not taken: at a sixth there is nothing left for it to catch,
+and "Play on" covers what measurement cannot.
+
 `battleOdds.js` is shared ground: the exact chance an attack of *a* dice beats
 a defence of *d*, as whole numbers of ways divided once at the end, so a battle
 that cannot be lost is exactly 1. Dice difference is a poor stand-in for it —
@@ -144,6 +183,17 @@ renderer wants.
   played in a test instantly. It emits events; the renderer listens. Passing
   `humanPlayerId: AUTOPLAY` leaves nobody in the human seat, which is how a
   whole match is played out unattended.
+
+  It also decides when to *offer* the match won: at the end of the player's own
+  turn — the one moment the board is settled and they are looking at it — if
+  every opponent left has surrendered (`surrenderedPlayerIds`), it emits `surrendered`.
+  Nothing about the game changes. `phase` is still `attack`, the AIs go on
+  playing exactly as they were, and `playOn()` does no more than stop it being
+  offered again. That is deliberate: a surrender is an opinion about the
+  position rather than an outcome of it, and one the player has to be able to
+  disagree with — which they cannot do if the match has already been ended
+  underneath them. It is asked once per match, and `playedOn` travels in the
+  save, so a reload is not a fresh chance to ask.
 - `session.js` — one match: a world, a game, and everything drawn for it,
   created from settings and disposed whole. "New game" throws one away and
   builds the next rather than resetting a dozen things. It also decides what is
@@ -178,7 +228,8 @@ renderer wants.
   stored as the **seed it grew from**, not as its geometry: a world is a
   deterministic function of `(seed, settings)`, so one number rebuilds every
   cell. Everything that cannot be recomputed — owners, dice, whose turn,
-  banked dice, the replay — is stored outright.
+  banked dice, the replay, whether a surrender has already been waved away —
+  is stored outright.
 
   That trade has exactly one failure mode: change the generator and the same
   seed grows a *different* planet. Hence `worldFingerprint`, a hash of the
@@ -376,6 +427,12 @@ from the game is worse than none.
 - `src/preview/pages.js` is the manifest; the directory page renders from it,
   and tests check the manifest and the folder still agree. `vite.preview.config.js`
   lists them again for the build, so a new page goes in both.
+- Two pages name a *specific* match rather than showing a state:
+  `surrender.html` plays two seeded games out headlessly, hands each to a real
+  `createSession` as a save, and lets the session's own restore path draw the
+  planet and the replay. Pinning `rollDie` and `rng` as well as the world seed
+  is what makes "the game where the surrender was wrong" a thing that can be
+  looked at twice.
 - `replay-perf.html` is the odd one out: numbers rather than a component. It
   plays real matches and puts them through the real save path against real
   `localStorage`, under a key of its own so a game in progress is never

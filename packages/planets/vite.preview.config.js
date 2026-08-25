@@ -11,6 +11,7 @@ const PAGES = [
   'poles',
   'replay',
   'replay-perf',
+  'surrender',
 ];
 
 /**

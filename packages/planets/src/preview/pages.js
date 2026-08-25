@@ -57,6 +57,13 @@ export const PREVIEW_PAGES = [
       + 'planet — surface, dice and camera all live, and at phone width too.',
   },
   {
+    href: '/preview/surrender.html',
+    title: 'Surrender, right and wrong',
+    description:
+      'Two named matches replayed on the real planet — the game that argued the surrender ratio '
+      + 'down to a sixth, and an ordinary match where the call is the right one.',
+  },
+  {
     href: '/preview/replay-perf.html',
     title: 'Replay storage & timing',
     description:
