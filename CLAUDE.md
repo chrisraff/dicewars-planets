@@ -296,6 +296,32 @@ exception, which is why `session.dispose` closes the replay: the interval
 outlives the markup and would go on painting steps onto a planet that has been
 taken out of the scene.
 
+There are two doors into it and the banner is only one of them. Every banner
+that can offer a replay does — a win, a win by surrender, and being knocked
+out, where there is most to look back at, since the match you were playing is
+over whatever the board goes on doing without you. And an offer once made is
+never withdrawn: `replayButtonView` puts a **Replay** button on the controls
+row, beside the menu, the moment the match has an ending to look back at — it is over, the player is out of it, or they have been offered the win and
+waved it away. All three are read back off the match rather than latched when
+the banner went up, which is what makes the button survive a reload: the board
+says who won and who is out, and `playedOn` travels in the save. Before this,
+"Look at the board", "Spectate" and "Play on" all closed the banner for good
+and left the replay one press away and unreachable.
+
+That second door opens onto a match that may still be *running* — playing on
+past a surrender, or watching from a knockout — so two things follow.
+`settleLiveBoard` finishes whatever move was mid-air first, in one long
+`game.tick`, so what the overlay covers is a whole move rather than half of
+one (`createGame` guarantees only one can ever be outstanding, since a turn
+cannot end on top of a pending attack). And the match is *held* while the
+replay has the planet — `game.tick` is the only clock in it, so not calling it
+is the whole of the pause. There is one board between them, and letting the AI
+take three turns behind the overlay would mean closing it dropped the player
+somewhere they never saw happen. Closing puts the banner back only if the match
+actually *ended* — `lastOutcome` is set for a win and a surrender and
+deliberately not for a knockout, since a game carrying on without you has no
+ending screen to return to and "You are out" is a question already answered.
+
 A replay throws its dice too, at `REPLAY_TIMING` — briefer than even the AI's
 pace, because the track advances itself every `REPLAY_STEP_MS` and a throw
 still in the air when the next step arrives is a throw nobody sees land. Only

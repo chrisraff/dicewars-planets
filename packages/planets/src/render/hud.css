@@ -613,6 +613,7 @@
 }
 
 .hud-menu,
+.hud-replay-open,
 .hud-end-turn {
   pointer-events: auto;
   font: inherit;
@@ -628,19 +629,25 @@
   backdrop-filter: blur(2px);
 }
 .hud-menu:hover,
+.hud-replay-open:hover,
 .hud-end-turn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
 .hud-menu:active,
+.hud-replay-open:active,
 .hud-end-turn:active:not(:disabled) { background: rgba(255, 255, 255, 0.3); }
 .hud-end-turn:disabled { opacity: 0.3; cursor: default; }
 
-/* the way out is always available, but quieter than the turn you are taking */
-.hud-menu {
+/* The ways out of the turn you are taking: always available, never competing
+   with it. Both are quieter than End turn for the same reason — the loud
+   button on this row should be the move, not the door. */
+.hud-menu,
+.hud-replay-open {
   font-weight: 500;
   opacity: 0.75;
   padding-left: 0.8rem;
   padding-right: 0.8rem;
 }
-.hud-menu:hover { opacity: 1; }
+.hud-menu:hover,
+.hud-replay-open:hover { opacity: 1; }
 
 /* ---- winner banner ---------------------------------------------- */
 
@@ -819,6 +826,7 @@
 }
 
 .hud-menu,
+.hud-replay-open,
 .hud-end-turn { min-height: 2.25rem; padding: 0.35rem 0.9rem; }
 }
 

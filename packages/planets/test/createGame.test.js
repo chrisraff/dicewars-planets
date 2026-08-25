@@ -483,3 +483,43 @@ test('the terminal, game-ending move of a turn is never reordered ahead of anyth
   assert.equal(game.state.nodes.get('x').owner, 'p1');
   assert.equal(game.state.nodes.get('y').owner, 'p1');
 });
+
+// --- settling a move on the spot ------------------------------------------
+//
+// The session leans on this to hand the planet over to the replay: whatever
+// was mid-air is finished in one tick, so what the replay covers up is a whole
+// move rather than half of one. Both halves of that are claims about the game
+// rather than about the renderer, so they belong here.
+
+test('one long tick finishes an attack still in the air', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.ok(game.isBusy(), 'the attack is rolled but not yet applied');
+
+  game.tick(1e6);
+  assert.equal(game.isBusy(), false, 'the countdown should have run out in one step');
+  assert.equal(game.state.nodes.get('b').owner, 'p1', 'and the board should have moved');
+});
+
+test('one long tick finishes a payout still dropping', () => {
+  const game = createGame({ world: balanced() });
+  game.endTurn();
+  assert.ok(game.isBusy(), 'the reinforcement is decided but not yet on the board');
+
+  game.tick(1e6);
+  assert.equal(game.isBusy(), false);
+});
+
+// Why one tick is enough rather than a loop: a turn cannot be ended while an
+// attack is pending, so there is only ever one thing outstanding to settle.
+test('a turn cannot end on top of an attack that has not landed', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+
+  game.endTurn();
+  game.tick(1e6);
+  assert.equal(game.currentPlayer(), 'p1', 'the end-turn should have been refused, not queued');
+  assert.equal(game.isBusy(), false, 'and the one pending thing settled in that single tick');
+});

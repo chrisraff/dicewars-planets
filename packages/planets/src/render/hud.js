@@ -112,6 +112,31 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
 }
 
 /**
+ * Whether the controls row carries a way back into the replay.
+ *
+ * The rule is that an offer once made is never withdrawn. The banner used to
+ * be the only door: "Look at the board" closed it for good, and a replay that
+ * had just been offered became unreachable without reloading the page. So the
+ * moment a match has an ending to look back at — it is over, the player has
+ * been knocked out of it, or they have been offered the win and waved it away
+ * — the button appears beside the menu and stays.
+ *
+ * Those three are asked of the match rather than remembered as a flag, which
+ * is what makes the button survive a reload: the board itself says who won and
+ * who is out, and `playedOn` travels in the save. A latch set when the banner
+ * went up would not — a played-on game reopens with no banner to set it.
+ *
+ * Mid-play, before any of that, there is nothing here. The match in progress
+ * is the thing to look at, and a door out of it is not worth a permanent seat
+ * on a row that has to stay readable on a phone.
+ */
+export function replayButtonView(status) {
+  const { hasReplay = false, isOver = false, humanEliminated = false, playedOn = false } = status;
+  if (!hasReplay) return 'hidden'; // a match nobody attacked in has nothing to show
+  return isOver || humanEliminated || playedOn ? 'shown' : 'hidden';
+}
+
+/**
  * The prompt a first-time player gets on their turn, or `null` when there is
  * nothing worth saying.
  *
@@ -184,8 +209,13 @@ export function outcomeView(outcome, nameOf = (id) => id) {
       playerId: by,
       title: 'You are out',
       detail: by ? `${nameOf(by)} took your last territory.` : 'Your last territory is gone.',
+      // Gentlest first: stay and watch, look back at how it went, start again.
+      // The replay belongs here as much as on a win — being knocked out is the
+      // moment there is most to look back at, and the match you were in is
+      // over whatever the board goes on doing without you.
       actions: [
         { id: 'watch', label: 'Spectate', primary: true },
+        ...(canReplay ? [{ id: 'replay', label: 'Watch replay', primary: false }] : []),
         { id: 'newGame', label: 'New game', primary: false },
       ],
     };
@@ -252,6 +282,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       <div class="hud-controls-row">
         <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
         <span class="hud-buttons">
+          <button class="hud-replay-open" type="button" hidden>Replay</button>
           <button class="hud-menu" type="button">Menu</button>
           <button class="hud-end-turn" type="button">End turn</button>
         </span>
@@ -308,6 +339,19 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   let replayTimer = null;
   let replaySeekHandler = null;
   let replayCloseHandler = null;
+
+  const replayOpenButton = root.querySelector('.hud-replay-open');
+  let replayOffered = false; // what the match last said; the overlay outranks it
+
+  // Two questions decide whether the button is there and they are answered in
+  // different places, so both go through here: whether the match has an ending
+  // to look back at, and whether the replay is already open — while it is, the
+  // × is the way back and a second door beside it is one too many, exactly as
+  // for the menu button. It takes no room when it is not there, rather than
+  // holding a gap open all match for something that mostly isn't offered.
+  function applyReplayButton() {
+    replayOpenButton.hidden = !replayOffered || !replayOverlay.hidden;
+  }
 
   function stopReplaying() {
     if (!replayTimer) return;
@@ -473,6 +517,20 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
     onMenu(handler) {
       menuButton.addEventListener('click', handler);
+    },
+
+    /**
+     * Whether the controls row offers a way back into the replay —
+     * `replayButtonView` decides, from the same kind of status object
+     * `showTurn` takes.
+     */
+    showReplayButton(status) {
+      replayOffered = replayButtonView(status) === 'shown';
+      applyReplayButton();
+    },
+
+    onReplayOpen(handler) {
+      replayOpenButton.addEventListener('click', handler);
     },
 
     /**
@@ -650,15 +708,16 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
      * paints, so dragging the track or stepping with the arrows takes it back
      * off the player's hands the moment they reach for it.
      *
-     * The menu button hides while this is open: the × is the way back to the
-     * outcome screen, and a second way out sitting right next to it is one
-     * too many.
+     * The controls row stands down while this is open — both the menu and the
+     * button that may have opened it: the × is the way back, and a second way
+     * out sitting right next to it is one too many.
      */
     showReplay(count) {
       stopReplaying();
       replayTrack.max = String(count);
       replayOverlay.hidden = false;
       menuButton.style.visibility = 'hidden';
+      applyReplayButton();
       paintReplayStep(0);
       startReplaying();
     },
@@ -667,6 +726,9 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       stopReplaying();
       replayOverlay.hidden = true;
       menuButton.style.visibility = 'visible';
+      // back to whatever the match last said, rather than unconditionally on:
+      // the replay is not the only reason this button may be away
+      applyReplayButton();
     },
 
     onReplaySeek(handler) {

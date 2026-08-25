@@ -26,6 +26,11 @@ import { createHud } from '../render/hud.js';
 import { assignPlayerColors } from '../render/palette.js';
 import { highlightsFor, pulseAt } from '../render/highlights.js';
 
+// One tick long enough to run any countdown in the game out in a single step.
+// Used to settle a move that is still mid-air when the replay takes the planet
+// over — see `settleLiveBoard`.
+const SETTLE_STEP = 1e6;
+
 // Named in palette order, so a player's name matches the color of their land.
 export const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'White'];
 
@@ -170,6 +175,7 @@ export function createSession({
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
+  let replayOpen = false; // the match is held while it is — see tick() below
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -305,12 +311,35 @@ export function createSession({
     applyReplayStep(step, entry, nodes, { animate });
   }
 
+  /**
+   * Brings the live board to a settled moment: a throw still in the air, or a
+   * payout still dropping, is finished on the spot.
+   *
+   * Nothing is skipped — a long enough tick runs the countdown out and the
+   * game emits exactly what it was about to emit anyway, so the handlers clear
+   * `roll` and `reinforceAnim` themselves, the dice are stood back up, and the
+   * save that follows is of a whole move rather than half of one. Only one of
+   * the two can ever be outstanding — a turn cannot end while an attack is
+   * pending — so a single tick is the whole of it.
+   *
+   * None of it is seen: the replay paints its own opening board over the top
+   * in the same breath. It is about what there is to come back to.
+   */
+  function settleLiveBoard() {
+    if (game.isBusy()) game.tick(SETTLE_STEP);
+  }
+
   function openReplay() {
+    // Now reachable mid-match, not only from a banner over a finished one, so
+    // there may still be a move in flight to put down first.
+    settleLiveBoard();
+    replayOpen = true;
     hud.hideOutcome();
     hud.showReplay(replay.attacks.length);
   }
 
   function closeReplay() {
+    replayOpen = false;
     hud.hideReplay();
     pendingReplayStep = null;
     replayFight = null;
@@ -326,7 +355,11 @@ export function createSession({
     refreshBoard();
     hud.showBattle(battles.latestBattle);
     hud.setHistory(battles.entries);
-    hud.showOutcome(lastOutcome);
+    // Only a match that actually ended has a banner to go back to. Opened from
+    // the controls row instead — knocked out, or playing on past a surrender —
+    // there is nothing to restore, and the game simply picks up where it was
+    // paused.
+    if (lastOutcome) hud.showOutcome(lastOutcome);
   }
 
   // What it would take to rebuild this match: the planet as the number it grew
@@ -374,6 +407,14 @@ export function createSession({
       isOver: game.isOver(),
       humanEliminated,
       canAct: game.isHumanTurn() && !game.isBusy(),
+    });
+    // All three of these are read back off the match rather than remembered,
+    // so a reload lands on the same answer — see `replayButtonView`.
+    hud.showReplayButton({
+      hasReplay: replay.attacks.length > 0,
+      isOver: game.isOver(),
+      humanEliminated,
+      playedOn: game.playedOn,
     });
     hud.showHint({
       seen: hintSeen,
@@ -462,7 +503,18 @@ export function createSession({
     // played on and nothing said why the board had stopped answering.
     if (event.playerId === humanPlayerId) {
       humanEliminated = true;
-      if (!game.isOver()) hud.showOutcome({ kind: 'eliminated', by: event.by, humanPlayerId });
+      if (!game.isOver()) {
+        // Deliberately not kept as `lastOutcome`: a match that carries on
+        // without you has no ending screen to be returned to, so closing a
+        // replay opened from here puts you back on the board rather than
+        // re-imposing a banner you have already answered.
+        hud.showOutcome({
+          kind: 'eliminated',
+          by: event.by,
+          humanPlayerId,
+          canReplay: replay.attacks.length > 0,
+        });
+      }
     }
   });
 
@@ -516,6 +568,7 @@ export function createSession({
 
   hud.onReplaySeek(showReplayStep);
   hud.onReplayClose(closeReplay);
+  hud.onReplayOpen(openReplay);
 
   hud.onHintDismiss(() => {
     hintDone();
@@ -580,7 +633,12 @@ export function createSession({
           reinforceAnim.dropped++;
         }
       }
-      game.tick(dt);
+      // Held while the replay has the planet. There is one board between them,
+      // and letting the AI take three turns behind the overlay would mean
+      // closing it dropped the player somewhere they never saw happen.
+      // `game.tick` is the only clock in the match, so not calling it is the
+      // whole of the pause.
+      if (!replayOpen) game.tick(dt);
     },
 
     dispose() {

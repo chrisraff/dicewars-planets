@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { turnIndicatorView, outcomeView, SURRENDER_DETAIL } from '../src/render/hud.js';
+import {
+  turnIndicatorView,
+  outcomeView,
+  replayButtonView,
+  SURRENDER_DETAIL,
+} from '../src/render/hud.js';
 
 const names = new Map([['p1', 'Red'], ['p2', 'Blue'], ['p3', 'Yellow']]);
 const nameOf = (id) => names.get(id) ?? id;
@@ -157,6 +162,34 @@ test('watching on is the gentler of the two, so it leads', () => {
   assert.equal(primary(view).id, 'watch', 'nothing is thrown away by carrying on');
 });
 
+// Being knocked out is the moment there is most to look back at: the match you
+// were playing is over, whatever the board goes on doing without you.
+test('being knocked out offers the replay too, between staying and starting again', () => {
+  const knockout = { kind: 'eliminated', by: 'p2', humanPlayerId: 'p1', canReplay: true };
+  const view = outcomeView(knockout, nameOf);
+  assert.deepEqual(actionIds(view), ['watch', 'replay', 'newGame'], 'gentlest first');
+  assert.equal(primary(view).id, 'watch', 'looking back is not the thing that leads');
+});
+
+test('every banner that can offer a replay offers it by the same name', () => {
+  const offered = [
+    outcomeView({ kind: 'over', winner: 'p2', humanPlayerId: 'p1', canReplay: true }, nameOf),
+    outcomeView({ kind: 'surrendered', humanPlayerId: 'p1', canReplay: true }, nameOf),
+    outcomeView({ kind: 'eliminated', by: 'p2', humanPlayerId: 'p1', canReplay: true }, nameOf),
+  ];
+  for (const view of offered) {
+    const action = view.actions.find((a) => a.id === 'replay');
+    assert.ok(action, `${view.kind} should offer a replay`);
+    assert.equal(action.label, 'Watch replay');
+    assert.equal(action.primary, false, 'it is never the thing that leads');
+  }
+});
+
+test('a knockout in a match nobody attacked in offers no replay', () => {
+  const view = outcomeView({ kind: 'eliminated', by: 'p2', humanPlayerId: 'p1' }, nameOf);
+  assert.equal(actionIds(view).includes('replay'), false);
+});
+
 test('every banner offers a way out of itself', () => {
   const banners = [
     outcomeView({ kind: 'over', winner: 'p1', humanPlayerId: 'p1' }, nameOf),
@@ -181,4 +214,48 @@ test('a knockout with nobody to blame still reads properly', () => {
 test('with no names to hand it falls back to raw ids rather than blanks', () => {
   const view = outcomeView({ kind: 'over', winner: 'p9', humanPlayerId: 'p1' });
   assert.equal(view.title, 'p9 wins');
+});
+
+// --- the way back into a replay -------------------------------------------
+
+const afterAttacks = (over = {}) => ({
+  hasReplay: true,
+  isOver: false,
+  humanEliminated: false,
+  playedOn: false,
+  ...over,
+});
+
+test('mid-match there is no replay button', () => {
+  assert.equal(replayButtonView(afterAttacks()), 'hidden');
+});
+
+// The three states the banner can offer a replay from. Each has to keep
+// offering one afterwards, because every one of them has a way of dismissing
+// the banner that used to be final: "Look at the board", "Spectate" and
+// "Play on" all left the replay one press away and unreachable.
+test('every ending the banner can offer a replay from keeps offering one', () => {
+  for (const ending of [{ isOver: true }, { humanEliminated: true }, { playedOn: true }]) {
+    assert.equal(replayButtonView(afterAttacks(ending)), 'shown', JSON.stringify(ending));
+  }
+});
+
+// Playing on is the case a session flag would get wrong: the match carries
+// straight on, no banner is up, and a reload has nothing to re-raise — so the
+// answer has to come from `playedOn` in the save rather than from having
+// watched the banner go up.
+test('playing on past a surrender keeps the button through the rest of the match', () => {
+  const playingOn = afterAttacks({ playedOn: true, isOver: false, humanEliminated: false });
+  assert.equal(replayButtonView(playingOn), 'shown');
+});
+
+test('a match with nothing fought in it offers nothing, however it ended', () => {
+  for (const ending of [{ isOver: true }, { humanEliminated: true }, { playedOn: true }]) {
+    const view = replayButtonView(afterAttacks({ ...ending, hasReplay: false }));
+    assert.equal(view, 'hidden', 'an empty replay is worse than no button');
+  }
+});
+
+test('an empty status is answered rather than thrown at', () => {
+  assert.equal(replayButtonView({}), 'hidden');
 });

@@ -56,7 +56,7 @@ function fakeAttacks(playerIds) {
   }));
 }
 
-function addScenario({ title, note, stageClass = '', outcome, status, ...board }) {
+function addScenario({ title, note, stageClass = '', outcome, status, hasReplay, ...board }) {
   const { state, playerIds } = stateFrom(board);
   const playerColors = assignPlayerColors(playerIds);
   const playerNames = new Map(playerIds.map((id, i) => [id, NAMES[i]]));
@@ -80,6 +80,12 @@ function addScenario({ title, note, stageClass = '', outcome, status, ...board }
   hud.showPlayers(playerStatsFor(state, playerIds));
   hud.showTurn(status);
 
+  // A scenario with a banner takes its answer from the banner; one without
+  // says so itself, which is how the states *behind* a dismissed banner get
+  // to show the button too.
+  const replayable = hasReplay ?? Boolean(outcome?.canReplay);
+  hud.showReplayButton({ ...status, hasReplay: replayable });
+
   // what the turn indicator resolved to, spelled out — it is the part that
   // used to go stale, and it is easy to miss in a strip of chrome
   const readout = document.createElement('pre');
@@ -88,22 +94,35 @@ function addScenario({ title, note, stageClass = '', outcome, status, ...board }
   readout.textContent = `turn indicator: "${view.text}"   ·   end turn: ${view.endTurn}`;
   section.append(readout);
 
+  const attacks = replayable ? fakeAttacks(playerIds) : [];
+
+  // Which banners come back when the replay closes, mirroring the game: only
+  // a match that actually ended has an ending screen to be returned to. A
+  // knockout does not — the game carries on without you, and putting "You are
+  // out" up a second time would be re-asking a question already answered.
+  const bannerReturns = outcome?.kind === 'over' || outcome?.kind === 'surrendered';
+
+  hud.onReplayOpen(() => {
+    hud.showReplay(attacks.length);
+    readout.textContent = 'replay opened from the controls row, with no banner in the way';
+  });
+  hud.onReplaySeek((step) => {
+    hud.showBattle(step > 0 ? attacks[step - 1] : null);
+    hud.setHistory(attacks.slice(0, step));
+    readout.textContent = `replay at step ${step} of ${attacks.length}`;
+  });
+  hud.onReplayClose(() => {
+    hud.hideReplay();
+    hud.showBattle(null); // nothing was shown before the replay in this scenario either
+    hud.setHistory([]);
+    if (bannerReturns) hud.showOutcome(outcome);
+    readout.textContent = bannerReturns
+      ? 'replay closed — the banner is back'
+      : 'replay closed — back to the board, with the button still on the row';
+  });
+
   if (outcome) {
     hud.showOutcome(outcome);
-    const attacks = outcome.canReplay ? fakeAttacks(playerIds) : [];
-
-    hud.onReplaySeek((step) => {
-      hud.showBattle(step > 0 ? attacks[step - 1] : null);
-      hud.setHistory(attacks.slice(0, step));
-      readout.textContent = `replay at step ${step} of ${attacks.length}`;
-    });
-    hud.onReplayClose(() => {
-      hud.hideReplay();
-      hud.showBattle(null); // nothing was shown before the replay in this scenario either
-      hud.setHistory([]);
-      hud.showOutcome(outcome);
-      readout.textContent = 'replay closed — the banner is back';
-    });
 
     hud.onOutcomeAction((action) => {
       readout.textContent = `action fired: ${action}`;
@@ -125,6 +144,7 @@ const status = (over = {}) => ({
   winner: null,
   isOver: false,
   humanEliminated: false,
+  playedOn: false,
   canAct: true,
   ...over,
 });
@@ -203,21 +223,39 @@ addScenario({
 addScenario({
   title: 'You are knocked out',
   note: 'The case that used to pass in complete silence: your last territory goes, the AIs play '
-    + 'on, and nothing said why the board had stopped answering. "Spectate" leads, because '
-    + 'carrying on throws nothing away.',
+    + 'on, and nothing said why the board had stopped answering. Three ways on, gentlest first — '
+    + '"Spectate" leads because carrying on throws nothing away, and the replay sits in the '
+    + 'middle: this is the moment there is most to look back at, since the match you were '
+    + 'playing is over whatever the board goes on doing without you.',
   holdings: [0, 14, 9, 12, 8, 6],
   currentIndex: 2,
   status: status({ currentPlayerId: 'p3', humanEliminated: true }),
-  outcome: { kind: 'eliminated', by: 'p3', humanPlayerId: 'p1' },
+  outcome: { kind: 'eliminated', by: 'p3', humanPlayerId: 'p1', canReplay: true },
 });
 
 addScenario({
   title: 'Watching on, after being knocked out',
   note: 'What the banner leaves behind: the indicator says you are out and watching, your tile is '
-    + 'greyed in the row, and there is no turn to take. Reachable above by pressing "Spectate".',
+    + 'greyed in the row, and there is no turn to take. Reachable above by pressing "Spectate". '
+    + 'Note what did *not* go with the banner — the Replay button is still on the row. An offer '
+    + 'once made is never withdrawn, and dismissing this banner used to put the replay one press '
+    + 'away and out of reach without reloading the page.',
   holdings: [0, 14, 9, 12, 8, 6],
   currentIndex: 2,
+  hasReplay: true,
   status: status({ currentPlayerId: 'p3', humanEliminated: true }),
+});
+
+addScenario({
+  title: 'Playing on, past a surrender',
+  note: 'The case a session flag would get wrong. The banner is gone, the match is running, it is '
+    + 'your turn — and the win you waved away is still there to be looked at. The button is on '
+    + 'the row because `playedOn` travels in the save, so this survives a reload with no banner '
+    + 'to re-raise it. Opening it here pauses the match rather than letting the AI play on behind '
+    + 'the overlay.',
+  holdings: [34, 6, 5, 4, 0, 0],
+  hasReplay: true,
+  status: status({ playedOn: true }),
 });
 
 addScenario({
