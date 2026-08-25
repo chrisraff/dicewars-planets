@@ -588,6 +588,11 @@ export function createSession({
       reinforceAnim = null;
       replayFight = null;
       replayRoll = null;
+      // The replay drives itself on a timer now, and that timer outlives the
+      // markup `replaceChildren` is about to throw away — it would go on
+      // asking this session to paint steps onto a planet that has been taken
+      // out of the scene. Closing the replay is what stops it.
+      hud.hideReplay();
       cameraFocus.dispose();
       viewer.scene.remove(surface.group, dice.group, poles.group);
       surface.dispose();

@@ -286,6 +286,16 @@ landing spots, neither with any three.js in it at all. Modules importable
 without a DOM are testable, so keep `document` access inside functions rather
 than at module top level.
 
+A replay starts playing the moment it opens: somebody who has just pressed
+"Watch replay" has said what they want, and leaving them on a still board to
+go and find the play button asks the question twice. Any touch of the
+transport pauses it — `seekReplay` stops the timer before it paints, so the
+track and the arrows take it back off the player's hands the moment they reach
+for it. That also means the timer is the *default* state rather than the
+exception, which is why `session.dispose` closes the replay: the interval
+outlives the markup and would go on painting steps onto a planet that has been
+taken out of the scene.
+
 A replay throws its dice too, at `REPLAY_TIMING` — briefer than even the AI's
 pace, because the track advances itself every `REPLAY_STEP_MS` and a throw
 still in the air when the next step arrives is a throw nobody sees land. Only

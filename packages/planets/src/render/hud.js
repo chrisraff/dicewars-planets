@@ -635,10 +635,20 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     },
 
     /**
-     * Opens the replay over the banner, for `count` recorded attacks. Starts
-     * at step 0 (the board before the first one) and asks the session to
-     * paint it, same as every later step — there is no state here that isn't
-     * also reachable by scrubbing the track back to the start.
+     * Opens the replay over the banner, for `count` recorded attacks, and
+     * starts it playing. Someone who has just pressed "Watch replay" has said
+     * what they want; leaving them on a still board to go and find the play
+     * button is asking the question twice.
+     *
+     * It opens on step 0 — the board before the first attack — and asks the
+     * session to paint it, same as every later step, so there is no state
+     * here that isn't also reachable by scrubbing the track back to the
+     * start. The first beat is spent on that opening board, which is the one
+     * view of the match nothing else shows.
+     *
+     * Any touch of the transport stops it: `seekReplay` pauses before it
+     * paints, so dragging the track or stepping with the arrows takes it back
+     * off the player's hands the moment they reach for it.
      *
      * The menu button hides while this is open: the × is the way back to the
      * outcome screen, and a second way out sitting right next to it is one
@@ -650,6 +660,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       replayOverlay.hidden = false;
       menuButton.style.visibility = 'hidden';
       paintReplayStep(0);
+      startReplaying();
     },
 
     hideReplay() {

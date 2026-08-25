@@ -88,11 +88,12 @@ function addScenario({ title, note, stageClass = '', settings = {} }) {
 
 addScenario({
   title: 'A replay, watched on the planet',
-  note: 'A real match — no two loads of this page play out quite the same. Drag the track, step '
-    + 'with ‹ ›, or press ▶: the camera swings to each attack and only then does the surface and '
-    + 'the dice show what happened there, exactly what "Watch replay" opens onto after a real '
-    + 'game. Drag anywhere off the transport bar to orbit, the way you would mid-match. Note the '
-    + 'menu button is gone while this is open — the × is the way back to the outcome screen.',
+  note: 'A real match — no two loads of this page play out quite the same. It starts playing on '
+    + 'its own, exactly as "Watch replay" does after a real game: the camera swings to each '
+    + 'attack, the dice are thrown, and only then does the surface show what they did. Touch the '
+    + 'transport and it pauses — drag the track, or step with ‹ › — and ▶ picks it up again. Drag '
+    + 'anywhere off the transport bar to orbit, the way you would mid-match. Note the menu button '
+    + 'is gone while this is open — the × is the way back to the outcome screen.',
 });
 
 addScenario({
