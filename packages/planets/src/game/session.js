@@ -17,6 +17,7 @@ import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
 import { createPoleMarkers } from '../render/poleMarkers.js';
 import { createRollAnimation } from '../render/rollAnimation.js';
+import { REPLAY_TIMING } from '../render/rollTimeline.js';
 import { createReinforceAnimation } from '../render/reinforceAnimation.js';
 import { createCameraFocus } from '../render/cameraFocus.js';
 import { fightCenter } from '../render/cameraFraming.js';
@@ -166,6 +167,9 @@ export function createSession({
   let hintSeen = attackHintSeen;
   let pendingReplayStep = null; // a board waiting for the camera to arrive before it shows
   let replayFight = null; // the fight the replay is stopped on, throbbing as a live one does
+  let replayRoll = null; // the attack a replay step is throwing dice for
+  let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
+  let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -175,25 +179,91 @@ export function createSession({
   // same way it shows the last fight during live play; the history behind it
   // is truncated to `step` for the same reason — opening it from partway
   // through the track should not spoil what the track hasn't reached yet.
-  function applyReplayStep(step, entry, nodes) {
+  function applyReplayStep(step, entry, nodes, { animate = false } = {}) {
     const atEnd = step >= replay.attacks.length;
     const players = replay.playersAt(step);
+
+    // A step reached by playing forward throws its dice before showing what
+    // they did, so the board this paints is the one *before* the attack —
+    // the stacks are still standing where they are about to be thrown from.
+    // Everything else about the step is drawn now either way: the readout
+    // holds its faces back (`revealed: false`) exactly as live play does, and
+    // the stats and history belong to the step being arrived at, not the one
+    // being left.
+    const rolling = animate && entry;
+    const board = rolling ? replay.boardAt(step - 1) : nodes;
     // The board a replay draws is a board mid-match, so the fight it stopped
     // on is marked the way a live one is — attacker held dark, defender
     // glowing. Without it the readout names a pair of territories that the
     // planet gives no way of finding, on a board where nothing is moving to
     // point at them. It throbs from here on out (see tick), so a step that
     // took a camera swing to reach isn't a still frame when it lands.
-    replayFight = entry ? { entry, nodes, elapsed: 0 } : null;
-    paintReplayBoard(nodes, entry, pulseAt(0));
-    dice.update({ nodes });
-    poles.settle({ nodes });
+    replayFight = entry ? { entry, nodes: board, elapsed: 0 } : null;
+    paintReplayBoard(board, entry, pulseAt(0));
+    settleThrownDice(board);
+    dice.update({ nodes: board });
+    poles.settle({ nodes: board });
+
+    if (rolling) startReplayRoll(entry, nodes);
+
     hud.showPlayers(playerStatsFor(
       { nodes, players, phase: 'gameover', winner: atEnd ? game.state.winner : null },
       playerIds
     ));
-    hud.showBattle(entry);
+    hud.showBattle(entry, rolling ? { revealed: false } : undefined);
     hud.setHistory(replay.historyAt(step));
+  }
+
+  /**
+   * Throws this step's dice across the two territories, the way live play
+   * does, and remembers the board to land on when they stop.
+   *
+   * A replay entry is a battle *log* entry rather than the attack event the
+   * animation was written for, so the faces come out of it by hand — they are
+   * the same numbers under a different pair of names.
+   */
+  function startReplayRoll(entry, nodes) {
+    replayRoll = {
+      elapsed: 0,
+      entry,
+      nodes,
+      animation: createRollAnimation({
+        attackerStand: dice.standFor(entry.from),
+        defenderStand: dice.standFor(entry.to),
+        event: { attackRolls: entry.attacker.rolls, defendRolls: entry.defender.rolls },
+        dieSize: dice.dieSize,
+        timing: REPLAY_TIMING,
+      }),
+    };
+    thrownDice = { from: entry.from, to: entry.to };
+  }
+
+  /** The board the throw was for, once the dice have stopped on it. */
+  function landReplayRoll({ entry, nodes }) {
+    settleThrownDice(nodes);
+    dice.update({ nodes });
+    poles.settle({ nodes });
+    if (replayFight) replayFight.nodes = nodes;
+    hud.showBattle(entry); // the faces, now that they have actually landed
+  }
+
+  /**
+   * Stands a thrown pair of stacks back up against whatever board is about to
+   * be drawn — on the step the throw was for, or on some other step entirely
+   * if the track moved on before the dice landed.
+   *
+   * `dice.update` cannot do this on its own: it rebuilds a stack only when
+   * its *count* changes, and a defender that is taken with exactly as many
+   * dice as it was holding keeps its count while every one of its dice is
+   * lying scattered on the ground. `reroll` rebuilds regardless, which is why
+   * live play calls it by hand for both sides of an attack too.
+   */
+  function settleThrownDice(nodes) {
+    if (!thrownDice) return;
+    const { from, to } = thrownDice;
+    thrownDice = null;
+    dice.reroll(from, { nodes });
+    dice.reroll(to, { nodes });
   }
 
   // The planet as some replay step left it, with that step's fight marked.
@@ -214,18 +284,25 @@ export function createSession({
   function showReplayStep(step) {
     const nodes = replay.boardAt(step);
     const entry = step > 0 ? replay.attacks[step - 1] : null;
+    // Only a step *forward* throws dice. Playing and the › button both move
+    // one at a time and are worth watching; dragging the track is a scrub
+    // through dozens of steps and animating each one would be a mess, and
+    // stepping back is arriving at a board rather than watching it happen.
+    const animate = step === replayStep + 1;
 
-    pendingReplayStep = null; // this seek supersedes whatever was still pending
+    replayStep = step;
+    replayRoll = null; // this seek supersedes whatever was still in the air
+    pendingReplayStep = null; // and whatever was still waiting on the camera
 
     // Looks ahead through every attack still to come, not just this one, so
     // a run of nearby fights gets one swing instead of several — the replay
     // order is never reordered (unlike a live AI turn), only clustered.
     if (entry && focusFights(replay.attacks.slice(step - 1))) {
-      pendingReplayStep = { step, entry, nodes };
+      pendingReplayStep = { step, entry, nodes, animate };
       return; // applied once the swing lands, in tick() below
     }
 
-    applyReplayStep(step, entry, nodes);
+    applyReplayStep(step, entry, nodes, { animate });
   }
 
   function openReplay() {
@@ -237,6 +314,9 @@ export function createSession({
     hud.hideReplay();
     pendingReplayStep = null;
     replayFight = null;
+    replayRoll = null;
+    replayStep = 0;
+    settleThrownDice(game.state.nodes);
     cameraFocus.cancel();
     // the replay has been drawing straight into the surface, dice, stats and
     // the battle readout; put the real, finished match back before the
@@ -468,9 +548,18 @@ export function createSession({
     tick(dt) {
       cameraFocus.tick(dt);
       if (pendingReplayStep && !cameraFocus.isSwinging) {
-        const { step, entry, nodes } = pendingReplayStep;
+        const { step, entry, nodes, animate } = pendingReplayStep;
         pendingReplayStep = null;
-        applyReplayStep(step, entry, nodes);
+        applyReplayStep(step, entry, nodes, { animate });
+      }
+      if (replayRoll) {
+        replayRoll.elapsed += dt;
+        const beat = replayRoll.animation.apply(replayRoll.elapsed);
+        if (beat.phase === 'done') {
+          const landed = replayRoll;
+          replayRoll = null;
+          landReplayRoll(landed);
+        }
       }
       if (replayFight) {
         replayFight.elapsed += dt;
@@ -498,6 +587,7 @@ export function createSession({
       roll = null;
       reinforceAnim = null;
       replayFight = null;
+      replayRoll = null;
       cameraFocus.dispose();
       viewer.scene.remove(surface.group, dice.group, poles.group);
       surface.dispose();

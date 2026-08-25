@@ -6,6 +6,20 @@ export const DEFAULT_TIMING = {
   read: 0.7, // everything holds still long enough to read the totals
 };
 
+/**
+ * The same throw, briefer still, for a replay.
+ *
+ * A replay is watched rather than played, and its dice have to land inside
+ * the cadence the track advances at (`REPLAY_STEP_MS`) or every roll is cut
+ * off by the next step — so this is shorter than even the AI's pace. The aim
+ * beat is nearly nothing because a replay step has already marked its fight
+ * before the dice move; there is no moment of "who is attacking whom" left to
+ * cover. What is kept is `read`: the whole point of throwing the dice out
+ * across the territory is that the roll can be read off the ground, and dice
+ * that re-stack the instant they land cannot be.
+ */
+export const REPLAY_TIMING = { aim: 0.05, roll: 0.3, read: 0.25 };
+
 export const TUMBLE_TURNS = 3; // whole turns a die makes on the way up and down
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));

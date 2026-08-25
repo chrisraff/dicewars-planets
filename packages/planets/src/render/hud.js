@@ -229,6 +229,14 @@ export function outcomeView(outcome, nameOf = (id) => id) {
   };
 }
 
+/**
+ * How long the replay holds each step while playing itself. Exported because
+ * it is a budget as much as a pace: the dice thrown for a step have to have
+ * landed before the next one arrives, which is what `REPLAY_TIMING` is sized
+ * against.
+ */
+export const REPLAY_STEP_MS = 900;
+
 export function createHud(root, { playerColors, playerNames = new Map() } = {}) {
   root.innerHTML = `
     <div class="hud-top">
@@ -297,7 +305,6 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
   const replayOverlay = root.querySelector('.hud-replay');
   const replayTrack = root.querySelector('.hud-replay-track');
   const replayPlay = root.querySelector('.hud-replay-play');
-  const REPLAY_STEP_MS = 900;
   let replayTimer = null;
   let replaySeekHandler = null;
   let replayCloseHandler = null;

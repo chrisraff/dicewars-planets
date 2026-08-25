@@ -286,6 +286,21 @@ landing spots, neither with any three.js in it at all. Modules importable
 without a DOM are testable, so keep `document` access inside functions rather
 than at module top level.
 
+A replay throws its dice too, at `REPLAY_TIMING` — briefer than even the AI's
+pace, because the track advances itself every `REPLAY_STEP_MS` and a throw
+still in the air when the next step arrives is a throw nobody sees land. Only
+a step *forward* animates: playing and `›` both move one at a time and are
+worth watching, while dragging the track is a scrub through dozens of steps
+and stepping back is arriving at a board rather than watching it happen.
+
+An animated step paints the board from *before* its attack, so the stacks are
+standing where they are about to be thrown from, and lands on the board after
+it once the dice stop. That landing has to call `diceLayer`'s `reroll` for
+both territories rather than relying on `update`, which rebuilds a stack only
+when its dice *count* changes — a defender taken with exactly as many dice as
+it was holding keeps its count while every one of its dice is lying scattered
+on the ground. Live play calls `reroll` by hand for the same reason.
+
 Attacking dice don't tumble in place: they are thrown out across the
 territory and land flat, so a roll of eight can be read at a glance instead of
 being stacked inside itself. Two rules make that work, and they meet in

@@ -4,8 +4,11 @@ import {
   sampleAttack,
   attackDuration,
   DEFAULT_TIMING,
+  REPLAY_TIMING,
   TUMBLE_TURNS,
 } from '../src/render/rollTimeline.js';
+import { AI_TIMING } from '../src/game/createGame.js';
+import { REPLAY_STEP_MS } from '../src/render/hud.js';
 
 const T = DEFAULT_TIMING;
 
@@ -66,4 +69,32 @@ test('a faster timing runs the same shape in less time', () => {
   assert.equal(sampleAttack(0.06, quick).phase, 'roll');
   assert.equal(sampleAttack(0.3, quick).phase, 'read');
   assert.equal(sampleAttack(0.25, quick).settle, sampleAttack(T.aim + T.roll, T).settle);
+});
+
+
+// --- the replay's own pace ------------------------------------------------
+
+test('a replay throw lands before the track moves on without it', () => {
+  // The replay advances itself every REPLAY_STEP_MS while playing, and a
+  // throw that has not finished by then is cut off mid-air by the next step.
+  // This is the whole constraint REPLAY_TIMING is sized against, and nothing
+  // in either constant enforces it on the other.
+  assert.ok(
+    attackDuration(REPLAY_TIMING) * 1000 < REPLAY_STEP_MS,
+    `a replay roll takes ${attackDuration(REPLAY_TIMING)}s but a step is ${REPLAY_STEP_MS}ms`
+  );
+});
+
+test('a replay throw is brisker than the AI’s, which is brisker than a player’s', () => {
+  // watched rather than played, and played faster than it is watched
+  assert.ok(attackDuration(REPLAY_TIMING) < attackDuration(AI_TIMING));
+  assert.ok(attackDuration(AI_TIMING) < attackDuration(DEFAULT_TIMING));
+});
+
+test('a replay throw still holds the dice still long enough to be read', () => {
+  // the reason the dice are thrown across the territory at all is that the
+  // roll can be read off the ground — a throw that re-stacks the instant it
+  // lands would be motion for its own sake
+  assert.ok(REPLAY_TIMING.read > 0.2);
+  assert.equal(sampleAttack(attackDuration(REPLAY_TIMING) - 0.01, REPLAY_TIMING).phase, 'read');
 });
