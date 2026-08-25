@@ -149,3 +149,21 @@ test('the player in the losing seat is not handed the game they are losing', () 
 
   assert.deepEqual(offers, []);
 });
+
+// The session holds the match behind the surrender banner until it is
+// answered — otherwise the AIs take turns underneath a question about the
+// position, and pressing "Play on" drops the player into a board several turns
+// past the one they were being asked about. Holding outright is only safe
+// because the offer lands at a settled moment: it is judged at the end of a
+// turn, with the payout already applied and no attack pending.
+test('a surrender is offered with nothing left in the air behind it', () => {
+  const game = createGame({ world: decided(), rollDie: alwaysRolls(1) });
+  const busyAtOffer = [];
+  game.on('surrendered', () => busyAtOffer.push(game.isBusy()));
+
+  game.start();
+  game.endTurn();
+  advance(game, 5);
+
+  assert.deepEqual(busyAtOffer, [false], 'the banner goes up over a settled board');
+});

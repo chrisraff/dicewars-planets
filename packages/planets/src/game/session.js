@@ -175,7 +175,10 @@ export function createSession({
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
-  let replayOpen = false; // the match is held while it is — see tick() below
+  // The two things that take the match out of the player's hands. Nothing in
+  // it moves while either is true — see tick() at the bottom.
+  let replayOpen = false;
+  let bannerHolding = false;
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -383,9 +386,33 @@ export function createSession({
     onAttackHintSeen?.();
   }
 
+  /**
+   * A banner over a match that is **still running** — knocked out, or handed
+   * the win because everyone else gave up — and the match held behind it until
+   * it is answered.
+   *
+   * Holding is the whole point. Without it the AIs went on taking turns behind
+   * the banner: you were told you were out while the planet carried on being
+   * carved up underneath, and dismissing it dropped you into a board several
+   * turns past the one the banner went up over. Both of these are questions,
+   * and a question that goes stale while it is being asked is worse than not
+   * asking it.
+   *
+   * Both moments are already settled ones — a knockout is emitted after the
+   * attack has been applied, a surrender is judged at the end of a turn — so
+   * unlike the replay there is never a move in mid-air to put down first.
+   *
+   * The banner covers the whole HUD, so answering it is the only way out and
+   * the hold cannot be stranded: every action releases it.
+   */
+  function interrupt(outcome) {
+    bannerHolding = true;
+    hud.showOutcome(outcome);
+  }
+
   // The banner a finished match ends on. In one place because it goes up
   // twice: when the game is won, and when a save of a game already won is
-  // opened again.
+  // opened again. No hold: there is nothing left to play.
   function showEnding(winner) {
     lastOutcome = { kind: 'over', winner, humanPlayerId, canReplay: replay.attacks.length > 0 };
     hud.showOutcome(lastOutcome);
@@ -508,7 +535,7 @@ export function createSession({
         // without you has no ending screen to be returned to, so closing a
         // replay opened from here puts you back on the board rather than
         // re-imposing a banner you have already answered.
-        hud.showOutcome({
+        interrupt({
           kind: 'eliminated',
           by: event.by,
           humanPlayerId,
@@ -540,7 +567,7 @@ export function createSession({
   // up that would otherwise stand between them and it.
   game.on('surrendered', () => {
     lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
-    hud.showOutcome(lastOutcome);
+    interrupt(lastOutcome);
   });
 
   game.on('over', (winner) => {
@@ -550,6 +577,10 @@ export function createSession({
   });
 
   hud.onOutcomeAction((action) => {
+    // Whatever it is, the question has been answered — so the match is no
+    // longer held for it. 'replay' hands the hold straight over to the replay
+    // itself, which keeps it until the overlay closes.
+    bannerHolding = false;
     if (action === 'newGame') return onNewGame?.();
     if (action === 'replay') return openReplay();
 
@@ -633,12 +664,12 @@ export function createSession({
           reinforceAnim.dropped++;
         }
       }
-      // Held while the replay has the planet. There is one board between them,
-      // and letting the AI take three turns behind the overlay would mean
-      // closing it dropped the player somewhere they never saw happen.
-      // `game.tick` is the only clock in the match, so not calling it is the
-      // whole of the pause.
-      if (!replayOpen) game.tick(dt);
+      // Held while the replay has the planet, and while a banner is up over a
+      // match that is still running. Both are the same problem: letting the AI
+      // take three turns behind something the player is looking at means
+      // closing it drops them somewhere they never saw happen. `game.tick` is
+      // the only clock in the match, so not calling it is the whole of it.
+      if (!replayOpen && !bannerHolding) game.tick(dt);
     },
 
     dispose() {

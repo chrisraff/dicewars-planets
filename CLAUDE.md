@@ -308,6 +308,18 @@ says who won and who is out, and `playedOn` travels in the save. Before this,
 "Look at the board", "Spectate" and "Play on" all closed the banner for good
 and left the replay one press away and unreachable.
 
+Two of those banners go up over a match that is **still running**, and the
+match is held behind them until they are answered (`interrupt` in
+`session.js`). Without it the AIs went on taking turns underneath: you were
+told you were out while the planet carried on being carved up, and dismissing
+the banner dropped you into a board several turns past the one it went up
+over. Both banners are questions, and a question that goes stale while it is
+being asked is worse than not asking it. Holding outright is safe because both
+arrive at a settled moment — a knockout is emitted after its attack has been
+applied, a surrender is judged at the end of a turn — so unlike the replay
+there is never a move in mid-air to put down first. The banner covers the whole
+HUD, so answering it is the only way out and the hold cannot be stranded.
+
 That second door opens onto a match that may still be *running* — playing on
 past a surrender, or watching from a knockout — so two things follow.
 `settleLiveBoard` finishes whatever move was mid-air first, in one long

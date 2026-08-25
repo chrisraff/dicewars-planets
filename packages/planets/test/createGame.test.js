@@ -523,3 +523,40 @@ test('a turn cannot end on top of an attack that has not landed', () => {
   assert.equal(game.currentPlayer(), 'p1', 'the end-turn should have been refused, not queued');
   assert.equal(game.isBusy(), false, 'and the one pending thing settled in that single tick');
 });
+
+// --- the moment a knockout is announced -----------------------------------
+//
+// The session puts a banner up on this event and holds the match behind it
+// until the player answers. That it arrives at a *settled* moment is what lets
+// it hold outright, with no move left in mid-air to put down first.
+
+test('being knocked out is announced with the board already settled', () => {
+  const game = createGame({
+    // p1 holds one territory with a strong neighbour on it; p3 keeps the game
+    // alive afterwards, so this is a knockout rather than a finished match
+    world: chainWorld([
+      ['mine', { owner: 'p1', dice: 1 }],
+      ['theirs', { owner: 'p2', dice: 8 }],
+      ['theirs2', { owner: 'p2', dice: 2 }],
+      ['third', { owner: 'p3', dice: 3 }],
+      ['third2', { owner: 'p3', dice: 3 }],
+    ], { playerIds: ['p1', 'p2', 'p3'] }),
+    humanPlayerId: 'p1',
+    rollDie: alwaysRolls(6),
+  });
+
+  const seen = [];
+  game.on('eliminated', (event) => {
+    seen.push({ playerId: event.playerId, busy: game.isBusy(), owner: game.state.nodes.get('mine').owner });
+  });
+
+  game.start();
+  game.endTurn();
+  advance(game, 10);
+
+  assert.equal(seen.length, 1, 'p1 should have been knocked out');
+  assert.equal(seen[0].playerId, 'p1');
+  assert.equal(seen[0].busy, false, 'nothing is still in the air when the banner goes up');
+  assert.equal(seen[0].owner, 'p2', 'and the attack that did it has already been applied');
+  assert.equal(game.isOver(), false, 'p3 is still standing, so the match carries on without you');
+});
