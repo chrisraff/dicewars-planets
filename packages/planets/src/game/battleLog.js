@@ -35,13 +35,15 @@ export function battleEntry(event) {
  * Old entries fall off the end past `limit`: a long game is thousands of
  * attacks and nobody scrolls back that far.
  *
- * `entries` restores a log from a saved game. Numbering picks up above the
- * highest id restored rather than from one, so an id stays a stable handle on
- * an entry for as long as the entry is in the log.
+ * `entries` restores a log from a saved game — nowadays the history read back
+ * out of that game's replay, which is where the record actually lives. Those
+ * entries arrive without ids, because an id is not a fact about a battle: it
+ * is this log's own handle on a row, minted here and only ever needing to
+ * stay put for as long as the row is in the log.
  */
 export function createBattleLog({ limit = DEFAULT_LIMIT, entries: restored = [] } = {}) {
-  const entries = restored.slice(-limit).map((entry) => ({ ...entry }));
-  let nextId = entries.reduce((highest, entry) => Math.max(highest, entry.id), 0) + 1;
+  let nextId = 1;
+  const entries = restored.slice(-limit).map((entry) => ({ ...entry, id: nextId++ }));
 
   function push(entry) {
     const stamped = { id: nextId++, ...entry };

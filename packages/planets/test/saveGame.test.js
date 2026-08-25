@@ -15,7 +15,27 @@ import {
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createGame, AUTOPLAY } from '../src/game/createGame.js';
 import { normalizeSettings } from '../src/game/settings.js';
+import { createReplay, reviveReplay, serializeReplay } from '../src/game/replay.js';
 import { boardOf } from '@dicewars/core/test-support';
+
+/**
+ * A replay wired to a game the way the session wires one: an attack recorded
+ * once it has actually resolved rather than the moment it is declared.
+ */
+function recordedReplay(game) {
+  const replay = createReplay({
+    nodes: game.state.nodes,
+    reserves: new Map([...game.state.players].map(([id, player]) => [id, player.reserve])),
+  });
+  let declared = null;
+  game.on('attack', ({ event }) => {
+    declared = event;
+  });
+  game.on('resolved', () => replay.record(declared));
+  game.on('eliminated', (event) => replay.recordElimination(event));
+  game.on('reinforce', (event) => replay.recordReinforcement(event));
+  return replay;
+}
 
 /** Runs the clock forward in small steps, as the render loop would. */
 function advance(game, seconds, step = 1 / 60) {
@@ -62,7 +82,7 @@ const saveOf = (seed, over = {}) => {
     humanPlayerId: 'p2',
     world,
     state: serializeState(createInitialState(world)),
-    battles: [],
+    replay: serializeReplay(createReplay()),
     ...over,
   });
 };
@@ -95,12 +115,18 @@ test('there is nothing to continue when nothing was ever saved', () => {
   assert.equal(readSavedGame(fakeStorage()), null);
 });
 
-test('a finished game is not offered as one to continue', () => {
+test('a finished game is kept, because its replay is still worth coming back to', () => {
+  // it used to be dropped on the grounds that there was nothing left to play.
+  // The replay travels in the save now, and a match played out is the one most
+  // worth watching — so a reload lands back on the ending rather than dealing
+  // a fresh planet over it.
   const save = saveOf(11);
   save.state.phase = 'gameover';
   save.state.winner = 'p1';
 
-  assert.equal(readSavedGame(stored(save)), null, 'there is nothing left to play');
+  const read = readSavedGame(stored(save));
+  assert.equal(read.state.phase, 'gameover');
+  assert.equal(read.state.winner, 'p1');
 });
 
 test('a save from an older version of the game is discarded, not half-read', () => {
@@ -116,6 +142,8 @@ test('a save missing the pieces a game cannot be rebuilt without is refused', ()
     { world: undefined },
     { state: undefined },
     { state: { phase: 'attack' } }, // a state, but with no board in it
+    { replay: undefined }, // no record of how the board got that way
+    { replay: { nodes: [], reserves: [] } }, // half a replay is not a replay
   ]) {
     assert.equal(readSavedGame(stored({ ...saveOf(11), ...broken })), null, JSON.stringify(broken));
   }
@@ -252,6 +280,7 @@ test('a game played, saved and picked up again is the same game', () => {
   const seed = 4242;
   const world = worldOf(seed);
   const game = createGame({ world, humanPlayerId: 'p2', rollDie: seededRoll(9) });
+  const replay = recordedReplay(game);
 
   for (let i = 0; i < 40; i++) advance(game, 1);
 
@@ -261,7 +290,7 @@ test('a game played, saved and picked up again is the same game', () => {
     humanPlayerId: game.humanPlayerId,
     world,
     state: serializeState(game.state),
-    battles: [],
+    replay: serializeReplay(replay),
   });
 
   const read = readSavedGame(stored(save));
@@ -280,6 +309,19 @@ test('a game played, saved and picked up again is the same game', () => {
     [...resumed.state.players].map(([id, p]) => [id, p.reserve]),
     [...game.state.players].map(([id, p]) => [id, p.reserve]),
     'banked dice included'
+  );
+
+  // and the record of how it got there, which is the other half of what a
+  // save is for now — the same match arrives with its replay intact, and that
+  // replay still walks forward onto the very board that was just restored
+  const replayed = reviveReplay(read.replay);
+  assert.deepEqual(replayed.moves, replay.moves, 'every move, down to the faces rolled');
+  // every move, not every attack: a step of the replay is a fight, so the
+  // payout this match happened to stop just after belongs to no step at all
+  assert.deepEqual(
+    boardOf({ nodes: replayed.boardAt(Infinity) }),
+    boardOf(game.state),
+    'and replaying them lands on the board the save was taken from'
   );
 });
 

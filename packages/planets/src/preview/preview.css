@@ -225,6 +225,22 @@ h1 {
   color: #75757e;
 }
 
+/* The one control on the storage preview — page furniture, not an exhibit, so
+   it is styled here rather than borrowed from the game's own buttons. */
+.perf-run {
+  font: inherit;
+  color: #8fb8ff;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.perf-run:disabled {
+  color: #55555e;
+  cursor: default;
+}
+
 /* ---- the endings preview ---------------------------------------------- */
 
 /* In the game the banner covers #hud, which is fixed to the viewport. Here it

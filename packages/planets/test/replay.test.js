@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { createInitialState } from '@dicewars/core';
 import { chainState, chainWorld, alwaysRolls, rollsOf } from '@dicewars/core/test-support';
 import { createGame } from '../src/game/createGame.js';
+import { createBattleLog } from '../src/game/battleLog.js';
 import {
   createReplay,
+  reviveReplay,
+  serializeReplay,
   boardAfterAttacks,
   reservesAfterAttacks,
   historyThroughStep,
@@ -22,11 +25,16 @@ const world = () =>
     ['d', { owner: 'p2', dice: 1 }],
   ]);
 
-// Wires a replay log to a game the same way the session does: recorded once
-// the attack has actually resolved, not the moment it is merely declared.
-function replayedGame(w, options) {
+// Wires a replay log to a game the same way the session does: anchored on the
+// board the game opens with, and recorded once the attack has actually
+// resolved rather than the moment it is merely declared.
+function replayedGame(w, options, replayOptions) {
   const game = createGame({ world: w, ...options });
-  const replay = createReplay();
+  const replay = createReplay({
+    nodes: game.state.nodes,
+    reserves: new Map([...game.state.players].map(([id, player]) => [id, player.reserve])),
+    ...replayOptions,
+  });
   let pendingEvent = null;
   game.on('attack', ({ event }) => {
     pendingEvent = event;
@@ -344,4 +352,173 @@ test('a step past the end has the same history as the end itself', () => {
   advance(game, 3);
 
   assert.deepEqual(historyThroughStep(replay.attacks, 999), historyThroughStep(replay.attacks, 1));
+});
+
+// --- the cap, and the anchor that makes trimming lossless -----------------
+
+test('past the cap the oldest moves go, and the board they left behind stays exact', () => {
+  // the whole claim behind trimming: dropping a move is only lossless because
+  // the anchor absorbs it on the way out, so every step still standing
+  // rebuilds the board it actually stood on
+  // a longer board than `world()`, so taking two territories off p2 does not
+  // end the match before there is anything to trim
+  const w = chainWorld([
+    ['a', { owner: 'p1', dice: 8 }],
+    ['b', { owner: 'p2', dice: 1 }],
+    ['c', { owner: 'p1', dice: 8 }],
+    ['d', { owner: 'p2', dice: 1 }],
+    ['e', { owner: 'p2', dice: 8 }],
+    ['f', { owner: 'p2', dice: 4 }],
+  ]);
+  const game = createGame({ world: w, rollDie: alwaysRolls(6) });
+  const anchor = () => ({ nodes: game.state.nodes });
+  const trimmed = createReplay({ ...anchor(), limit: 3 });
+  const whole = createReplay(anchor());
+
+  let declared = null;
+  game.on('attack', ({ event }) => {
+    declared = event;
+  });
+  game.on('resolved', () => {
+    trimmed.record(declared);
+    whole.record(declared);
+  });
+  game.on('reinforce', (event) => {
+    trimmed.recordReinforcement(event);
+    whole.recordReinforcement(event);
+  });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.clickTerritory('c');
+  game.clickTerritory('d');
+  advance(game, 3);
+  game.endTurn();
+  advance(game, 10);
+
+  assert.ok(whole.moves.length > 3, 'sanity: the match ran long enough to be trimmed');
+  assert.equal(trimmed.moves.length, 3, 'only the last three moves are on the record');
+  assert.deepEqual(trimmed.moves, whole.moves.slice(-3), 'the newest, not the oldest');
+  assert.deepEqual(
+    [...trimmed.boardAt(Infinity)],
+    [...whole.boardAt(Infinity)],
+    'and the trimmed replay still ends on the same board, die for die'
+  );
+});
+
+test('a pass is recorded rather than worked out, so trimming cannot invent one', () => {
+  // "no attack since the last payout" would call this turn a pass the moment
+  // the attack that disproves it drops off the front of the log
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) }, { limit: 1 });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.endTurn(); // p1 fought this turn, so it is not a pass
+
+  assert.deepEqual(replay.moves.map((move) => move.kind), ['reinforce'], 'the attack is gone');
+  assert.deepEqual(replay.historyAt(), [], 'and the turn it belonged to is still not a pass');
+});
+
+// --- a replay, written down and read back ---------------------------------
+
+test('a replay survives being written down, including what was left out of it', () => {
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.endTurn();
+  advance(game, 10);
+
+  const revived = reviveReplay(JSON.parse(JSON.stringify(serializeReplay(replay))));
+
+  // none of this is written down: who was attacking, who was defending, what
+  // the totals came to and who won are all read back off the board the moves
+  // are walked over
+  assert.deepEqual(revived.moves, replay.moves);
+  assert.equal(revived.attacks[0].attacker.playerId, 'p1');
+  assert.equal(revived.attacks[0].defender.playerId, 'p2');
+  assert.equal(revived.attacks[0].attacker.total, 48, 'eight sixes');
+  assert.equal(revived.attacks[0].attackerWins, true);
+});
+
+test('a fight is written down as the two territories and the faces, and nothing else', () => {
+  // this is where a save shrank: five short values out, against two owners,
+  // two roll arrays, two totals and a verdict coming back
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+
+  assert.deepEqual(serializeReplay(replay).moves, [[0, 'a', 'b', '66666666', '6']]);
+});
+
+test('an elimination comes back out of a save, tagged onto the attack that caused it', () => {
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.clickTerritory('c');
+  game.clickTerritory('d'); // p2's last territory
+  advance(game, 3);
+
+  const revived = reviveReplay(serializeReplay(replay));
+  assert.deepEqual(revived.attacks[1].elimination, { playerId: 'p2', by: 'p1' });
+});
+
+test('a turn that passed is a history row of its own, the way the live log shows it', () => {
+  // the history panel is read out of the replay now, so anything the battle
+  // log used to record on its own has to survive in here — a turn with no
+  // fight in it included, or a resumed game loses rows it had before the
+  // reload
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.endTurn(); // p1 passes without attacking
+
+  assert.deepEqual(replay.historyAt(), [{ kind: 'passed', playerId: 'p1' }]);
+});
+
+test('the history a reload shows is the history the live log had before it', () => {
+  // the whole basis for not saving the battle log any more: what the replay
+  // gives back has to be what the log had, row for row — an elimination in
+  // its place after the attack that caused it, and a passed turn still there
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  // the battle log wired up exactly as session.js wires it during play
+  const live = createBattleLog();
+  let declared = null;
+  game.on('attack', ({ event }) => {
+    declared = event;
+  });
+  game.on('resolved', () => live.record(declared));
+  game.on('eliminated', (event) => live.record(event));
+  game.on('reinforce', (event) => {
+    if (event.passed) live.record({ type: 'passed', playerId: event.playerId });
+  });
+
+  game.endTurn(); // p1 passes
+  advance(game, 10);
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.clickTerritory('c');
+  game.clickTerritory('d'); // knocks p2 out
+  advance(game, 3);
+
+  const restored = reviveReplay(serializeReplay(replay)).historyAt();
+
+  assert.deepEqual(
+    restored.map((entry) => entry.kind),
+    live.entries.map((entry) => entry.kind),
+    'the same rows, in the same order'
+  );
+  assert.deepEqual(
+    restored.map(({ kind, from, to, playerId }) => ({ kind, from, to, playerId })),
+    live.entries.map(({ kind, from, to, playerId }) => ({ kind, from, to, playerId })),
+    'saying the same things'
+  );
 });

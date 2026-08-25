@@ -5,7 +5,7 @@ import { createMenu } from './render/menu.js';
 import { createSession } from './game/session.js';
 import { pointerToNdc } from './render/pickTerritory.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
-import { readSavedGame, writeSavedGame, clearSavedGame } from './game/saveGame.js';
+import { readSavedGame, writeSavedGame } from './game/saveGame.js';
 import { ATTACK_HINT, markHintSeen, readSeenHints } from './game/hints.js';
 
 const canvas = document.getElementById('planet-canvas');
@@ -33,10 +33,9 @@ function startGame(settings, saved = null) {
     saved,
     attackHintSeen,
     // the session decides what is worth keeping; this is the only place that
-    // knows where it goes. A finished game hands back null and is cleared,
-    // because there is nothing left to come back to.
-    onSave: (save) =>
-      save ? writeSavedGame(window.localStorage, save) : clearSavedGame(window.localStorage),
+    // knows where it goes. Nothing here clears it: a finished game is kept for
+    // its replay, and starting the next one overwrites it on the first move.
+    onSave: (save) => writeSavedGame(window.localStorage, save),
     onAttackHintSeen: () => {
       attackHintSeen = true;
       markHintSeen(window.localStorage, ATTACK_HINT);
@@ -64,7 +63,8 @@ const menu = createMenu(menuRoot, {
   onContinue: () => startGame(savedGame.settings, savedGame),
 });
 
-// Skip the menu if there is a game in progress.
+// Skip the menu if there is a game to pick back up — one in progress, or one
+// already won, which opens back onto the ending it finished on.
 if (savedGame) {
   startGame(savedGame.settings, savedGame);
 } else {

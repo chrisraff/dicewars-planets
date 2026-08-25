@@ -138,10 +138,23 @@ test('a restored log is a copy — playing on does not write back into the save'
 });
 
 test('a log restored from more entries than it holds keeps the newest', () => {
-  const many = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, kind: 'battle', from: i }));
+  const many = Array.from({ length: 200 }, (_, i) => ({ kind: 'battle', from: i }));
   const restored = createBattleLog({ limit: 5, entries: many });
 
   assert.equal(restored.entries.length, 5);
-  assert.equal(restored.latest.id, 200);
-  assert.equal(restored.record(attackEvent()).id, 201, 'and still numbers on from there');
+  assert.equal(restored.latest.from, 199, 'the last five fought, not the first five');
+});
+
+test('a log mints its own ids, since what it restores from has none', () => {
+  // the history comes back out of the replay now, where a row is a move
+  // rather than a numbered entry — so ids are this log's own handle on its
+  // rows, and all that is asked of them is that no two rows share one
+  const restored = createBattleLog({
+    entries: [{ kind: 'battle', from: 1 }, { kind: 'battle', from: 2 }],
+  });
+  restored.record(attackEvent());
+
+  const ids = restored.entries.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.every((id) => Number.isInteger(id)));
 });

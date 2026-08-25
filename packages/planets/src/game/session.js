@@ -9,7 +9,7 @@ import { generatePlanetWorld } from '../world/generateWorld.js';
 import { createGame } from './createGame.js';
 import { orderAiTurnForCamera } from './aiTurnOrder.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
-import { createReplay, boardAfterAttacks, reservesAfterAttacks, historyThroughStep } from './replay.js';
+import { createReplay, reviveReplay, serializeReplay } from './replay.js';
 import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, strategyFor, subdivisionsFor } from './settings.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
@@ -46,10 +46,11 @@ export const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange
  * the page decides where that fact is written down.
  *
  * `saved` resumes a match rather than dealing a new one, and `onSave` is
- * handed the state to write after every move — or `null` once the game is
- * over, since a finished game is not one to come back to. Storage itself stays
- * outside: the session says what is worth keeping, the page decides where it
- * goes, and nothing here has to know that localStorage exists.
+ * handed the state to write after every move — including the move that ends
+ * the game, since a finished match still has its replay to come back to.
+ * Storage itself stays outside: the session says what is worth keeping, the
+ * page decides where it goes, and nothing here has to know that localStorage
+ * exists.
  */
 export function createSession({
   viewer,
@@ -88,20 +89,14 @@ export function createSession({
     orderAiTurn: (moves) =>
       orderAiTurnForCamera(moves, (id) => dice.standFor(id).normal, cameraFocus.currentView()),
   });
-  const battles = createBattleLog({ entries: restored?.battles });
-  // Every attack and reinforcement recorded since this session opened, for
-  // the replay offered once the game ends — not saved and not restored,
-  // since a finished game's save is cleared the moment it ends and a replay
-  // only ever covers the match still open behind it. `initialNodes` and
-  // `initialReserves` are the board this session actually opened on — the
-  // planet as dealt for a fresh game, or the board a resumed one was picked
-  // back up on — which is what `replay`'s own moves build forward from. A
-  // replay of a resumed match therefore only reaches back to the reload, not
-  // to the game's true start: nothing before that was ever recorded to
-  // rebuild it from.
-  const replay = createReplay();
-  const initialNodes = game.state.nodes;
-  const initialReserves = new Map(playerIds.map((id) => [id, game.state.players.get(id).reserve]));
+  // Every attack and every payout, in the order they happened, anchored on
+  // the board they build forward from — the whole match, and it travels in
+  // the save, so a resumed game's replay still reaches back to where the
+  // recording began rather than only to the reload.
+  const replay = restoreReplay(restored, game.state);
+  // The history panel is the replay read back, rather than a second record of
+  // the same fights kept alongside it.
+  const battles = createBattleLog({ entries: replay.historyAt() });
 
   // A resumed game puts the camera back where it was left; a fresh one
   // leaves it wherever the viewer already starts.
@@ -179,7 +174,7 @@ export function createSession({
   // through the track should not spoil what the track hasn't reached yet.
   function applyReplayStep(step, entry, nodes) {
     const atEnd = step >= replay.attacks.length;
-    const players = reservesAfterAttacks(initialReserves, replay.moves, step);
+    const players = replay.playersAt(step);
     surface.refresh({ nodes });
     dice.update({ nodes });
     poles.settle({ nodes });
@@ -188,7 +183,7 @@ export function createSession({
       playerIds
     ));
     hud.showBattle(entry);
-    hud.setHistory(historyThroughStep(replay.attacks, step));
+    hud.setHistory(replay.historyAt(step));
   }
 
   // Live play shows an attack's result while the camera is still swinging to
@@ -199,7 +194,7 @@ export function createSession({
   // arrived just looks like the planet changed for no reason. So here, and
   // only here, the swing runs first and the board waits for it.
   function showReplayStep(step) {
-    const nodes = boardAfterAttacks(initialNodes, replay.moves, step);
+    const nodes = replay.boardAt(step);
     const entry = step > 0 ? replay.attacks[step - 1] : null;
 
     pendingReplayStep = null; // this seek supersedes whatever was still pending
@@ -244,7 +239,7 @@ export function createSession({
       humanPlayerId,
       world,
       state: serializeState(game.state),
-      battles: battles.entries,
+      replay: serializeReplay(replay),
       camera: cameraSnapshot(viewer.camera),
     });
   }
@@ -253,6 +248,14 @@ export function createSession({
     if (hintSeen) return;
     hintSeen = true;
     onAttackHintSeen?.();
+  }
+
+  // The banner a finished match ends on. In one place because it goes up
+  // twice: when the game is won, and when a save of a game already won is
+  // opened again.
+  function showEnding(winner) {
+    lastOutcome = { kind: 'over', winner, humanPlayerId, canReplay: replay.attacks.length > 0 };
+    hud.showOutcome(lastOutcome);
   }
 
   function refreshBoard(pulse = 1) {
@@ -373,14 +376,16 @@ export function createSession({
     // since the last tick. An attack still being animated is deliberately not
     // saved — the state it will land on has not been applied yet, so a reload
     // mid-roll simply un-throws those dice rather than saving half a battle.
-    onSave?.(game.isOver() ? null : snapshot());
+    // A finished game is saved too rather than cleared: there is no turn left
+    // to take, but the replay is in there, and reopening onto the ending is
+    // how a player gets back to it.
+    onSave?.(snapshot());
   });
 
   game.on('over', (winner) => {
     // the banner stays until the player dismisses it — winning gets a moment
     // rather than being covered by the menu the instant it happens
-    lastOutcome = { kind: 'over', winner, humanPlayerId, canReplay: replay.attacks.length > 0 };
-    hud.showOutcome(lastOutcome);
+    showEnding(winner);
   });
 
   hud.onOutcomeAction((action) => {
@@ -404,6 +409,11 @@ export function createSession({
   });
 
   hud.onMenu(() => onMenu?.());
+
+  // A game restored after it had already been won gets no `over` event —
+  // nothing happens in it any more — so the ending it finished on goes back up
+  // by hand, which is what makes "Watch replay" reachable after a reload.
+  if (game.isOver()) showEnding(game.state.winner);
 
   game.start();
 
@@ -452,6 +462,29 @@ export function createSession({
       hudRoot.replaceChildren();
     },
   };
+}
+
+/**
+ * The replay this session records into: the one saved with the match if there
+ * is one, otherwise a fresh one anchored on the board the session opens with.
+ *
+ * A replay that will not decode is dropped rather than thrown — the game
+ * behind it is still perfectly playable, and losing the record of how it got
+ * here is a far smaller loss than refusing to open it at all.
+ */
+function restoreReplay(restored, state) {
+  if (restored?.replay) {
+    try {
+      return reviveReplay(restored.replay);
+    } catch {
+      // a hand-edited or half-written save; carry on recording from here
+    }
+  }
+
+  return createReplay({
+    nodes: state.nodes,
+    reserves: new Map([...state.players].map(([id, player]) => [id, player.reserve])),
+  });
 }
 
 /**

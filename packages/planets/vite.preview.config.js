@@ -1,7 +1,17 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
-const PAGES = ['index', 'menu', 'hud', 'hints', 'battles', 'endgame', 'poles', 'replay'];
+const PAGES = [
+  'index',
+  'menu',
+  'hud',
+  'hints',
+  'battles',
+  'endgame',
+  'poles',
+  'replay',
+  'replay-perf',
+];
 
 /**
  * Compiles the development preview pages — the directory at /preview/ and the

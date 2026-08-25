@@ -7,7 +7,7 @@ import { normalizeSettings } from './settings.js';
  * world is a deterministic function of `(seed, settings)`, so one number
  * rebuilds every cell, every territory and every boundary exactly. What cannot
  * be recomputed — who owns what, how many dice, whose turn, what has been
- * banked, the battles fought so far — is stored outright.
+ * banked, the moves that got there — is stored outright.
  *
  * That trade has one failure mode, and it is the reason `SAVE_VERSION` and
  * `worldFingerprint` both exist: change the world generator and the same seed
@@ -15,13 +15,21 @@ import { normalizeSettings } from './settings.js';
  * A save is checked against the world it rebuilt before it is trusted, and a
  * mismatch is a discarded save rather than a board laid over land that is not
  * there any more.
+ *
+ * The match's `replay` travels with it, which is what lets a reload pick up a
+ * replay rather than only a board — including the reload of a game already
+ * *finished*, since a match that has been played out is worth coming back to
+ * watch even though there is nothing left to play. The battle log is not
+ * stored beside it: the history panel is read back out of the replay
+ * (`historyThroughStep`), which used to mean storing every fight twice and
+ * the duplicate was 87% of a save.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 const STORAGE_KEY = 'dicewars-planets:game';
 
 /** The one shape everything below agrees on. */
-export function gameSave({ seed, settings, humanPlayerId, world, state, battles, camera }) {
+export function gameSave({ seed, settings, humanPlayerId, world, state, replay, camera }) {
   return {
     version: SAVE_VERSION,
     seed,
@@ -29,7 +37,7 @@ export function gameSave({ seed, settings, humanPlayerId, world, state, battles,
     humanPlayerId,
     world: worldFingerprint(world),
     state,
-    battles,
+    replay,
     camera,
   };
 }
@@ -92,8 +100,23 @@ function isUsable(save) {
   if (!Number.isFinite(save.seed) || !Number.isFinite(save.world)) return false;
   if (typeof save.humanPlayerId !== 'string') return false;
   if (!save.settings || !save.state || !Array.isArray(save.state.nodes)) return false;
-  // a finished game is not a game in progress — there is nothing to continue
-  return save.state.phase !== 'gameover';
+  // A finished game is kept, unlike every earlier version of this: there is
+  // nothing left to play, but the replay of what was played is right here and
+  // reopening onto the ending it produced is the way back to it.
+  return isUsableReplay(save.replay);
+}
+
+/**
+ * Shape only — enough that `reviveReplay` is being handed the kind of thing
+ * it decodes, not a promise that every move in it makes sense. A save with a
+ * broken replay is still a game worth resuming; that call is `session.js`'s,
+ * and it makes it by catching rather than by trusting this.
+ */
+function isUsableReplay(replay) {
+  if (!replay) return false;
+  return Array.isArray(replay.nodes)
+    && Array.isArray(replay.reserves)
+    && Array.isArray(replay.moves);
 }
 
 /**

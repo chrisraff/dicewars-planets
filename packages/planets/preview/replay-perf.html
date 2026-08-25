@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — replay storage preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Replay storage &amp; timing</h1>
+      <p class="lede">
+        What it costs to keep a match's replay in its save. Real matches are played out here and
+        then put through the real <code>serializeReplay</code>, <code>writeSavedGame</code> and
+        <code>readSavedGame</code> — against real <code>localStorage</code>, under a key of this
+        page's own, so a game in progress in another tab is never touched. The interesting row is
+        <b>snapshot + stringify</b> plus <b>localStorage.setItem</b>: together they are what every
+        single move a player makes has to pay for, since a save is written on every change.
+      </p>
+      <p class="siblings">
+        <a href="/preview/">&larr; All previews</a>
+        &nbsp;·&nbsp;
+        <button id="run" class="perf-run" type="button">Run again</button>
+      </p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/replay-perf.js"></script>
+  </body>
+</html>

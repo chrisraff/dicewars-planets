@@ -149,11 +149,36 @@ renderer wants.
   builds the next rather than resetting a dozen things. It also decides what is
   worth saving and hands it to `onSave`; where that goes is `main.js`'s
   business, so nothing in here knows that localStorage exists.
-- `saveGame.js` — a game in progress, written down so a reload picks it up.
-  The planet is stored as the **seed it grew from**, not as its geometry: a
-  world is a deterministic function of `(seed, settings)`, so one number
-  rebuilds every cell. Everything that cannot be recomputed — owners, dice,
-  whose turn, banked dice, the battle log — is stored outright.
+- `replay.js` — every move of the match, in order, plus the board they build
+  forward from (the **anchor**). Nothing per step is remembered: a step is
+  rebuilt by walking the moves over the anchor, which is what makes the
+  history at a step (`historyThroughStep`) and the board at a step
+  (`boardAfterAttacks`) two views of one record rather than two records.
+
+  It is the *only* record. The battle log the history panel reads is derived
+  from it, because storing both meant writing every fight down twice and the
+  duplicate was 87% of a save.
+
+  `serializeReplay` leaves out everything a walk recovers — who was attacking,
+  who was defending, the totals, who won — so a fight is written as its two
+  territories and the faces they rolled and nothing else. That is a whole
+  eight-player match in about 20KB against 88KB for the shape these moves have
+  in memory. It stays JSON, and stays readable in a console: bit-packing gets
+  it under 5KB, which is not worth a bit reader on a 5MB storage budget.
+
+  `REPLAY_LIMIT` caps it at 1000 moves. Nothing currently playable comes close
+  — eight players on a default planet run about 750 — so the cap is for the
+  planet sizes not offered yet, where a match runs to tens of thousands of
+  moves. Past it the *oldest* moves go and the anchor advances over them,
+  which is what keeps trimming lossless for every step still standing. It is
+  also why a pass is recorded on the move rather than inferred from "no attack
+  since the last payout": trimming removes exactly the attacks that would
+  disprove one.
+- `saveGame.js` — a game, written down so a reload picks it up. The planet is
+  stored as the **seed it grew from**, not as its geometry: a world is a
+  deterministic function of `(seed, settings)`, so one number rebuilds every
+  cell. Everything that cannot be recomputed — owners, dice, whose turn,
+  banked dice, the replay — is stored outright.
 
   That trade has exactly one failure mode: change the generator and the same
   seed grows a *different* planet. Hence `worldFingerprint`, a hash of the
@@ -167,8 +192,13 @@ renderer wants.
   `pagehide` (which is not reliable on mobile). An attack that is still being
   animated is deliberately *not* saved: the state it will land on has not been
   applied yet, so a reload mid-roll un-throws those dice rather than storing
-  half a battle. A finished game clears the save — there is nothing to
-  continue.
+  half a battle.
+
+  A finished game is saved too, rather than cleared. There is no turn left to
+  take, but the replay is in there, so a reload opens back onto the ending it
+  finished on with "Watch replay" still on it — which is also why `session.js`
+  puts that banner up by hand when it restores a game already won, since `over`
+  will never fire for one.
 - `settings.js` — every configurable option declared once as data
   (`SETTING_DEFINITIONS`). The menu renders itself from that list, so a new
   option is added here and nowhere else.
@@ -344,7 +374,15 @@ from the game is worse than none.
 
 - Pages live in `preview/*.html` with their scripts in `src/preview/`.
 - `src/preview/pages.js` is the manifest; the directory page renders from it,
-  and tests check the manifest and the folder still agree.
+  and tests check the manifest and the folder still agree. `vite.preview.config.js`
+  lists them again for the build, so a new page goes in both.
+- `replay-perf.html` is the odd one out: numbers rather than a component. It
+  plays real matches and puts them through the real save path against real
+  `localStorage`, under a key of its own so a game in progress is never
+  overwritten. A stub store would time nothing worth knowing — `setItem` is a
+  synchronous main-thread write and its cost is the whole reason a save's size
+  matters. It reports rather than asserts, for the same reason the conventions
+  lint is not in `npm test`: a wall-clock budget cries wolf on a slow machine.
 - Preview CSS styles the caption, never the exhibit. A descendant selector
   rooted at the preview's own furniture (`.scenario p`) outranks the game's own
   rules on specificity and will silently restyle what the page exists to show.

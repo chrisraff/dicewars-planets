@@ -56,4 +56,11 @@ export const PREVIEW_PAGES = [
       'A real match played out by itself and dropped straight into its own replay on the actual '
       + 'planet — surface, dice and camera all live, and at phone width too.',
   },
+  {
+    href: '/preview/replay-perf.html',
+    title: 'Replay storage & timing',
+    description:
+      'What keeping a replay in the save costs: real matches encoded, written to real '
+      + 'localStorage and read back, from a two-player game up to a replay filled to the cap.',
+  },
 ];
