@@ -15,6 +15,10 @@ npm run build                              # lint, site -> dist/, the deployabil
 
 node --test packages/planets/test/settings.test.js       # one file
 node --test --test-name-pattern "banked dice" packages/planets/test/*.test.js   # one test
+
+# how strong an AI is, and what it costs to be that strong (minutes, not seconds)
+node packages/planets/scripts/arena.js duel --b expert:follow=0
+node packages/planets/scripts/arena.js timing --players 2
 ```
 
 The user usually already has a dev server running — on 5173 or another
@@ -85,18 +89,40 @@ Three are shipped, weakest first:
 - `createDefensiveStrategy` — the classic `ai_defensive`, translated. Attacks
   only where it expects to keep what it wins.
 - `createExpertStrategy` — prices every attack as an expected change in the
-  value of the position and takes the best while any is worth making. It beats
-  either of the others about three games in four, measured over 360
-  six-player games with the seats rotated so turn order cancels out. Costs
-  about 0.4ms per AI turn on a default planet, against 0.05ms for the simple
-  one — nothing, next to a frame.
+  value of the position, looks one move past the best few, and takes the best
+  while any is worth making. It wins 80% of games against the simple one and
+  69% against the defensive one, six-handed. Costs about 0.5ms for the median
+  AI turn on a default planet, against 0.05ms for the simple one.
 
 The `difficulty` setting picks between the first and the last: Normal is
 `createSimpleStrategy`, Hard is `createExpertStrategy`, and `strategyFor` in
-`settings.js` is the whole of the mapping. The defensive one is not offered —
-it is the translated legacy AI, kept because it is a second opinion to measure
-against, and it is weaker than Normal anyway. A save carries its settings, so
-a match started on Hard is finished on Hard.
+`settings.js` is the whole of the mapping. A save carries its settings, so a
+match started on Hard is finished on Hard.
+
+The defensive one is not offered. It is the translated legacy AI, kept because
+it is a second opinion to measure against, and at the default six players it is
+genuinely weaker than Normal: 45.2% against it, over 1,008 games. **But that
+ordering is not stable across the table size.** Two-handed it wins 36.5%, and
+eight-handed it wins 53.3% — the same two AIs, the same planet generator, and
+the stronger of them depends on how many are sitting at the table:
+
+| players | defensive vs simple |
+|---------|---------------------|
+| 2       | 36.5% ±3.0          |
+| 6       | 45.2% ±3.1          |
+| 8       | 53.3% ±3.1          |
+
+That flip is the most interesting thing either of the weak AIs does, because
+neither of them knows how many players there are — so nothing about *them*
+changed between those rows, and what moved is which habit the board rewards.
+It points at a gap all three share: none of them has any notion of *when in the
+game it is*. Early, the board is a
+scramble for room and refusing fights is expensive; late, it is a few big
+stacks and position, and it is not. The defensive AI is playing a late-game
+habit throughout, which costs it on the open boards of a small table and pays
+on the crowded ones of a large one. The expert has one set of weights for the
+whole match too. A strategy that told the two phases apart is the obvious thing
+none of this has tried, and is worth more than another ply of search.
 
 `surrender.js` is neither a strategy nor a rule. `surrenderedPlayerIds(state)` is
 everyone left with no way back into the game: behind on **both** total dice —
@@ -142,16 +168,49 @@ a defence of *d*, as whole numbers of ways divided once at the end, so a battle
 that cannot be lost is exactly 1. Dice difference is a poor stand-in for it —
 "one die up" runs from 84% down to 67% across the range.
 
-Two things about the expert are worth knowing before touching it. Its
-`EXPERT_WEIGHTS` were found by playing rather than derived, and they pull
+Three things about the expert are worth knowing before touching it.
+
+Its `EXPERT_WEIGHTS` were found by playing rather than derived, and they pull
 against each other hard: `denial` at 0 was harmless until `relief` moved and
 then cost thirty points, so a retune wants re-measuring against the whole set
-rather than one weight at a time. And what made the difference between "loses
-to the defensive AI" and "beats it three to one" was not the search — it was
-two structural terms. It counts what a capture does to the *opponent's* largest
-region, not only its own; and it judges what its territories can survive
-against the dice they will have *after* end-of-turn reinforcement, which is the
-term that stops it sprawling into ground too thin to hold.
+rather than one weight at a time.
+
+What made the difference between "loses to the defensive AI" and "beats it
+three to one" was not the search — it was two structural terms. It counts what
+a capture does to the *opponent's* largest region, not only its own; and it
+judges what its territories can survive against the dice they will have *after*
+end-of-turn reinforcement, which is the term that stops it sprawling into
+ground too thin to hold.
+
+And the second ply is narrow on purpose. A turn is a run of attacks, so each of
+the best `breadth` moves is played out — the winning branch only — and credited
+with what the board it lands on is worth, discounted by `follow`. It exists for
+the two things one ply cannot see at all, both of which are about a *sequence*
+rather than a fight: a join two territories away, which scores enormously for
+its second half and nothing at all for its first; and a stack about to be
+walled in behind its own lines. (The second turned out to be mostly handled
+already — the one-ply term for how exposed an emptied attacker is left happens
+to fire on exactly the same geometry, and picks the right attacker about 77% of
+the time in that shape without ever knowing why.)
+
+Measured with `scripts/arena.js` against the same AI with `follow` at 0, which
+is exactly the AI that shipped before the second ply — half the seats each,
+alternating, every game played twice with the camps swapped over the same
+planet and the same dice — it wins **54.1% of 4,432 six-player games**. The
+edge grows with the table and vanishes without one: 50.6% two-handed (3,200
+games), 52.0% four-handed, about 56% eight-handed. That is the shape to expect
+from it. A crowded board is where the close calls and the two-step joins are;
+a duel has neither, and there it is a wash rather than a loss.
+
+Three budgets keep the cost of that off the frame, and none of them costs
+anything measurable in strength — `decided` at 1 measured 53.3% against 53.3%
+unpruned, and `dominance` at 2.5 measured 53.9%. They matter because the cost
+lands in one block: `planAiTurnMoves` works a whole AI turn out before any of
+it is shown, so the slowest turn in a match is a frame either dropped or not.
+Unpruned, a six-player match peaked at 20ms; pruned it peaks at about 10ms,
+against 4ms for the one-ply AI, with the median at half a millisecond and the
+99th percentile at five. Two-handed is the worst case for all of them and peaks
+at about 11ms, against 9ms one ply.
 
 Anyone tempted to tidy the defensive one: its counter-attack test compares the
 strongest rival to the attacker's dice, though a winner garrisons the prize
@@ -301,8 +360,9 @@ that can offer a replay does — a win, a win by surrender, and being knocked
 out, where there is most to look back at, since the match you were playing is
 over whatever the board goes on doing without you. And an offer once made is
 never withdrawn: `replayButtonView` puts a **Replay** button on the controls
-row, beside the menu, the moment the match has an ending to look back at — it is over, the player is out of it, or they have been offered the win and
-waved it away. All three are read back off the match rather than latched when
+row, beside the menu, the moment the match has an ending to look back at — it
+is over, the player is out of it, or they have been offered the win and waved
+it away. All three are read back off the match rather than latched when
 the banner went up, which is what makes the button survive a reload: the board
 says who won and who is out, and `playedOn` travels in the save. Before this,
 "Look at the board", "Spectate" and "Play on" all closed the banner for good

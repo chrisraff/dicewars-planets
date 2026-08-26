@@ -37,6 +37,17 @@ import { winProbability } from './battleOdds.js';
  *   the most, which is exactly the ground this term is asked about.
  * - `minGain` — what a move has to be worth before it is worth making. Above
  *   0 it passes rather than take a marginal fight.
+ * - `follow` — how much of what a capture *leads to* counts towards making it.
+ *   At 0 the AI plays each attack as though the turn stopped there. See the
+ *   lookahead at the bottom of `expertMovesFor`.
+ * - `breadth` — how many of the best moves get that second look.
+ * - `decided` — how far behind the leading move another one can be and still
+ *   be worth looking at. Nothing below it can be brought back by what it opens
+ *   up, and when nothing is close there is no decision to spend anything on.
+ * - `dominance` — the income lead past which the lookahead is switched off
+ *   altogether. `breadth`, `decided` and this are budgets rather than
+ *   opinions: they are what keeps the cost of the second ply off the frame,
+ *   and between them they cost nothing measurable in strength.
  *
  * The numbers were found by playing, not derived: a coordinate search over
  * several thousand six-player games against the other two strategies here.
@@ -55,7 +66,27 @@ export const EXPERT_WEIGHTS = Object.freeze({
   relief: 0.6,
   refill: 1.5,
   minGain: 0,
+  follow: 0.6,
+  breadth: 4,
+  decided: 1,
+  dominance: 2.5,
 });
+
+/**
+ * The board this attack would leave if it won: the prize changes hands with
+ * all but one of the attacker's dice standing on it.
+ *
+ * Nothing else in the state moves — an attack pays out no reinforcement and
+ * touches no bank — so everything but the two territories is shared rather
+ * than copied.
+ */
+function afterWinning(state, from, to, playerId) {
+  const nodes = new Map(state.nodes);
+  const attacker = nodes.get(from);
+  nodes.set(from, { ...attacker, dice: 1 });
+  nodes.set(to, { ...nodes.get(to), owner: playerId, dice: attacker.dice - 1 });
+  return { ...state, nodes };
+}
 
 /**
  * The board carved into connected regions — every player's, not just mine,
@@ -216,7 +247,7 @@ function holdChance(rivalDice, dice) {
  * anyway has little left to lose by spending itself first, and that last term
  * is what says so.
  */
-export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS) {
+export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth = 0) {
   const w = { ...EXPERT_WEIGHTS, ...weights };
   const board = readBoard(state, playerId);
   const moves = [];
@@ -303,11 +334,76 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS) {
         - w.risk * emptied * spent;
 
       const score = chance * won + (1 - chance) * lost + w.relief * before;
-      if (score > w.minGain) moves.push({ from, to, score });
+      if (score > w.minGain) moves.push({ from, to, score, chance });
     }
   }
 
+  // Whether this is a match rather than a mopping-up: the lookahead is only
+  // ever worth paying for while there is still a game in the position.
+  let rivalIncome = 0;
+  for (const [id, income] of board.incomeOf) {
+    if (id !== playerId && income > rivalIncome) rivalIncome = income;
+  }
+  const alreadyWon = board.income > w.dominance * Math.max(1, rivalIncome);
+
   moves.sort((a, b) => b.score - a.score);
+
+  // A turn is a run of attacks rather than one, so the move worth making is
+  // the one that leads somewhere. Each of the best few is played out — the
+  // winning branch only, since a failed attack ends that stack's run anyway —
+  // and credited with what the board it lands on is worth, discounted by
+  // `follow` and by the chance of getting there at all.
+  //
+  // This is the whole of the AI's lookahead and it is deliberately narrow.
+  // What it buys is the two things one ply cannot see at all, both of which
+  // are about a *sequence* rather than a fight:
+  //
+  //   - a stack that is about to be walled in behind its own lines. Given two
+  //     attackers for the same target, one ply prices the fight and mildly
+  //     prefers the smaller one; it has no way to notice that the bigger one
+  //     will have nothing left to attack afterwards and its dice are about to
+  //     stop counting.
+  //   - a join two territories away. Income is paid on the largest connected
+  //     region, so a bridge scores enormously for its second half and nothing
+  //     at all for its first, and one ply only ever sees the first.
+  //
+  // `depth` stops it there: a move being looked at *as* a follow-up is priced
+  // one ply, so the search is one move wide and one move deep, never a tree.
+  //
+  // The rest of the condition is budget. A second ply costs what the first one
+  // did, once per move it looks at, and the cost lands in a single block —
+  // `planAiTurnMoves` works a whole AI turn out before any of it is shown, so
+  // the slowest turn in a match is a frame either dropped or not. Three things
+  // keep that in hand, and none of them costs anything measurable in strength:
+  //
+  //   - only the best `breadth` moves are looked at,
+  //   - and only while they are within `decided` of the leader. A move further
+  //     behind than that is not coming back, and if *nothing* is close then
+  //     the leader is going to stay the leader whatever its follow-up is
+  //     worth, so the whole pass is skipped rather than run to confirm it.
+  //   - and not at all once the game is `dominance` times won on income. The
+  //     long turns are the mopping-up ones, which is exactly where the tail of
+  //     the cost was and exactly where there is nothing left to get right.
+  //
+  // Together they take the worst turn in a six-player match from about 20ms to
+  // about 10, against 4ms for the one-ply AI, and leave the median at half a
+  // millisecond.
+  if (w.follow > 0 && depth === 0 && moves.length > 1 && !alreadyWon) {
+    const cutoff = moves[0].score - w.decided;
+    const contenders = [];
+    for (const move of moves.slice(0, w.breadth)) {
+      if (move.score < cutoff) break; // sorted, so nothing behind it qualifies
+      contenders.push(move);
+    }
+    if (contenders.length > 1) {
+      for (const move of contenders) {
+        const next = afterWinning(state, move.from, move.to, playerId);
+        const [best] = expertMovesFor(next, playerId, w, depth + 1);
+        if (best) move.score += w.follow * move.chance * best.score;
+      }
+      moves.sort((a, b) => b.score - a.score);
+    }
+  }
   return moves;
 }
 

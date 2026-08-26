@@ -543,20 +543,32 @@ test('being knocked out is announced with the board already settled', () => {
     ], { playerIds: ['p1', 'p2', 'p3'] }),
     humanPlayerId: 'p1',
     rollDie: alwaysRolls(6),
+    // reinforcement scatters at random, and where it lands changes what the
+    // AIs do with the rest of the match — pinned, so this is one game rather
+    // than a different one every run
+    rng: seededRng(4),
   });
 
-  const seen = [];
+  // Everything that is true at the instant the knockout is announced. Read
+  // inside the handler rather than after the fact: the whole claim is about
+  // that moment, and the match goes on afterwards.
+  const knockouts = [];
   game.on('eliminated', (event) => {
-    seen.push({ playerId: event.playerId, busy: game.isBusy(), owner: game.state.nodes.get('mine').owner });
+    knockouts.push({
+      playerId: event.playerId,
+      busy: game.isBusy(),
+      over: game.isOver(),
+      owner: game.state.nodes.get('mine').owner,
+    });
   });
 
   game.start();
   game.endTurn();
   advance(game, 10);
 
-  assert.equal(seen.length, 1, 'p1 should have been knocked out');
-  assert.equal(seen[0].playerId, 'p1');
-  assert.equal(seen[0].busy, false, 'nothing is still in the air when the banner goes up');
-  assert.equal(seen[0].owner, 'p2', 'and the attack that did it has already been applied');
-  assert.equal(game.isOver(), false, 'p3 is still standing, so the match carries on without you');
+  const mine = knockouts.find((k) => k.playerId === 'p1');
+  assert.ok(mine, 'p1 should have been knocked out');
+  assert.equal(mine.busy, false, 'nothing is still in the air when the banner goes up');
+  assert.equal(mine.owner, 'p2', 'and the attack that did it has already been applied');
+  assert.equal(mine.over, false, 'p3 is still standing, so the match carries on without you');
 });

@@ -6,10 +6,18 @@ import {
   isLegalAttack,
   runAiTurn,
   getCurrentPlayerId,
+  winProbability,
 } from '../src/index.js';
 import { chainState, graphState, seededRng } from './support/index.js';
+import { EXPERT_WEIGHTS } from '../src/ai/expertStrategy.js';
 
 const choose = createExpertStrategy();
+
+// The same AI with its second ply switched off — which is exactly what shipped
+// before there was one. Every test below that is about the lookahead states
+// what this picks instead, so each of them says what it is worth as well as
+// what it does.
+const flat = { ...EXPERT_WEIGHTS, follow: 0 };
 
 test('only offers attacks the reducer would accept', () => {
   const state = chainState([
@@ -207,5 +215,138 @@ test('the weights are what it believes, and turning them off shows it', () => {
   assert.deepEqual(
     createExpertStrategy({ income: 0 })(state, 'p1'),
     { from: 'far', to: 'spoils' }
+  );
+});
+
+
+// --- looking one move further -----------------------------------------------
+//
+// A turn is a run of attacks, so a capture is worth what it leads to as well
+// as what it is. `follow` is the discount on the second half of that, and
+// these are the two positions where one ply is not merely worse but blind.
+
+test('it starts a bridge that is worth nothing at all until it is finished', () => {
+  // Two regions of three, two enemy territories apart. Taking the first of
+  // them joins nothing — the income only arrives with the second — so one ply
+  // prices it as an ordinary small capture and takes the free ground on the
+  // far side of the board instead. It is the shape income makes commonest and
+  // the one a single ply can never see: the whole prize is in the second half.
+  const bridge = () => graphState(
+    [
+      ['a1', { owner: 'p1', dice: 5 }],
+      ['a2', { owner: 'p1', dice: 3 }],
+      ['a3', { owner: 'p1', dice: 6 }],
+      ['b1', { owner: 'p1', dice: 3 }],
+      ['b2', { owner: 'p1', dice: 3 }],
+      ['b3', { owner: 'p1', dice: 3 }],
+      ['g1', { owner: 'p2', dice: 2 }],
+      ['g2', { owner: 'p2', dice: 2 }],
+      ['spoils', { owner: 'p2', dice: 2 }],
+      ['spoils2', { owner: 'p2', dice: 2 }],
+    ],
+    [
+      ['a1', 'a2'], ['a2', 'a3'], ['b1', 'b2'], ['b2', 'b3'],
+      ['a1', 'g1'], ['g1', 'g2'], ['g2', 'b1'],
+      ['a3', 'spoils'], ['spoils', 'spoils2'],
+    ],
+    { playerIds: ['p1', 'p2'] }
+  );
+
+  assert.deepEqual(choose(bridge(), 'p1'), { from: 'a1', to: 'g1' });
+  assert.deepEqual(
+    createExpertStrategy(flat)(bridge(), 'p1'), { from: 'a3', to: 'spoils' },
+    'one ply takes the free ground and never starts the bridge at all'
+  );
+});
+
+test('between two captures of the same size it takes the one it can go on from', () => {
+  // `x` is a dead end and `y` is a doorway on to `z`. One ply sees only that
+  // holding y leaves a rival next to it and takes the quiet one; the run of
+  // attacks that y opens is worth more than the quiet is.
+  const fork = () => graphState(
+    [
+      ['a', { owner: 'p1', dice: 4 }],
+      ['home', { owner: 'p1', dice: 3 }],
+      ['x', { owner: 'p2', dice: 2 }],
+      ['y', { owner: 'p2', dice: 1 }],
+      ['z', { owner: 'p2', dice: 1 }],
+    ],
+    [['a', 'x'], ['a', 'y'], ['y', 'z'], ['a', 'home']],
+    { playerIds: ['p1', 'p2'] }
+  );
+
+  assert.deepEqual(choose(fork(), 'p1'), { from: 'a', to: 'y' });
+  assert.deepEqual(
+    createExpertStrategy(flat)(fork(), 'p1'), { from: 'a', to: 'x' },
+    'one ply prefers the dead end, because nothing borders it afterwards'
+  );
+});
+
+test('the lookahead is one move deep, not a tree', () => {
+  // Every move on the board, counted: the follow-up scan re-enters
+  // `expertMovesFor` at depth 1, and a second ply there would fan out again
+  // into a search that grows with the board rather than with `breadth`.
+  const state = chainState([
+    ['a', { owner: 'p1', dice: 8 }],
+    ['b', { owner: 'p2', dice: 1 }],
+    ['c', { owner: 'p2', dice: 1 }],
+    ['d', { owner: 'p2', dice: 1 }],
+  ]);
+
+  const deep = expertMovesFor(state, 'p1', EXPERT_WEIGHTS, 1);
+  const shallow = expertMovesFor(state, 'p1', flat, 1);
+  assert.deepEqual(
+    deep.map((m) => [m.from, m.to, m.score]),
+    shallow.map((m) => [m.from, m.to, m.score]),
+    'a move already being looked at as a follow-up is priced one ply and stops there'
+  );
+});
+
+test('every move comes back with the odds it was priced on', () => {
+  // The lookahead weights what a capture opens up by the chance of getting
+  // there, so the two have to travel together.
+  const state = chainState([
+    ['a', { owner: 'p1', dice: 4 }],
+    ['b', { owner: 'p2', dice: 2 }],
+  ]);
+  const [best] = expertMovesFor(state, 'p1');
+  assert.ok(best.chance > 0 && best.chance < 1, 'a real fight, priced as one');
+  assert.equal(best.chance, winProbability(4, 2));
+});
+
+test('the budgets on the lookahead are budgets, not opinions', () => {
+  // `decided` and `dominance` exist to keep the second ply off the frame, and
+  // both are justified by the same claim: they only ever skip a look whose
+  // answer was already settled. Here the join is worth so much more than
+  // anything else on the board that no follow-up could reorder it, and the
+  // position is a mopping-up besides — so both budgets fire, and neither
+  // changes the move.
+  const runaway = () => graphState(
+    [
+      ['a1', { owner: 'p1', dice: 8 }],
+      ['a2', { owner: 'p1', dice: 4 }],
+      ['a3', { owner: 'p1', dice: 4 }],
+      ['a4', { owner: 'p1', dice: 4 }],
+      ['a5', { owner: 'p1', dice: 4 }],
+      ['b1', { owner: 'p1', dice: 4 }],
+      ['b2', { owner: 'p1', dice: 4 }],
+      ['b3', { owner: 'p1', dice: 4 }],
+      ['join', { owner: 'p2', dice: 1 }],
+      ['scrap', { owner: 'p2', dice: 3 }],
+    ],
+    [
+      ['a1', 'a2'], ['a2', 'a3'], ['a3', 'a4'], ['a4', 'a5'],
+      ['b1', 'b2'], ['b2', 'b3'],
+      ['a1', 'join'], ['join', 'b1'],
+      ['a5', 'scrap'],
+    ],
+    { playerIds: ['p1', 'p2'] }
+  );
+
+  const unbudgeted = { ...EXPERT_WEIGHTS, decided: Infinity, dominance: Infinity };
+  assert.deepEqual(choose(runaway(), 'p1'), { from: 'a1', to: 'join' });
+  assert.deepEqual(
+    createExpertStrategy(unbudgeted)(runaway(), 'p1'), choose(runaway(), 'p1'),
+    'looking at everything reaches the same move the budgeted search does'
   );
 });

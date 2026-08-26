@@ -10,6 +10,7 @@
     "build:preview": "vite build --config vite.preview.config.js",
     "preview": "vite preview",
     "lint": "node scripts/lint-conventions.js",
+    "arena": "node scripts/arena.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
