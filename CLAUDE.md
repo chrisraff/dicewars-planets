@@ -235,6 +235,101 @@ strongest ring of territories runs along the equator. `generateWorld.js`
 returns exactly what `createInitialState` needs plus the extra geometry a
 renderer wants.
 
+`seating.js` is who gets dealt what, and it exists because **moving first was
+most of the game**. Every seat played by the same AI — so nothing separates
+them but where they sit — seat 1 of six won 25.9% of 20,006 games against seat
+6's 10.3%, and a duel was 91.9% to 8.1%. The advantage follows the *turn order*
+rather than the deal: reverse the order over an unchanged board and the curve
+reverses with it. Hard was worse than Normal (30.2% to 8.7%), because a better
+player converts a tempo edge more reliably.
+
+Three things correct it, and only the first is a bug fix.
+
+- **The remainder.** `playerIds[i % playerIds.length]` shorts the *last* seats
+  every single game — 59 territories over six players is five seats with 10 and
+  one with 9, always the same one. Over 20,000 planets that was 9.82
+  territories for seat 1 against 8.98 for seat 6, worth about a fifth of the
+  whole gap. Rotating where the deal starts removes it and costs nothing.
+- **One extra territory**, last seat over first, straight-lined between.
+- **A ramp of scattered dice**, `SEAT_DICE_RAMP` per territory a seat holds.
+
+Six-handed that leaves **0.6 points of spread against 15.6** — about 96% of the
+advantage gone — for one more territory and about 2.3 more dice. Measured
+through the real generator at 30,002 games a table: 2.9 points of spread at two
+players against 83.8, 2.3 at four against 30.2, and 0.6 to 0.7 from five up.
+Three players is the one that resists, keeping about four points of wobble on
+its middle seat; no shape of ramp fixed it and bending the ramp to starve it
+made things worse.
+
+The **split between land and dice is the interesting decision**, because land
+alone can flatten every table size and was where this started. It is a small
+component on purpose. Land is the strongest currency going — reinforcement is
+paid every turn on the largest connected region, so it is an income stream
+where dice are a lump sum — and that is exactly why a land-only fix is wrong
+twice over: it wanted the last of six seats to open with 11.3 territories
+against 8.4, an empire visibly half again the size, and it is the currency a
+*stronger* player exploits best. Per unit, dice deliver 2.35 to Normal and 2.32
+to Hard; land delivers 2.15 and 1.72. Moving the work into dice cut the two
+difficulties' disagreement from 66% to 14%, which is what makes one number
+serve both — Normal is flattest at 0.245 six-handed and Hard at 0.28.
+
+That difficulty-robustness matters for the planned mixed AI, and the shape of
+it was measured rather than assumed: rotating one Hard AI through every seat of
+a Normal table, **one setting flattens both roles at once**, and the Hard AI in
+that field wants the *Normal* number. The correction tracks the table as a
+whole rather than who sits in which chair, so a mixed field blends its seats'
+rates.
+
+`SEAT_DICE_RAMP` climbs at small tables (0.47 for two players against 0.23 for
+six) because dice saturate: a duel's gap is three times a six-player gap, and a
+die stops being worth 0.23 log-odds once ten are being handed over — by then it
+is worth about 0.15. That saturation is the whole reason land is in the mix at
+all rather than dice doing everything.
+
+Every entry in that table is measured rather than fitted, and the column does
+not scale as one: the tail runs slightly hot at large tables and slightly cold
+at small ones, so trimming the whole column 10% improved six and eight players
+and took a duel from 1.9 points of spread to 7.0. There is also a rounding trap
+underneath it. The land step is a single territory and seats take whole ones,
+so flooring the exact shares and handing out the leftovers puts every seat on
+one of two integers — at 57 territories over six seats, five seats on 9.33 and
+the last on 10.33, the whole step arriving as a cliff on the tail rather than a
+ramp across the order. That over-paid the last seat by about 1.2 points while
+the other five sat flat. `seatTerritoryCounts` rounds by carrying one random
+offset along the running total instead, so each seat's *expected* share is its
+exact share and the average across planets is a straight line.
+
+Two alternatives were measured and rejected. **Clumping** — dealing later seats
+contiguous blobs — hits a wall: it moves a duel from 90.5/9.5 to 76.9/23.1 and
+no further, because blobs of 20 do no better than blobs of 10. **Raising the
+one-die territories to two** costs the same dice as scattering and leaves more
+imbalance (2.4 points against 1.6); a single die is defenceless but also cheap
+to lose, so protecting it buys less than spending that die where it can fight.
+
+A **global** floor is a different proposition and is worth knowing about: dice
+of 2–3 instead of 1–3, for everyone, is not a handicap at all and still shrinks
+the Normal gap by a fifth (a flat 3 shrinks it by half), because the ragged
+opening board is a large part of what moving first is worth. It was not taken —
+it helps the weak AI far more than the strong one, so it *widens* the gap
+between the difficulties — but it is the lever to reach for if the handicap
+ever needs to be smaller.
+
+Turn-order changes were measured and are **out of model deliberately**.
+Reshuffling the living players every round is exactly neutral by construction,
+for any field including a human of unknown strength, and needs no calibration
+at all — but shuffling mid-match is not this game, and it would empty the
+`start` setting of meaning. Snake order (1..P then P..1) is worse than doing
+nothing: it turns the ramp into a U, because the last seat takes two turns back
+to back at the turn of the round.
+
+`scripts/seats.js` is the tool all of this was measured with — same sharding
+and same shape of answer as `arena.js`, but what it holds still is the AI
+rather than the seat. It carries every lever that was tried (`tilt`, `ramp`,
+`floor`, `clump`, `remainder`, mixed lineups, alternative turn orders), and
+`--level 1` measures the correction the generator actually ships. Passing
+`levelSeats: false` to `generatePlanetWorld` is the board as it was dealt
+before any of this, which is what the handicaps are measured against.
+
 **`src/game/`** is the layer between core and the screen:
 
 - `createGame.js` — turn flow, selection, when the AI plays. **No three.js**,

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitialState, reduce, endTurn } from '@dicewars/core';
+import { createInitialState, reduce, endTurn, MAX_DICE_PER_NODE } from '@dicewars/core';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { settingDefinition, MAX_PLAYERS } from '../src/game/settings.js';
 import { seededRng } from '@dicewars/core/test-support';
@@ -17,6 +17,18 @@ test('a generated planet feeds straight into @dicewars/core', () => {
   assert.equal(state.nodes.size, world.territories.length);
   for (const node of state.nodes.values()) {
     assert.ok(world.playerIds.includes(node.owner));
+    // the roll is 1-3, but the seat leveller scatters more on top of it
+    assert.ok(node.dice >= 1 && node.dice <= MAX_DICE_PER_NODE);
+  }
+
+  // without the leveller it is the bare roll, which is what that 1-3 is
+  const unlevelled = generatePlanetWorld({
+    subdivisions: 2,
+    playerIds: ['p1', 'p2', 'p3'],
+    rng: seededRng(42),
+    levelSeats: false,
+  });
+  for (const [, node] of unlevelled.assignments) {
     assert.ok(node.dice >= 1 && node.dice <= 3);
   }
 
