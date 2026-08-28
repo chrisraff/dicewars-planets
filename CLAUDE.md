@@ -532,6 +532,69 @@ less often than it looks: on a default planet, four and six dice never put a
 corner on foreign land at all, and eight manage it about 2% of the time, one
 corner at a time.
 
+`lightRig.js` is the lights, and the first thing to know is how little they
+touch: the planet is `MeshBasicMaterial` and the pole markers are an unlit
+additive shader, so **the dice are the only lit thing in the scene**. Lighting
+and the planet's colours are therefore independent problems — the one place
+they meet is dice painted by owner.
+
+The rig is aimed off the **camera** rather than off the world, and that is
+structural rather than a tuning. Dice stand on a sphere, so their up faces
+point every way there is, while the camera orbits freely — a key light fixed
+in the world lights one hemisphere of dice and leaves the rest on ambient,
+which does not shade a normal map, so the pip dimples stop existing entirely
+on the far side. Measured on the up faces of the territories actually in view,
+the single directional light at `(3, 5, 4)` that shipped before this read a
+median Lambert term of 0.75 and 0.62 from two camera positions and **0.00**
+from the other two — a straight-down look at the south pole, and the equator
+facing away. Carried by the camera it reads 0.74 from all four, identically,
+because the angle between an up face and the light no longer depends on where
+the camera went. The claim is not that the numbers are better; it is that
+there is no view left to tune *for*.
+
+Three lights, and the key's off-axis angle is the whole of the modelling: an
+up face carries the *number* and keeps `cos`, the two visible sides carry the
+*cube* and get `±sin`, and nothing can have both. At 20° up and 24° across —
+which compose to 31° off, not 44 — that is 0.86 and 0.51. The fill is opposite
+in azimuth and weak: a shadow side, not a second key. Ambient is the floor and
+is deliberately low, since it was 0.6 of a 1.8 total before, a third of every
+surface arriving as the one term that cannot describe a shape.
+
+`preview/dice.html` is where all of that is judged, and it carries the old rig
+on a toggle so the two can be turned on one board rather than described. It
+also holds the two open questions next to it: dice painted by owner
+(`createPlayerDiePipMaterials`, a `tint` toward white until the pips have
+somewhere to stand, with `readableTextColor` picking the ink) and a die-size
+slider.
+
+**Colour is a separate pipeline from light, and it was being encoded twice.**
+The palette is written as sRGB — the HUD hands those exact numbers to a CSS
+`rgb()` — but a three.js vertex colour is read as *linear* and encoded to sRGB
+on output, so the planet was showing the whole palette lightened and flattened.
+Yellow was authored `242,191,38` and displayed `249,225,108`, which put it
+ΔE2000 11.4 from orange where the two are 19.4 apart as written. `planetSurface`
+now linearizes at the buffer write (`palette.js` `linearRgb`), and the output
+encoding puts it back exactly: a territory and its swatch in the HUD are the
+same colour.
+
+Three things about where that conversion sits. It is at the **very last step**
+and nowhere earlier, so every tint upstream — selection, attacker, defender —
+still means the fraction between two sRGB colours it was judged as; blending in
+linear instead would move all of them. Nothing else needed it: a `THREE.Color`
+built from a hex is converted by three.js itself, so the boundary lines and the
+pole marker were always right, and the dice textures already carry
+`SRGBColorSpace`. And **the working space is still linear, which is what the
+lighting wants** — this is not a move away from sRGB but the correction that
+makes the displayed result the sRGB the palette asks for.
+
+The failure mode is worth recognising again, because it does not look like a
+fault: a pastel planet is a plausible planet, and nothing gives it away until
+it is put beside the swatches it is supposed to match. `planetSurface.test.js`
+states the claim in what reaches the *screen* rather than in what sits in the
+buffer, since asserting the buffer against the palette directly is exactly the
+test that passed all the way through. The comparison grid on `preview/dice.html`
+is the record of what it cost.
+
 The AI plays where it likes, and most of that is round the back of the
 planet, so `cameraFocus.js` swings the orbit camera over to an AI attack that
 isn't in view — along the shortest arc, and never for the player's own

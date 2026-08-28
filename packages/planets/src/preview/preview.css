@@ -144,6 +144,34 @@ h1 {
   border-radius: 0.35rem;
 }
 
+/* ---- the colour grids on the dice page ------------------------------
+
+   Two grids of flat colour, not exhibits: the palette as written against the
+   palette as the planet renders it, and a die face at each tint with the ink
+   picked for it. Both are chips of the real colours rather than screenshots,
+   so neither can drift from `palette.js`. */
+
+.faces.is-swatches {
+  grid-template-columns: 5rem repeat(2, minmax(0, 1fr));
+}
+.faces.is-tints {
+  grid-template-columns: 5rem repeat(6, auto);
+}
+.faces .swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.2rem;
+  padding: 0 0.5rem;
+  border-radius: 0.35rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.faces.is-tints .swatch {
+  width: 2.6rem;
+  font-size: 1.1rem;
+}
+
 /* ---- the directory at /preview/ -------------------------------------- */
 
 .directory {

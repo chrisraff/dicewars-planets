@@ -503,7 +503,7 @@ export function createSession({
     reinforceAnim = {
       elapsed: 0,
       dropped: 0, // how many of the HUD's chips have been told their die has landed
-      animation: createReinforceAnimation({ landed: event.landed, dice, materials: pipMaterials }),
+      animation: createReinforceAnimation({ landed: event.landed, dice }),
     };
   });
 

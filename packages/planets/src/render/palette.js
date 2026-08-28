@@ -34,13 +34,43 @@ export const lighten = (color, amount) => mix(color, WHITE, amount);
 const DARK_INK = [0.06, 0.06, 0.09];
 const LIGHT_INK = [1, 1, 1];
 
+/**
+ * The sRGB transfer function: one channel of the colours written above — which
+ * are sRGB, the same numbers the HUD hands to CSS — into the linear light they
+ * stand for.
+ *
+ * Two quite different things need it, which is why it is here rather than
+ * inside either of them. Contrast is measured on light rather than on the
+ * numbers (see `luminance`), and so is *rendering*: three.js works in linear
+ * and encodes to sRGB on the way out, so a colour has to be linearized on the
+ * way in or it arrives on screen having been encoded twice.
+ *
+ * WCAG publishes the breakpoint as 0.03928 and the sRGB standard as 0.04045.
+ * They are the same curve — the first is a rounding of the second — and agree
+ * to five decimal places at the join, so one function serves both.
+ */
+export function srgbToLinear(channel) {
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+// A whole colour through it. This is what a renderer wants; nothing else does.
+export const linearRgb = (color) => color.map(srgbToLinear);
+
+// And back the other way — the encoding the renderer applies on output. Only
+// two things ask: a test stating what a buffer will *look* like rather than
+// what is in it, and the preview page that shows what the double encoding
+// used to cost. Both are claims about the screen, so both want this and not
+// the buffer values.
+export const srgbRgb = (color) => color.map((c) =>
+  (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055));
+
 // WCAG relative luminance: sRGB channels linearized before weighting. The
 // linearization matters — judging by the raw channel values instead puts
 // purple's luminance below the midpoint and picks white ink for it, which is
 // the one combination in this palette that falls below AA contrast.
 export function luminance([r, g, b]) {
   return [r, g, b]
-    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .map(srgbToLinear)
     .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
 }
 

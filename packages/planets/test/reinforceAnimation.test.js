@@ -25,7 +25,7 @@ function setup(counts, landed, seed = 1) {
   layer.update({
     nodes: new Map(Object.entries(counts).map(([id, dice]) => [id, { owner: 'p1', dice }])),
   });
-  const animation = createReinforceAnimation({ landed, dice: layer, materials });
+  const animation = createReinforceAnimation({ landed, dice: layer });
   const settle = (counts2) => layer.update({
     nodes: new Map(Object.entries(counts2).map(([id, dice]) => [id, { owner: 'p1', dice }])),
   });

@@ -50,6 +50,14 @@ export const PREVIEW_PAGES = [
       + 'against.',
   },
   {
+    href: '/preview/dice.html',
+    title: 'Dice, light and colour',
+    description:
+      'The only lit thing in the scene, on a real planet you can turn — the light rig against '
+      + 'the world-fixed one it replaced, dice painted by owner at every tint, and the record of '
+      + 'the double encoding that used to leave the whole palette pale on the globe.',
+  },
+  {
     href: '/preview/replay.html',
     title: 'Replay',
     description:

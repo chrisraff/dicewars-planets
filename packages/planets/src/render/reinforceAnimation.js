@@ -43,7 +43,6 @@ function landingSlot(stand, sequence, dieSize) {
 export function createReinforceAnimation({
   landed,
   dice,
-  materials,
   timing = DEFAULT_REINFORCE_TIMING,
 }) {
   // What each territory will hold once the whole payout is down, so the
@@ -71,7 +70,10 @@ export function createReinforceAnimation({
     // Its own slot in the layout the rebuild will use, so the die that
     // replaces this one a moment later is standing exactly as this one landed.
     const slot = plans.get(territoryId)[stand.dice + sequence];
-    const mesh = new THREE.Mesh(dice.geometry, materials);
+    // Painted by the stack it is joining rather than by a set handed in, so
+    // a die dropped on a coloured board lands the colour of whoever it is
+    // reinforcing. With bone dice this is the one set there is.
+    const mesh = new THREE.Mesh(dice.geometry, dice.materialsAt(territoryId));
     if (slot) mesh.quaternion.copy(dieTumble(slot.pipUp, slot.spin));
     mesh.position.copy(start);
     mesh.visible = false;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { createLightRig } from './lightRig.js';
 
 // Where the camera starts before anything has looked at the screen it is on.
 // Comfortably outside the planet, and the distance every desktop game has
@@ -14,16 +15,16 @@ export function createViewer(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
-  // The planet itself is flat-shaded (MeshBasicMaterial, unaffected by
-  // lights) — these exist only so lit objects like the dice show their
-  // shape (bevels need light to catch an edge to be visible at all).
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  keyLight.position.set(3, 5, 4);
-  scene.add(keyLight);
-
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   camera.position.set(0, 0, ROOMY_DISTANCE);
+
+  // The planet itself is flat-shaded (MeshBasicMaterial, unaffected by
+  // lights) and so are the pole markers, so the only thing these reach is the
+  // dice — and the dice stand on a sphere, pointing every way there is. Hence
+  // a rig aimed relative to the camera rather than to the world: see
+  // lightRig.js, which is where the whole argument for that lives.
+  const lights = createLightRig(camera);
+  scene.add(lights.group);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   // phones report ratios of 3 and up; past 2 the extra pixels cost real frame
@@ -72,8 +73,11 @@ export function createViewer(canvas) {
   function render() {
     resize();
     controls.update();
+    // after the controls, never before: they are what may just have moved the
+    // camera, and the lights are aimed off the camera's own frame.
+    lights.update();
     renderer.render(scene, camera);
   }
 
-  return { scene, camera, renderer, controls, render };
+  return { scene, camera, renderer, controls, lights, render };
 }

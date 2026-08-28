@@ -74,9 +74,18 @@ export function stackHalfWidth(diceCount, dieSize = DIE_SIZE) {
  * `update(state)` re-stacks only the territories whose dice count actually
  * changed, so capturing one territory doesn't send every die on the planet
  * tumbling into a new orientation.
+ *
+ * `materialsFor(playerId)` paints the dice by owner — pass it and a territory
+ * changing hands repaints its stack, pass nothing and every die on the planet
+ * is bone. It is asked for a whole materials array rather than a colour
+ * because a die is six textures, one per face, and swapping the array is all
+ * a change of owner costs: the meshes, the geometry and the tumble are
+ * untouched, so a captured stack does not turn over just because it changed
+ * hands. See `createPlayerDiePipMaterials`.
  */
 export function createDiceLayer(world, pipMaterials, options = {}) {
-  const { dieSize = DIE_SIZE, rng = Math.random } = options;
+  const { dieSize = DIE_SIZE, rng = Math.random, materialsFor = null } = options;
+  const paintFor = (owner) => (materialsFor && materialsFor(owner)) || pipMaterials;
   const cellsById = new Map(world.cells.map((c) => [c.id, c]));
   const grounds = findAllDiceGrounds(world.territories, cellsById);
   const geometry = new RoundedBoxGeometry(dieSize, dieSize, dieSize, BEVEL_SEGMENTS, dieSize * 0.12);
@@ -101,6 +110,7 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
       normal,
       groundRadius: radius,
       dice: 0,
+      owner: undefined,
       meshes: [],
       reserved: null,
     });
@@ -123,12 +133,14 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
     return planDiceStacks(diceCount, rng);
   }
 
-  function rebuild(stand, diceCount) {
+  function rebuild(stand, diceCount, owner) {
     stand.object.clear();
     const columns = stackColumnCount(diceCount);
     stand.dice = diceCount;
+    stand.owner = owner;
+    const materials = paintFor(owner);
     stand.meshes = layoutFor(stand, diceCount).map(({ column, level, pipUp, spin }) => {
-      const mesh = new THREE.Mesh(geometry, pipMaterials);
+      const mesh = new THREE.Mesh(geometry, materials);
       mesh.position.copy(dicePosition(column, level, columns, dieSize));
       mesh.quaternion.copy(dieTumble(pipUp, spin));
       stand.object.add(mesh);
@@ -141,6 +153,11 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
     dieSize,
     geometry,
     standFor: (territoryId) => stands.get(territoryId),
+
+    // What this territory's dice are painted with right now — asked for by
+    // the reinforcement drop, which builds a die of its own and has to paint
+    // it the same as the ones it is landing among.
+    materialsAt: (territoryId) => paintFor(stands.get(territoryId)?.owner),
 
     /**
      * How this territory's dice will be standing once it holds `diceCount` —
@@ -164,7 +181,18 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
       for (const stand of stands.values()) {
         const node = state.nodes.get(stand.id);
         const dice = node ? node.dice : 0;
-        if (dice !== stand.dice) rebuild(stand, dice);
+        const owner = node ? node.owner : undefined;
+        if (dice !== stand.dice) {
+          rebuild(stand, dice, owner);
+        } else if (owner !== stand.owner) {
+          // Repainting is not restacking. A territory that changed hands
+          // without changing count keeps every die exactly where and which
+          // way up it was — the only thing about it that is now different is
+          // whose it is.
+          stand.owner = owner;
+          const materials = paintFor(owner);
+          for (const mesh of stand.meshes) mesh.material = materials;
+        }
       }
     },
 
@@ -178,7 +206,7 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
       // never honour a plan reserved for standing dice back up unchanged
       stand.reserved = null;
       const node = state.nodes.get(territoryId);
-      rebuild(stand, node ? node.dice : 0);
+      rebuild(stand, node ? node.dice : 0, node ? node.owner : undefined);
     },
     dispose() {
       geometry.dispose();

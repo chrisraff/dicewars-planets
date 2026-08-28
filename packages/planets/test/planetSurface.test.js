@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createInitialState } from '@dicewars/core';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createPlanetSurface } from '../src/render/planetSurface.js';
-import { assignPlayerColors, SELECTION_COLOR } from '../src/render/palette.js';
+import { assignPlayerColors, SELECTION_COLOR, srgbRgb } from '../src/render/palette.js';
 import { highlightsFor } from '../src/render/highlights.js';
 import { seededRng } from '@dicewars/core/test-support';
 
@@ -31,17 +31,46 @@ function paintedColor(surface, world, territoryId) {
   return [array[start * 3], array[start * 3 + 1], array[start * 3 + 2]];
 }
 
-test('the first paint puts every territory in its owner’s color', () => {
+/**
+ * Stated in what reaches the screen rather than in what sits in the buffer,
+ * because those are two different numbers and only one of them is the claim.
+ *
+ * A vertex colour is read by three.js as linear and encoded to sRGB on output,
+ * so the buffer holds the linear form and the *display* is that form encoded —
+ * which has to come back to exactly the palette entry the HUD writes into its
+ * CSS. Asserting the buffer against the palette directly is the mistake this
+ * replaces: it passed for a planet that was showing every colour lightened.
+ */
+test('a territory shows its owner’s color — the same one the HUD draws', () => {
   const { world, surface, state, colors } = setup();
   const changed = surface.refresh(state);
 
   assert.ok(changed > 0, 'the whole planet gets painted the first time');
   const territory = world.territories[0];
   const owner = state.nodes.get(territory.id).owner;
+
   assert.deepEqual(
-    paintedColor(surface, world, territory.id).map((c) => Math.round(c * 1000)),
+    srgbRgb(paintedColor(surface, world, territory.id)).map((c) => Math.round(c * 1000)),
     colors.get(owner).map((c) => Math.round(Math.fround(c) * 1000))
   );
+});
+
+// The failure this guards is not "the wrong colour" but "the right colour,
+// twice encoded" — which looks plausible on screen and only shows up as the
+// whole palette drifting pale. So: the buffer must NOT hold what the palette
+// says, and what it displays as must.
+test('the buffer holds linear light, not the sRGB the palette is written in', () => {
+  const { world, surface, state, colors } = setup();
+  surface.refresh(state);
+
+  const territory = world.territories[0];
+  const authored = colors.get(state.nodes.get(territory.id).owner);
+  const inBuffer = paintedColor(surface, world, territory.id);
+
+  authored.forEach((channel, i) => {
+    if (channel <= 0.04045) return; // the two agree on the very darkest channels
+    assert.ok(inBuffer[i] < channel, 'a linearized channel is darker than the sRGB it came from');
+  });
 });
 
 test('a change of owner repaints that territory *and* flags the buffer for the GPU', () => {

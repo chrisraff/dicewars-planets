@@ -1,5 +1,19 @@
 import * as THREE from 'three';
 import { pipPositions } from './pips.js';
+import { lighten, readableTextColor } from './palette.js';
+
+// Bone, and the near-black drilled into it. Written the way the palette
+// writes colours (channels in 0..1) rather than as CSS, because a coloured
+// die takes its face straight from the player palette and the two have to be
+// the same kind of thing.
+export const DIE_FACE = [0.973, 0.949, 0.894];
+export const DIE_INK = [0.11, 0.11, 0.11];
+
+// How far a player-coloured die is pulled toward white before its pips are
+// inked on. Judged by eye on preview/dice.html, which is what that page is for.
+export const DIE_TINT = 0.45;
+
+const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
 
 // A pip's radius as a fraction of the face. The ink and the hollow it sits in
 // are the same circle: a real die's pip is drilled and then filled, so the
@@ -42,14 +56,14 @@ function newFaceCanvas(size) {
   return canvas;
 }
 
-function drawDieFace(pipCount, size) {
+function drawDieFace(pipCount, size, face, ink) {
   const canvas = newFaceCanvas(size);
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = '#f8f2e4';
+  ctx.fillStyle = rgb(face);
   ctx.fillRect(0, 0, size, size);
 
-  ctx.fillStyle = '#1c1c1c';
+  ctx.fillStyle = rgb(ink);
   const radius = size * PIP_RADIUS;
   for (const [xf, yf] of pipPositions(pipCount)) {
     ctx.beginPath();
@@ -115,10 +129,15 @@ function drawDieFaceNormals(pipCount, size) {
 // Generates the six pip-face textures once and returns them as a
 // BoxGeometry-ready materials array (face order: +X, -X, +Y, -Y, +Z, -Z),
 // laid out so opposite faces sum to 7, matching a standard western die.
-export function createDiePipMaterials(textureSize = 128) {
+//
+// `face` and `ink` are the only things a coloured die changes — the normal
+// map is geometry written down as colour, and is identical whatever the die
+// is painted.
+export function createDiePipMaterials(options = {}) {
+  const { textureSize = 128, face = DIE_FACE, ink = DIE_INK } = options;
   const facePips = [1, 6, 2, 5, 3, 4];
   return facePips.map((pips) => {
-    const texture = new THREE.CanvasTexture(drawDieFace(pips, textureSize));
+    const texture = new THREE.CanvasTexture(drawDieFace(pips, textureSize, face, ink));
     texture.colorSpace = THREE.SRGBColorSpace;
 
     // A normal map is geometry written down as color, so it stays linear —
@@ -128,4 +147,29 @@ export function createDiePipMaterials(textureSize = 128) {
 
     return new THREE.MeshStandardMaterial({ map: texture, normalMap, roughness: 0.5 });
   });
+}
+
+/**
+ * One set of pip materials per player, for dice painted in their owner's
+ * colour rather than in bone.
+ *
+ * The player colour is not used raw. A die has to carry a *number* as well as
+ * an identity, and its pips are the only thing on it that says which — so the
+ * face is pulled toward white by `tint` until there is somewhere for an ink to
+ * stand, and the ink is then chosen by the same measurement the HUD uses
+ * (`readableTextColor`, which picks whichever of black or white actually
+ * clears AA against that face rather than guessing from a threshold).
+ *
+ * `tint` at 0 is the player's colour undiluted and 1 is a plain bone die, so
+ * the knob is really "how much of a die is left once it is also a flag".
+ * Eight sets of six 128px canvases is the whole cost, paid once.
+ */
+export function createPlayerDiePipMaterials(playerColors, options = {}) {
+  const { tint = DIE_TINT, ...rest } = options;
+  const sets = new Map();
+  for (const [playerId, color] of playerColors) {
+    const face = lighten(color, tint);
+    sets.set(playerId, createDiePipMaterials({ ...rest, face, ink: readableTextColor(face) }));
+  }
+  return sets;
 }

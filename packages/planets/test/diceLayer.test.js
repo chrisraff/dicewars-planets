@@ -187,3 +187,62 @@ test('reroll stands a surviving stack back up on its counting face', () => {
   const top = stand.meshes.reduce((a, b) => (b.position.y > a.position.y ? b : a));
   assert.equal(pipFacing(top, stand.normal), 3, 'and reading as three again');
 });
+
+// --- painted by owner --------------------------------------------------
+
+const paintedWorld = () => ({
+  p1: Array.from({ length: 6 }, () => new THREE.MeshBasicMaterial()),
+  p2: Array.from({ length: 6 }, () => new THREE.MeshBasicMaterial()),
+});
+
+test('dice are painted by whoever owns the territory', () => {
+  const paints = paintedWorld();
+  const layer = createDiceLayer(twoCellWorld(), materials, {
+    rng: seededRng(1),
+    materialsFor: (owner) => paints[owner],
+  });
+  layer.update(stateWith(3, 2));
+
+  assert.equal(layer.standFor('front').meshes[0].material, paints.p1);
+  assert.equal(layer.standFor('back').meshes[0].material, paints.p2);
+});
+
+// A change of hands is a repaint, not a restack. The tumble is what says how
+// many dice a territory holds — turning it over because it changed owner
+// would throw away the one thing the stack is there to tell you, on the very
+// move the player most wants to read it.
+test('a territory changing hands repaints its dice without re-tumbling them', () => {
+  const paints = paintedWorld();
+  const layer = createDiceLayer(twoCellWorld(), materials, {
+    rng: seededRng(1),
+    materialsFor: (owner) => paints[owner],
+  });
+  layer.update(stateWith(3, 2));
+
+  const before = layer.standFor('front').meshes.slice();
+  const orientations = before.map((mesh) => mesh.quaternion.clone());
+
+  layer.update({
+    nodes: new Map([
+      ['front', { owner: 'p2', dice: 3 }],
+      ['back', { owner: 'p2', dice: 2 }],
+    ]),
+  });
+
+  const after = layer.standFor('front').meshes;
+  assert.deepEqual(after, before, 'the same meshes, not new ones');
+  after.forEach((mesh, i) => {
+    assert.ok(mesh.quaternion.equals(orientations[i]), 'standing exactly as it was');
+    assert.equal(mesh.material, paints.p2, 'in its new owner’s colour');
+  });
+});
+
+// The default has to be untouched: pass no painter and every die on the
+// planet is the one bone set, which is what every existing caller relies on.
+test('with no painter, every die shares the one set of materials', () => {
+  const layer = layerFor();
+  layer.update(stateWith(3, 2));
+  assert.equal(layer.standFor('front').meshes[0].material, materials);
+  assert.equal(layer.standFor('back').meshes[0].material, materials);
+  assert.equal(layer.materialsAt('front'), materials);
+});
