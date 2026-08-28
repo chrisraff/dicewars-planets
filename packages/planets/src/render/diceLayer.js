@@ -3,9 +3,30 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { findAllDiceGrounds } from '../world/territoryCenters.js';
 import { planDiceStacks, stackColumnCount, PIP_FACE_NORMALS } from './diceStacks.js';
 
-// The die's edge length, in planet radii. Exported because the pole markers
-// are sized and stood up in dice — what they have to clear is a dice tower.
-export const DIE_SIZE = 0.035;
+/**
+ * The die's edge length, in planet radii. Exported because the pole markers
+ * are sized and stood up in dice — what they have to clear is a dice tower.
+ *
+ * The one number the whole layer is measured in, so it is the only place a die
+ * changes size: the scatter is handed it, `stackHalfWidth` defaults to it, and
+ * the pole marker states its own clearance in dice.
+ *
+ * It buys readability out of border accuracy, and the two halves of that trade
+ * are not the same size. A *resting* stack is one or two columns and has room
+ * to spare — at this size an eight-die stack is wider than its ground on 6% of
+ * territories, against 1.6% at 0.035. A *thrown* pile is spread across the
+ * territory and is what runs out of room: dice landing on a neighbour's land
+ * go from 2.0% to 8.7% of dice on a throw of eight, and from 0.9% to 18% of
+ * *piles* on a throw of six (`diceScatter.js` shrinks its pitch to fit and then
+ * overhangs rather than overlapping, so what gives is the border, never the
+ * dice standing clear of each other). Measured over 1,106 territories on 20
+ * default planets, against the real nearest-cell test rather than the
+ * conservative disc.
+ *
+ * Which is to say: the cost lands almost entirely on the second or two a
+ * battle is being rolled, and the benefit is on every frame in between.
+ */
+export const DIE_SIZE = 0.042;
 const BEVEL_SEGMENTS = 3;
 const COLUMN_GAP = 1.06; // column spacing, in die widths
 

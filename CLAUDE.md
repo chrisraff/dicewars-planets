@@ -527,10 +527,22 @@ The pitch shrinks until the pile fits the ground it has, and stops at dice
 touching — past that there is nothing left to give, so a pile that still
 doesn't fit overhangs the border rather than dice landing inside one another.
 Not overlapping is the guarantee; staying inside is the strong preference.
-Because `diceGroundRadius` takes the worst direction, that trade bites far
-less often than it looks: on a default planet, four and six dice never put a
-corner on foreign land at all, and eight manage it about 2% of the time, one
-corner at a time.
+Because `diceGroundRadius` takes the worst direction, that trade bites less
+often than it looks. It is also the half of the dice that pays for their size:
+a resting stack is one or two columns and has room to spare, while a thrown
+pile is spread across the whole territory, so raising `DIE_SIZE` costs the
+throw and almost nothing else. Measured over 1,106 territories on 20 default
+planets, dice landing on a neighbour's land:
+
+| die size | 4 dice | 6 dice | 8 dice |
+|----------|--------|--------|--------|
+| 0.035    | 0.1%   | 0.1%   | 2.0%   |
+| 0.042    | 0.4%   | 3.6%   | 8.7%   |
+
+0.042 is what ships. The four-dice column is what most throws actually are,
+and it barely moves; the eight-dice column is the price, and it is paid for
+the second or two a battle is in the air rather than on the board you look at
+in between.
 
 `lightRig.js` is the lights, and the first thing to know is how little they
 touch: the planet is `MeshBasicMaterial` and the pole markers are an unlit
