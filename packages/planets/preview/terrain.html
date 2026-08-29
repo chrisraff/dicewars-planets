@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — terrain preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Terrain</h1>
+      <p class="lede">
+        What the ocean carver makes, and what it used to make. A planet is
+        boring when the water is one cap on one side and the land is the cap
+        opposite — a couple of peninsulas, nothing to sail round. What is worth
+        looking at is water that <em>wraps</em>: a ring of land with ocean over
+        both poles, or the near miss of that, where the land almost closes the
+        loop and one narrow strait keeps the ocean a single body. The number
+        under each planet is <code>landClustering</code>, which is 0.40 for the
+        most cap-like planet there can be at 40% water and near 0 for a ring.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/terrain.js"></script>
+  </body>
+</html>

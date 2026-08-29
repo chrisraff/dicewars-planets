@@ -323,3 +323,24 @@ h1 {
 .stage.is-planet .hud-host {
   pointer-events: none;
 }
+
+/* ---- the terrain preview: two planets from one seed -------------------
+
+   Two carvings of the same seed have to be seen together to mean anything, so
+   they sit side by side and drop to one column when there is no room for
+   that. Addressed with `>` like every other preview rule: the stage inside
+   holds the game's own canvas and markup. */
+
+.terrain-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.terrain-pair > div > .stage.is-planet {
+  min-height: 20rem;
+}
+@media (max-width: 40rem) {
+  .terrain-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

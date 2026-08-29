@@ -72,6 +72,14 @@ export const PREVIEW_PAGES = [
       + 'down to a sixth, and an ordinary match where the call is the right one.',
   },
   {
+    href: '/preview/terrain.html',
+    title: 'Terrain & lakes',
+    description:
+      'What the ocean carver makes and what it used to make — the same seed carved both '
+      + 'ways side by side, the lakes it now punches into a continent, and a count of how '
+      + 'often each of the two leaves a planet that is a cap of land facing a cap of ocean.',
+  },
+  {
     href: '/preview/replay-perf.html',
     title: 'Replay storage & timing',
     description:

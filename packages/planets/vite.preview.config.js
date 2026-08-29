@@ -13,6 +13,7 @@ const PAGES = [
   'replay',
   'replay-perf',
   'surrender',
+  'terrain',
 ];
 
 /**

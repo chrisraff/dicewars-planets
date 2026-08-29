@@ -235,6 +235,76 @@ strongest ring of territories runs along the equator. `generateWorld.js`
 returns exactly what `createInitialState` needs plus the extra geometry a
 renderer wants.
 
+`oceans.js` decides where the water goes, and the thing it is really deciding
+is whether the planet is **worth looking at**. A planet is boring when the
+water is one cap on one side and the land is the cap opposite: a couple of
+peninsulas, nothing to sail round, every player looking at the same continent
+from a different edge of it. What is worth having is water that *wraps* — a
+ring of land with ocean over both poles, or the near miss of that, where the
+land almost closes the loop and one narrow strait keeps the ocean a single
+body. Those two are the same planet either side of one strait closing, which
+is why nothing here counts ocean bodies.
+
+`landClustering` is how that is measured: the mean resultant length of the
+land cells' directions. Cells are near enough equal area that counting them is
+weighting them, so it is the length of the average land direction — a cap
+covering fraction `f` of the sphere reads exactly `1 - f`, so at the 40% water
+the game ships with, **0.40 is as cap-like as a planet can physically get and
+0 is a ring**. One number over the whole planet, no thresholds inside it, and
+it agrees with the eye across the range rather than at the ends.
+
+Measured with it, **61.8% of the planets the old carver dealt were boring**
+and half were flatly cap-like. The cause was the seeding: ocean seeds were
+placed uniformly at random, and at 40% water every basin is angularly
+enormous, so two seeds an ordinary distance apart merge into one lobe long
+before either finishes growing. A quarter of planets were dealt a single basin
+outright, which is a cap by construction.
+
+**The fix is placement, and it is not where it looks.** Adding basins does
+help — four uniform ones score 0.217 median against one basin's 0.345 — so the
+tempting change is to raise the count and stop. Two basins *placed apart*
+score 0.174. Count buys blobs; placement buys the ones that end up opposite
+each other. `seedCandidates` is best-candidate sampling at best-of-8,
+deliberately not an exact antipode, so basins are reliably opposed without
+every planet arriving on the same axis.
+
+On top of that sits a guard rather than a shaper. A carve scoring over
+`maxClustering` is thrown away and retried, up to `attempts`; spread seeding
+already clears the bar 93% of the time, so this averages 1.07 carves and costs
+nothing measurable (12.4ms against 12.5ms). The bar is at 0.28 because planets
+between 0.20 and 0.28 still wrap most of the way round and are worth keeping
+for variety — tightening it does not make planets better, only more alike.
+Together: **0% boring against 61.8%, and 78% now wrap the planet outright.**
+
+Territory statistics barely move — 56.9 territories against 56.5, the same
+size distribution, the same count of dead ends. What does move is mean
+territory adjacency, 4.79 down to 4.48, which is the trade being made: more
+coastline is fewer land borders and more chokepoints.
+
+**Lakes** are single cells of water with land the whole way round, punched
+after the basins are grown. Two things make them cheap. A lake site is a land
+cell with land on every side, which is both what tells a lake from a bite out
+of the coast *and* what stops two ever merging into a pond — punching one
+turns its neighbours into coast, and coast is not a site, so nothing has to
+remember where the last one went. And removing such a cell cannot disconnect
+the land, because the cells around a cell of a Goldberg polyhedron form a
+cycle, so any path through it can go round it. They are spent out of the same
+water budget as the basins, so `oceanFraction` keeps meaning "how much of the
+planet is water" however that water is arranged. Nothing downstream needed
+changing: the renderer derives water from "has no territory", and
+`diceGroundRadius` already treats a non-member cell as foreign, so dice will
+not land in one.
+
+A trap worth knowing before measuring any of this: `seededRng` is an LCG, so
+its **first** draw is very nearly a linear function of the seed — across seeds
+1..200 it only moves from 0.236 to 0.314. Anything the carver decides from its
+first draw is therefore near-constant across a sample built from small seeds,
+and the old carver's basin count was exactly that. Measure with whole-range
+seeds drawn from one generator, which is also what a real game deals itself.
+`preview/terrain.html` is where all of this is looked at rather than argued
+about: one seed carved both ways side by side, the lakes, and the distribution
+counted live.
+
 `seating.js` is who gets dealt what, and it exists because **moving first was
 most of the game**. Every seat played by the same AI — so nothing separates
 them but where they sit — seat 1 of six won 25.9% of 20,006 games against seat
@@ -726,6 +796,10 @@ from the game is worse than none.
   planet and the replay. Pinning `rollDie` and `rng` as well as the world seed
   is what makes "the game where the surrender was wrong" a thing that can be
   looked at twice.
+- `terrain.html` opens on a pinned seed for the same reason, and the seed is
+  chosen to be *typical* rather than damning: its old carving scores 0.317,
+  which is the old carver's median. A comparison page that opened on the worst
+  case it could find would be an advert rather than evidence.
 - `replay-perf.html` is the odd one out: numbers rather than a component. It
   plays real matches and puts them through the real save path against real
   `localStorage`, under a key of its own so a game in progress is never

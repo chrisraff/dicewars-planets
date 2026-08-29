@@ -36,6 +36,11 @@ export function generatePlanetWorld({
   playerIds,
   rng = Math.random,
   oceanFraction = 0.4,
+  // How the water is arranged, as opposed to how much of it there is — see
+  // `OCEAN_TUNING`. A game never passes this; `preview/terrain.html` does, to
+  // carve one seed both the shipping way and the way that used to leave half
+  // of all planets a cap of land facing a cap of ocean.
+  oceanOptions = {},
   targetTerritorySize = 7,
   territorySizeSigma = 2,
   minTerritorySize = 3,
@@ -46,7 +51,7 @@ export function generatePlanetWorld({
   levelSeats = true,
 }) {
   const cells = generateIcosphereCells(subdivisions);
-  const { landCellIds, oceanCellIds } = carveOceans(cells, oceanFraction, rng);
+  const { landCellIds, oceanCellIds } = carveOceans(cells, oceanFraction, rng, oceanOptions);
   const landCells = cells.filter((c) => landCellIds.has(c.id));
 
   const { territories, edges, cellTerritory } = groupIntoTerritories(landCells, {
