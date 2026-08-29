@@ -651,8 +651,15 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
     /**
      * One die has just landed on the planet — peels the tray back by one, so
-     * it empties right to left in step with the drops rather than vanishing
-     * all at once.
+     * it empties in step with the drops rather than vanishing all at once.
+     *
+     * Which chip this takes is not what decides the direction it empties in,
+     * and anyone here to change that should go to `.hud-reinforce` in hud.css
+     * instead. The chips are identical and the row is left-aligned, so the
+     * ones still standing always fill the first slots however this picks —
+     * popping the last and shifting the first draw the same picture. The
+     * stylesheet's `wrap-reverse` is what puts the partial line on top, and so
+     * what makes the tray empty right to left, top to bottom.
      */
     reinforceDropped() {
       reinforceChips.pop()?.remove();

@@ -756,6 +756,24 @@ to count comes before the point where they stop fitting. `.battle-current` is
 `overflow: hidden`, so a full reading that overruns truncates rather than
 scrolls — which is why the fit is measured rather than hoped for.
 
+The **payout tray** — a chip per die a turn just earned, peeled back one at a
+time by `reinforceDropped` as each die lands — empties right to left, top to
+bottom, and **that direction is set in CSS, not in the JS that removes the
+chips**. This is the counter-intuitive part and the reason the tray is worth a
+paragraph. The chips are identical and the row is left-aligned, so the ones
+still standing always occupy the first *n* slots however `reinforceDropped`
+picks: popping the last chip and shifting the first draw the same picture,
+pixel for pixel. Nothing in the JS can change the direction. What decides
+which line goes first is which line the *last slot* is on, and that is
+`.hud-reinforce`'s `flex-wrap`. `wrap-reverse` puts the first flex line at the
+bottom and each new line above it, so the short partial line is on top and
+drains first; plain `wrap` puts it at the bottom and gives the opposite. The
+count is capped at `MAX_RESERVE`, 64, and a phone fits about fifteen chips to
+a line, so wrapping is an ordinary late-game turn rather than an edge case.
+`preview/payout.html` stands the two directions side by side, draining off one
+clock, with a step button — because a whole payout is capped at a second
+however many dice are in it, which is not long enough to read a direction in.
+
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice
 texture and the flat SVG dice in the battle readout, and `diceStacks.js`

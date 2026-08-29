@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — payout tray preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Payout tray</h1>
+      <p class="lede">
+        The chips that stand for the dice a turn just earned, peeling back one
+        at a time as each die lands on the planet. A payout runs to
+        <code>MAX_RESERVE</code> — 64 dice — so on a phone it wraps onto several
+        lines routinely, and the order it empties in is only visible once it
+        does. Every tray here is a real HUD draining on the real
+        <code>reinforceTimeline</code>; the drain is capped at a second whatever
+        the count, so use <b>slowly</b> or <b>step</b> to actually read one.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/payout.js"></script>
+  </body>
+</html>

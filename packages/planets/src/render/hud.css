@@ -599,10 +599,22 @@
 /* The dice a turn just earned, sitting above the turn/menu/end-turn row
    rather than inside it, so a big payout can wrap onto as many lines as it
    needs instead of running out of room — gone again the moment the payout
-   actually lands. */
+   actually lands.
+
+   `wrap-reverse` is what makes the tray empty from the top down, and it is
+   the *only* thing that can: the drain direction is a layout question, not a
+   JS one. Every chip is identical and the row is left-aligned, so whatever
+   order `reinforceDropped` pops them in, the n still standing always occupy
+   the first n slots — removing the first chip instead of the last is
+   pixel-for-pixel the same picture. What decides which line goes first is
+   which line the *last slot* is on, and that is this declaration. Reversing
+   the wrap puts the first flex line at the bottom and each new line above it,
+   so the short, partial line is the one on top and the one that drains first:
+   right to left, top to bottom. Plain `wrap` gives right to left, bottom to
+   top. See `preview/payout.html`, which stands both side by side. */
 .hud-reinforce {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap-reverse;
   gap: 0.18rem;
 }
 .hud-reinforce[hidden] { display: none; }

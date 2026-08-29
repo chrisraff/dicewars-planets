@@ -9,6 +9,7 @@ const PAGES = [
   'battles',
   'endgame',
   'poles',
+  'payout',
   'dice',
   'replay',
   'replay-perf',

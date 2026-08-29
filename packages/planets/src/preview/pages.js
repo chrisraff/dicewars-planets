@@ -58,6 +58,14 @@ export const PREVIEW_PAGES = [
       + 'the double encoding that used to leave the whole palette pale on the globe.',
   },
   {
+    href: '/preview/payout.html',
+    title: 'Payout tray',
+    description:
+      'The chips for the dice a turn just earned, draining on the real payout clock at every '
+      + 'size they reach — including the wrapping the sixty-four a reserve can hold forces, and '
+      + 'the two directions that wrapping can empty in, side by side.',
+  },
+  {
     href: '/preview/replay.html',
     title: 'Replay',
     description:

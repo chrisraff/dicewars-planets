@@ -344,3 +344,23 @@ h1 {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---- the payout preview: labelled trays in a row ----------------------
+
+   Each child keeps its own stage width rather than being squeezed to share
+   the row, because how many chips fit a line IS the thing on show — a tray
+   narrowed to fit three across would wrap at a count no phone ever would.
+   Out of room, they wrap onto the next row instead. */
+
+.payout-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.payout-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  color: #75757e;
+}
