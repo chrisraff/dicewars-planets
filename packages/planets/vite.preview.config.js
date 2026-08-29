@@ -10,6 +10,7 @@ const PAGES = [
   'endgame',
   'poles',
   'payout',
+  'handover',
   'dice',
   'replay',
   'replay-perf',

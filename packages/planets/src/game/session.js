@@ -23,6 +23,7 @@ import { createCameraFocus } from '../render/cameraFocus.js';
 import { fightCenter } from '../render/cameraFraming.js';
 import { createTerritoryPicker } from '../render/pickTerritory.js';
 import { createHud } from '../render/hud.js';
+import { createTurnFlash } from '../render/turnFlash.js';
 import { assignPlayerColors } from '../render/palette.js';
 import { highlightsFor, pulseAt } from '../render/highlights.js';
 
@@ -125,7 +126,10 @@ export function createSession({
   poles.settle(game.state);
   viewer.scene.add(surface.group, dice.group, poles.group);
 
-  const hud = createHud(hudRoot, { playerColors, playerNames });
+  const hud = createHud(hudRoot, { playerColors, playerNames, humanPlayerId });
+  // Under the HUD and over the canvas — see `turnFlash.js` for why that order,
+  // and why this is an overlay rather than the scene's background.
+  const turnFlash = createTurnFlash(hudRoot.parentNode ?? hudRoot, { before: hudRoot });
   hud.setHistory(battles.entries);
   // A resumed game brings its history with it, so the readout should show the
   // last fight already fought rather than sitting empty until the next one.
@@ -154,6 +158,45 @@ export function createSession({
     return cameraFocus.lookAtCluster(points);
   }
 
+  /**
+   * A turn has just handed back to the player, so put their own ground in
+   * front of them.
+   *
+   * The AI plays where it likes and the camera has been following it round the
+   * back for a minute, so the board the player is handed is quite often
+   * somebody else's half of the planet. `lookAtHoldings` turns it back — but
+   * only when *none* of their territories is on screen, since seeing some of
+   * their own ground is enough to know where they are, and moving the camera
+   * then would be taking a view away from somebody who has one.
+   *
+   * Held back for the four states where an announcement is wrong rather than
+   * merely unhelpful: a player who is out has no turn to be handed, a finished
+   * match has no next move, and both the replay and a banner are things the
+   * player is looking at instead of the board — turning the planet underneath
+   * either would move a board they cannot see and land them somewhere they
+   * never watched happen.
+   */
+  function focusOwnGround() {
+    if (humanEliminated || game.isOver() || replayOpen || bannerHolding) return false;
+
+    const mine = [];
+    for (const [id, node] of game.state.nodes) {
+      if (node.owner === humanPlayerId) mine.push(dice.standFor(id).normal);
+    }
+    // The flash waits for the camera to settle: an announcement over a planet
+    // still turning underneath it is two things happening at once, and the
+    // player has to read both. `pendingFlash` is cleared in `tick`, which is
+    // also where a pan cancelled by a hand on the planet ends up — the flash
+    // still fires there, because it is an announcement rather than a camera
+    // move and the player has not stopped needing it.
+    if (cameraFocus.lookAtHoldings(mine)) {
+      pendingFlash = true;
+      return true;
+    }
+    turnFlash.play();
+    return false;
+  }
+
   const pickTerritoryAt = createTerritoryPicker({
     planetMesh: surface.mesh,
     camera: viewer.camera,
@@ -179,6 +222,7 @@ export function createSession({
   // it moves while either is true — see tick() at the bottom.
   let replayOpen = false;
   let bannerHolding = false;
+  let pendingFlash = false; // a handover pan is running and the flash follows it
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -445,7 +489,7 @@ export function createSession({
     });
     hud.showHint({
       seen: hintSeen,
-      humanPlayerId, // the prompt names the color you are, so it has to know
+      humanPlayerId, // the panel names the color you are, so it has to know
       isHumanTurn: game.isHumanTurn(),
       isOver: game.isOver(),
       humanEliminated,
@@ -519,6 +563,13 @@ export function createSession({
     // `framePlanet`. It has the AI's think pause plus its first aim to land
     // in, so it is over before there are dice to read.
     if (event.playerId === humanPlayerId) cameraFocus.framePlanet();
+    // And the other side of the same handover. `endTurn` is emitted from
+    // `finishReinforce`, so by here the previous player's payout has finished
+    // landing and `state` has already moved on to whoever is next — which is
+    // both the moment the player is actually being handed the board and the
+    // first moment the camera is free to move without cutting an animation
+    // short.
+    else if (game.currentPlayer() === humanPlayerId) focusOwnGround();
   });
 
   game.on('eliminated', (event) => {
@@ -631,6 +682,15 @@ export function createSession({
 
     tick(dt) {
       cameraFocus.tick(dt);
+      // Re-checked rather than trusted from when the pan started: a knockout
+      // or a replay can arrive in the second the camera is moving, and every
+      // one of those is a reason not to flash after all.
+      if (pendingFlash && !cameraFocus.isMoving) {
+        pendingFlash = false;
+        if (!humanEliminated && !game.isOver() && !replayOpen && !bannerHolding) turnFlash.play();
+      }
+      turnFlash.tick(dt);
+
       if (pendingReplayStep && !cameraFocus.isSwinging) {
         const { step, entry, nodes, animate } = pendingReplayStep;
         pendingReplayStep = null;
@@ -683,6 +743,7 @@ export function createSession({
       // out of the scene. Closing the replay is what stops it.
       hud.hideReplay();
       cameraFocus.dispose();
+      turnFlash.dispose();
       viewer.scene.remove(surface.group, dice.group, poles.group);
       surface.dispose();
       dice.dispose();

@@ -119,7 +119,9 @@
   grid-template-columns: 1fr;
   align-items: center;
   overflow: hidden; /* contents are clipped as the column closes, not reflowed */
-  padding: 0.35rem 0.55rem 0.5rem; /* lower pad clears the banked-dice badge */
+  /* upper pad clears the you-caret, lower pad the banked-dice badge — both
+     on every tile, so marking one never makes it a different size */
+  padding: 0.5rem 0.55rem 0.5rem;
   border-radius: var(--panel-radius);
   background: var(--player-color);
   color: var(--player-ink);
@@ -176,6 +178,40 @@
 }
 .hud-player-reserve.is-empty { display: none; }
 .hud-player-reserve.is-full { text-decoration: underline; }
+
+/* Which tile is you, for the whole match.
+
+   Inside the tile rather than hanging above it, because `.hud-player` clips
+   its own overflow to fold up on a knockout — and that clip is the padding
+   edge, so `top: 0` is as high as this can go. Which is exactly where it
+   wants to be: flush against the inner edge of the border, and as far from
+   the name below as the tile can give it.
+
+   In the tile's own ink so it stays legible across a palette running from
+   dark red to near-white — except on your own turn, when the border it is
+   resting against turns white and so does this. The two are touching, so
+   letting them share a color makes them one mark: a white tab on a white
+   outline, rather than a colored notch sitting oddly inside a white frame.
+   `is-winner` wears the same white border and gets the same treatment. */
+.hud-player.is-you::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 0.26rem solid transparent;
+  border-right: 0.26rem solid transparent;
+  border-top: 0.26rem solid var(--player-ink);
+  opacity: 0.85;
+  transition: border-top-color 120ms ease, opacity 120ms ease;
+}
+.hud-player.is-you.is-current::after,
+.hud-player.is-you.is-winner::after {
+  border-top-color: #fff;
+  opacity: 1;
+}
 
 .hud-player.is-current {
   border-color: #fff;
@@ -502,19 +538,67 @@
 /* ---- turn indicator + end turn ----------------------------------- */
 
 .hud-controls {
+  /* Named because the rail below centres itself in this gap and has to keep
+     doing so if it changes, and because the rail's reach to the screen edge is
+     this padding cancelled out — three places that have to agree. */
+  --controls-gap: 0.5rem;
+  --controls-inset: calc(var(--safe-left) + 0.9rem);
+  --turn-rail: 0.16rem;
+
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--controls-gap);
   padding: 0.7rem calc(var(--safe-right) + 0.9rem)
-           calc(var(--safe-bottom) + 0.8rem) calc(var(--safe-left) + 0.9rem);
+           calc(var(--safe-bottom) + 0.8rem) var(--controls-inset);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
 }
+
 .hud-controls-row {
+  position: relative; /* the your-turn rail is drawn along its top edge */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
+
+/* The state half of saying whose turn it is: the player's own color, present
+   while the turn is theirs and gone while it is not. The pan and the flash
+   mark the *moment* a turn arrives and are no use at all to somebody who
+   looked away and back; this is readable at a glance at any point in the turn,
+   and being present-or-absent rather than one color against another, it does
+   not depend on telling two hues apart.
+
+   A divider rather than a decoration: it runs off the left edge of the screen
+   and sits in the gap above the button row, so everything transient — the
+   payout tray, the first-timer's prompt — is above the line and the controls
+   are below it. Reaching the edge is what makes it read as a rule across the
+   interface rather than as an underline belonging to one of the words.
+
+   The right end fades instead of stopping. The taper is capped in `rem` so it
+   does not grow silly on a wide screen, but falls back to a share of the rail
+   below that — a fixed 8rem is most of the whole line on a phone, which leaves
+   barely any solid color to fade *from*. */
+.hud-controls-row::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--controls-inset) * -1);
+  width: min(26rem, 66%);
+  top: calc((var(--controls-gap) + var(--turn-rail)) / -2);
+  height: var(--turn-rail);
+  background: linear-gradient(
+    to right,
+    var(--turn-color, transparent) calc(100% - min(8rem, 45%)),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.hud-controls-row.is-your-turn::before { opacity: 1; }
+/* The turn text is silent during ordinary play, so the buttons are pinned
+   right rather than left where they are by `space-between` when they become
+   the row's only child. Without this they jump sides the moment a game ends. */
+.hud-turn[hidden] { display: none; }
+.hud-buttons { margin-left: auto; }
 .hud-turn {
   display: inline-flex;
   align-items: center;
@@ -523,6 +607,11 @@
   letter-spacing: 0.02em;
   text-shadow: 0 0 0.4rem #000;
 }
+
+/* Only on your own turn: the corner names your color in words between turns
+   and shows it as a dot on them, so the dot arriving is half of what says the
+   planet is yours again. */
+.hud-dot[hidden] { display: none; }
 .hud-dot {
   width: 0.8rem;
   height: 0.8rem;
@@ -563,19 +652,37 @@
   color: #e8e8ea;
 }
 
-/* The one word that says which of the eight colors on the planet is yours.
-   A chip rather than tinted text: a player color used as ink on this panel
-   only reaches about 4:1, under AA at this size, whereas the color as a
-   background under `readableTextColor` is the pairing the stats row already
-   proves legible across the whole palette — and it makes the word look like
-   the territories it is talking about. */
-.hud-hint-color {
+/* The one word a line is *about*, set in that player's color. Usually a color
+   name — "you are red" — but for a win or a knockout it is the person instead,
+   so this styles "You" and "Blue" as readily as "red". Shared by the corner
+   line and the first-timer's prompt, which say it in the same voice and should
+   not drift apart.
+
+   A chip rather than tinted text: a player color used as ink at this size only
+   reaches about 4:1, under AA, whereas the color as a background under
+   `readableTextColor` is the pairing the stats row already proves legible
+   across the whole palette — and it makes the word look like the territories
+   it is talking about. */
+.hud-color-chip {
   display: inline-block;
   padding: 0 0.3rem;
   border-radius: 0.25rem;
   background: var(--player-color);
   color: var(--player-ink);
   font-weight: 700;
+  /* The corner line wears a black glow so it can be read over a moving planet.
+     A chip has its own opaque background and so has never had that problem —
+     and inheriting the glow actively hurt the half of the palette whose ink is
+     dark. Purple is the case that shows it: 4.78 against its own background,
+     the tightest margin in the palette and only just over AA, with a black
+     halo eating into exactly the edge the letterforms are carried by.
+
+     Not a lighter glow for dark ink, which is the tempting fix. `readableTextColor`
+     measures its contrast against a *flat* background, so any halo makes that
+     measurement — and the test asserting the whole palette clears AA — stop
+     describing what is on the screen. It would also be a second rule having to
+     track where that function flips from light ink to dark. */
+  text-shadow: none;
 }
 
 /* The glyph is a few pixels across; the target it sits in is not — dismissing
@@ -1074,4 +1181,34 @@
   .menu-toggle-track,
   .menu-toggle-knob,
   .menu-seat { transition: none; }
+}
+
+/* ---- the your-turn flash ---------------------------------------------
+
+   A veil over the view for the moment a turn hands back to the player. Sits
+   over the canvas and *under* the HUD, so it announces the board rather than
+   greying out the controls it has just invited you to use. Its host has to be
+   positioned; opacity is driven per frame from `turnFlash.js`, which is also
+   where the argument for a DOM overlay rather than a scene background lives.
+
+   The vignette is the default shape: opaque at the corners, clear over the
+   middle, so the planet you have just been handed is the one thing the flash
+   does not cover. `.is-full` is the flat veil — the stronger of the two
+   signals, and the one that hides more. */
+.turn-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  --flash-color: 160, 164, 172;
+  --flash-inner: 30%;
+  --flash-outer: 95%;
+  background: rgb(var(--flash-color));
+}
+.turn-flash.is-vignette {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--flash-color), 0) var(--flash-inner),
+    rgb(var(--flash-color)) var(--flash-outer)
+  );
 }

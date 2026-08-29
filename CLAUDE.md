@@ -707,6 +707,37 @@ read. A hand on the planet cancels it outright — a wheel zoom doesn't, since
 that says nothing about where to look, and the swing keeps whatever distance
 the player lands on.
 
+The camera also turns **back to the player's own ground** when a turn hands to
+them (`lookAtHoldings` / `holdingsFocus`), because the other side of following
+the AI round the back for a minute is that the board handed back is often
+somebody else's half of the planet. It fires from `endTurn`, which
+`finishReinforce` emits once the previous player's payout has finished landing
+— both the moment the player is actually handed the board and the first moment
+the camera is free without cutting an animation short. Held back for the four
+states where moving the planet is wrong rather than merely unhelpful: the
+player is out, the match is over, the replay has the planet, or a banner is
+holding it.
+
+Two things about how it aims. It goes on **how many territories end up on
+screen**, not on the largest connected region — what a camera can show is
+decided by angle, and connectedness is a fact about the territory graph, so
+two territories can share a border and still want different framings. Counting
+what lands on screen also degrades gracefully: on an opening board of
+scattered singletons there is no region to speak of, and a region-based aim
+would pick an essentially arbitrary one, where this aims at whichever quarter
+of the planet holds most of you. And it **seeds from the territories
+themselves** rather than sampling the sphere evenly, sliding each seed a
+couple of times toward the middle of whatever it can see. The best aim is
+always near a territory, since an aim near nothing sees nothing — which is
+what keeps this at 0.4ms for a 40-territory empire instead of a scan of the
+whole sphere.
+
+It only fires when **none** of the player's territories is on screen, and it
+draws back only when the wider view strictly shows more, never inwards — the
+same bargain `framePlanet` makes about distance, applied to direction. Seeing
+some of your own ground is enough to know where you are, and a camera that
+moved anyway would be taking a view away from somebody who has one.
+
 **How far back the camera sits** is the other half, and it is a phone problem.
 `narrowHalfFov` is the tighter of the two frustum half-angles, because "in
 frame" has to mean in frame in both directions — and on a phone held upright
@@ -756,6 +787,111 @@ to count comes before the point where they stop fitting. `.battle-current` is
 `overflow: hidden`, so a full reading that overruns truncates rather than
 scrolls — which is why the fit is measured rather than hoped for.
 
+**Four things say whose game this is**, and they are deliberately different
+kinds of thing, because "which colour am I" is a standing fact you may want
+three minutes in, while "it is your turn now" is a moment. A persistent badge
+cannot mark a handover and a flash cannot answer a question asked later.
+
+- **The caret** (`is-you` on the stats tile) is the standing answer. A shape
+  rather than a word or a colour, because every other affordance the tile has
+  is taken: the border and its glow say whose turn it is (and say it again,
+  brighter, for a winner), the lower-right corner is the banked-dice badge,
+  the middle is the dot a knocked-out tile folds to — and colour cannot mark
+  it either, since every tile is already its player's colour. It sits *inside*
+  the tile: `.hud-player` clips its own overflow to fold up on a knockout, and
+  that clip is the padding edge, so `top: 0` is as high as it can go — which
+  is also where it wants to be, flush against the border and as far from the
+  name below as the tile can give it. On your own turn it goes white with the
+  border it is resting against: the two are touching, so sharing a colour
+  makes them one mark rather than a coloured notch inside a white frame.
+  The top padding is on every tile,
+  not just the marked one, so marking a tile never makes it a different size.
+  The colour *name* stays on the tile — a tile reading only "YOU" would leave
+  "Blue is playing" and the battle history with nothing to attach to — and the
+  `aria-label` says "Red, you".
+- **The rail** (`is-your-turn` on `.hud-controls-row`) is the standing answer
+  to "is it me now". Present while the turn is yours, absent otherwise, so it
+  is readable at any point in a turn rather than only at its start, and being
+  present-or-absent rather than one hue against another it does not depend on
+  telling colours apart. It is a **divider**: it runs off the left edge of the
+  screen and sits in the gap above the button row, so everything transient —
+  the payout tray, the first-timer's prompt — is above the line and the
+  controls are below it. Reaching the edge is what makes it read as a rule
+  across the interface rather than as an underline belonging to one of the
+  words. `.hud-controls` names `--controls-gap`, `--controls-inset` and
+  `--turn-rail` so the rail can centre itself in that gap and cancel out that
+  padding; three places that have to agree, and would drift silently if each
+  wrote its own number. The right end fades rather than stopping, capped in
+  `rem` so the taper does not grow silly on a wide screen but falling back to a
+  share of the rail below that — a fixed 8rem is most of the whole line on a
+  phone, which leaves barely any solid colour to fade *from*.
+- **The pan and the flash** mark the moment. Above.
+- **The corner line** (`turnIndicatorView`) carries the words, and the change
+  worth knowing is that it is now anchored on **you** rather than on whoever
+  is playing. `Blue is playing` was three ways redundant — the stats row
+  already borders the current player, the rail already says whether the turn
+  is yours — and it answered a question nobody was asking. What a random seat
+  leaves you needing is *which of these colours am I*, and it leaves you
+  needing it for a while: `resolveStartSeat` defaults to any seat, so a
+  six-player game can open with five AI turns carving the planet up before you
+  get a move.
+
+So the corner says one of two things, and they are one sentence at two
+moments. Between your turns it names your colour as a chip (`You are red`); on
+your own turn it is a **dot** in that same colour beside the words. Having
+been told you are red, a red dot is what makes `Your turn` the sentence
+continued — a second chip spelling the word out again would read as a change
+of subject. The endings keep their old wording, and are still the states the
+line alone can say once their banner has been dismissed, which is the same
+argument `replayButtonView` makes about the replay.
+
+**The dot means "yours, now", and nothing else does.** Every other line marks
+its subject as a chip instead — `You` for your own win or your knockout, the
+winner's name in their colour for somebody else's — which leaves the dot
+appearing on exactly one line in the whole game. That is worth more than the
+consistency it costs: the dot arriving is then part of what says the planet is
+yours again, alongside the rail and the flash, rather than a decoration that
+has been sitting there all along changing colour. `Nobody wins` names nobody
+and so takes neither. Note the chipped word is not always a colour name — it is
+whatever the line is *about*, which for a win or a knockout is the person.
+
+Order matters in that function and is not arbitrary. The result is decided
+first, then the **unattended match** (`AUTOPLAY`), then the knockout. The
+autoplay check has to come before the knockout because `humanEliminated` is
+derived from whether the human seat still holds ground, so an empty seat reads
+as eliminated — checked the other way round, a match nobody is playing would
+announce that somebody had been knocked out of a game they were never in. It
+comes *after* the result because how a match ended is worth reading whoever, if
+anyone, was at the keyboard.
+
+`turnIndicatorView` returns `before`/`color`/`after` rather than one string,
+for the same reason `attackHintView` does: a word that has to be set in a
+player's colour cannot just be part of a sentence. `turnIndicatorText` joins
+them back up for tests. `.hud-color-chip` is shared by the corner and the
+first-timer's prompt, which say it in the same voice and should not drift.
+
+That chip explicitly clears the corner line's `text-shadow`. The glow is there
+so the line can be read over a moving planet; a chip has its own opaque
+background and never had that problem, and inheriting the glow hurt the half of
+the palette whose ink is dark. **Purple is the case that shows it** — 4.78
+against its own background, the tightest margin in the palette and only just
+over AA, with a black halo eating into the edge the letterforms are carried by.
+Not a *lighter* glow for dark ink, which is the tempting fix: `readableTextColor`
+measures against a flat background, so any halo makes that measurement — and
+the test asserting the whole palette clears AA — stop describing the screen,
+and it would be a second rule tracking where that function flips.
+
+The one state that says nothing at all is an **unattended match** —
+`createGame`'s `AUTOPLAY` leaves nobody in the human seat, so a line about
+which colour you are has no subject. `.hud-buttons` takes `margin-left: auto`
+so the controls stay pinned right when it is hidden; without it they jump
+sides, since `space-between` puts a lone child at the start.
+
+`humanPlayerId` is told to `createHud` once rather than also threaded through
+`playerStatsFor`, for the same reason the pointer kind and the colour name are
+filled in there: it is a fact about the interface rather than about the board,
+and one source is what stops the caret and the rail ever disagreeing.
+
 The **payout tray** — a chip per die a turn just earned, peeled back one at a
 time by `reinforceDropped` as each die lands — empties right to left, top to
 bottom, and **that direction is set in CSS, not in the JS that removes the
@@ -773,6 +909,42 @@ a line, so wrapping is an ordinary late-game turn rather than an edge case.
 `preview/payout.html` stands the two directions side by side, draining off one
 clock, with a step button — because a whole payout is capped at a second
 however many dice are in it, which is not long enough to read a direction in.
+
+`turnFlash.js` is the loud half of marking that handover: a brief veil over the
+whole view, which is the one cue that cannot be missed by looking somewhere
+else, because there is nowhere else to look. Two decisions in it are worth
+keeping. It is **DOM over the canvas rather than `scene.background`** — a
+background flash lights only the ring of empty space around the planet, and how
+much of the frame that is varies enormously (a portrait phone frames at about
+4.9 radii against a desktop's 3.2), plus it stops working the day the
+background grows stars. And the shape is a **vignette**, clear over the middle,
+because the point is to announce the board rather than hide the one thing the
+player has just been handed. It sits *under* the HUD: greying out the controls
+at the moment you have been invited to use them is the opposite of the point.
+`flashOpacity` combines the flashes with `max` rather than by adding them, so a
+spacing tighter than one flash's own length runs them into a plateau instead of
+stacking past `peak` — otherwise the number named "how grey it gets" would be a
+lie at some settings. `preview/handover.html` is where the shape and the timing
+are judged, at both framings, with the pan on the same page.
+
+The flash **follows the pan rather than running with it**: `session.js` sets
+`pendingFlash` when `lookAtHoldings` starts a move and fires once
+`cameraFocus.isMoving` goes false, because an announcement over a planet still
+turning underneath it is two things at once and the player has to read both.
+A pan cancelled by a hand on the planet lands in the same place and still
+flashes — it is an announcement, not a camera move, and the player has not
+stopped needing it. The suppression rules are re-checked at that moment rather
+than trusted from when the pan started, since a knockout or a replay can arrive
+in the second the camera is moving.
+
+`prefersReducedMotion` is read **at play time** rather than latched at startup,
+so switching the system setting takes effect on the next turn with nothing
+listening for it. `REDUCED_TURN_FLASH` is one slow swell instead of two quick
+ones and dimmer, but deliberately still *something*: the request is for less
+movement, not for less information. The previews pin the flag off rather than
+asking the browser, so the page shows what it says it is showing on a machine
+that has reduced motion switched on — the same bargain `coarsePointer` makes
+on the hints page.
 
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice

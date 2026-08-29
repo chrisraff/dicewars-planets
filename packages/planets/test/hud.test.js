@@ -229,3 +229,21 @@ test('a game already over outranks its own turn indicator still pointing at you'
   // turn" answers yes long after there is anything to do
   assert.equal(attackHintView(firstTurn({ isHumanTurn: true, isOver: true })), null);
 });
+
+
+// --- which tile is you ----------------------------------------------------
+
+test('the tile the player owns is marked, and only that one', () => {
+  assert.equal(playerPanelView(player({ isYou: true })).classes['is-you'], true);
+  assert.equal(playerPanelView(player({ isYou: false })).classes['is-you'], false);
+  assert.equal(playerPanelView(player()).classes['is-you'], false, 'unset is not yours');
+});
+
+// The mark has to survive every other state a tile can be in at the same time,
+// because those are exactly the moments it is most worth knowing which one is
+// you: your own turn, and your own knockout.
+test('being you is independent of whose turn it is and of being out', () => {
+  for (const over of [{ isCurrent: true }, { alive: false, territories: 0 }, { isWinner: true }]) {
+    assert.equal(playerPanelView(player({ isYou: true, ...over })).classes['is-you'], true);
+  }
+});

@@ -58,6 +58,15 @@ export function scrollLeftToReveal({
  */
 export function playerPanelView(player) {
   const classes = {
+    // Which tile is *you*, marked for the whole match. Deliberately a caret
+    // rather than the word "YOU": every other affordance the tile has is
+    // already spoken for — the border and its glow say whose turn it is (and
+    // say it again, brighter, for a winner), the lower-right corner is the
+    // banked-dice badge, the middle is the dot a knocked-out tile folds to —
+    // and colour cannot mark it either, since every tile is already its
+    // player's colour. A shape in a place nothing else uses is the one thing
+    // left that reads without being read.
+    'is-you': Boolean(player.isYou),
     'is-current': player.isCurrent,
     'is-out': !player.alive,
     'is-winner': Boolean(player.isWinner),
@@ -82,33 +91,100 @@ export function playerPanelView(player) {
 }
 
 /**
- * What the turn indicator should say. Pure, because the awkward cases are all
- * here: a game that has ended never moves its turn index off the winner, so
- * asking "whose turn is it" after the fact gives a live-looking answer to a
+ * What the indicator in the corner says. Pure, because the awkward cases are
+ * all here: a game that has ended never moves its turn index off the winner,
+ * so asking "whose turn is it" after the fact gives a live-looking answer to a
  * dead question — and a player knocked out mid-game is neither taking a turn
  * nor watching a finished one.
+ *
+ * It is anchored on **you** rather than on whoever is playing, which is what
+ * makes it worth the corner it sits in. "Blue is playing" was three ways
+ * redundant — the stats row already borders whoever is playing, and the rail
+ * along the controls already carries your color while the turn is yours — and
+ * it answered a question nobody was asking. What a random seat actually leaves
+ * you needing is *which of these colors am I*, and it leaves you needing it
+ * for a while: `resolveStartSeat` defaults to any seat, so a six-player game
+ * can open with five AI turns carving the planet up before you get a move.
+ *
+ * So it says one of two things, and they are one sentence at two moments.
+ * Between your turns it names your color, as a chip set in that color. On your
+ * own turn it says so with a *dot* in the same color — having been told you
+ * are red, a red dot is what makes "Your turn" the sentence continued rather
+ * than a new one, where a second chip spelling the word out again would read
+ * as a change of subject.
+ *
+ * **The dot means "yours, now", and nothing else does.** Every other line here
+ * marks its subject as a chip instead — `You` for a win or a knockout, the
+ * winner's name for somebody else's — which leaves the dot appearing on
+ * exactly one line in the whole game. That is worth more than the consistency
+ * it costs: the dot arriving is then part of what says the planet is yours
+ * again, alongside the rail and the flash, rather than a decoration that has
+ * been sitting there all along changing color. `Nobody wins` names nobody and
+ * so takes neither.
+ *
+ * `color` is a word that has to be set in a player's color, so it cannot just
+ * be part of the string — hence the three pieces, the same shape
+ * `attackHintView` returns for the same reason. The word is not always a color
+ * name: it is whatever the line is *about*, which for a win or a knockout is
+ * the person rather than the hue.
  */
 export function turnIndicatorView(status, nameOf = (id) => id) {
   const { currentPlayerId, humanPlayerId, winner = null, isOver = false } = status;
   const { humanEliminated = false, canAct = false } = status;
 
+  const line = (over) => ({
+    before: '',
+    color: null,
+    after: '',
+    dot: false,
+    playerId: currentPlayerId,
+    endTurn: 'hidden',
+    show: true,
+    isYours: false,
+    ...over,
+  });
+
   if (isOver) {
-    if (!winner) return { text: 'Nobody wins', playerId: currentPlayerId, endTurn: 'hidden' };
-    return {
-      text: winner === humanPlayerId ? 'You win' : `${nameOf(winner)} wins`,
-      playerId: winner,
-      endTurn: 'hidden',
-    };
+    if (!winner) return line({ before: 'Nobody wins' });
+    if (winner === humanPlayerId) {
+      return line({ color: 'You', after: ' win', playerId: humanPlayerId });
+    }
+    return line({ color: nameOf(winner), after: ' wins', playerId: winner });
   }
 
+  // Nobody at the keyboard — an unattended match playing itself out. Checked
+  // before everything below and after the result above, because every line
+  // under here is about a "you" that does not exist, while a result is worth
+  // reading whoever (if anyone) was playing. Note that `humanEliminated` is
+  // derived from whether the human seat still holds ground, so an empty seat
+  // reads as eliminated and would otherwise claim somebody had been knocked
+  // out of a game they were never in.
+  if (!humanPlayerId || typeof humanPlayerId === 'symbol') return line({ show: false });
+
   if (humanEliminated) {
-    return { text: 'You are out — watching', playerId: currentPlayerId, endTurn: 'hidden' };
+    return line({ color: 'You', after: ' are out — watching', playerId: humanPlayerId });
   }
 
   if (currentPlayerId === humanPlayerId) {
-    return { text: 'Your turn', playerId: currentPlayerId, endTurn: canAct ? 'ready' : 'waiting' };
+    return line({
+      before: 'Your turn',
+      dot: true,
+      playerId: humanPlayerId,
+      endTurn: canAct ? 'ready' : 'waiting',
+      isYours: true,
+    });
   }
-  return { text: `${nameOf(currentPlayerId)} is playing`, playerId: currentPlayerId, endTurn: 'hidden' };
+
+  return line({
+    before: 'You are ',
+    color: String(nameOf(humanPlayerId)).toLowerCase(),
+    playerId: humanPlayerId,
+  });
+}
+
+/** The whole line as one string — for tests, and for anything reading it. */
+export function turnIndicatorText(view) {
+  return `${view.before}${view.color ?? ''}${view.after}`;
 }
 
 /**
@@ -267,7 +343,17 @@ export function outcomeView(outcome, nameOf = (id) => id) {
  */
 export const REPLAY_STEP_MS = 900;
 
-export function createHud(root, { playerColors, playerNames = new Map() } = {}) {
+/**
+ * `humanPlayerId` is which seat the person at the keyboard has. Told to the
+ * HUD once here rather than threaded through `playerStatsFor` as well, for the
+ * same reason the pointer kind and the color name are: it is a fact about this
+ * interface rather than about the board, and one source for it is what stops
+ * the caret and the rail ever disagreeing about who you are.
+ */
+export function createHud(
+  root,
+  { playerColors, playerNames = new Map(), humanPlayerId = null } = {}
+) {
   root.innerHTML = `
     <div class="hud-top">
       <div class="hud-players" role="list" aria-label="Players"></div>
@@ -317,6 +403,8 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
     playerColors,
     playerNames,
   });
+  const controlsRow = root.querySelector('.hud-controls-row');
+  const turnIndicator = root.querySelector('.hud-turn');
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
   const hint = root.querySelector('.hud-hint');
@@ -484,6 +572,13 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       <span class="hud-player-reserve"></span>
     `;
     element.querySelector('.hud-player-name').textContent = nameOf(playerId);
+    // The caret says "you" to anyone looking at the row; this says it to
+    // anyone who is not. The color name stays in both, because the rest of the
+    // interface still talks about colors — a tile that only said YOU would
+    // leave "Blue is playing" with nothing to attach to.
+    if (playerId === humanPlayerId) {
+      element.setAttribute('aria-label', `${nameOf(playerId)}, you`);
+    }
 
     panel = {
       element,
@@ -545,7 +640,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
 
       for (const player of stats) {
         const panel = panelFor(player.id);
-        const view = playerPanelView(player);
+        const view = playerPanelView({ ...player, isYou: player.id === humanPlayerId });
 
         // only on the turn passing to them — not every time their numbers move,
         // which would drag the row back mid-scroll while someone is reading it
@@ -570,12 +665,43 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       if (changed) refreshRowFades();
     },
 
+    /**
+     * The corner line, and the rail under the controls — both of them about
+     * *you* rather than about whoever happens to be playing. See
+     * `turnIndicatorView` for why that is the useful question.
+     *
+     * The rail is a state where the pan and the flash are announcements: those
+     * two mark the moment a turn arrives and are no help at all to somebody
+     * who looked away and back, which is exactly what a color that is simply
+     * present for the length of a turn is for.
+     */
     showTurn(status) {
       const view = turnIndicatorView(status, nameOf);
-      dot.style.background = rgb(playerColors.get(view.playerId) ?? [1, 1, 1]);
-      turnText.textContent = view.text;
+      const color = playerColors.get(view.playerId) ?? [1, 1, 1];
+
+      dot.style.background = rgb(color);
+      dot.hidden = !view.dot;
+
+      const parts = [view.before];
+      if (view.color) {
+        const chip = document.createElement('b');
+        chip.className = 'hud-color-chip';
+        chip.textContent = view.color;
+        chip.style.setProperty('--player-color', rgb(color));
+        chip.style.setProperty('--player-ink', rgb(readableTextColor(color)));
+        parts.push(chip);
+      }
+      parts.push(view.after);
+      turnText.replaceChildren(...parts);
+
+      turnIndicator.hidden = !view.show;
       endTurnButton.disabled = view.endTurn !== 'ready';
       endTurnButton.style.visibility = view.endTurn === 'hidden' ? 'hidden' : 'visible';
+
+      // The rail divides the controls from everything transient above them, so
+      // it belongs to the row rather than to the line inside it.
+      controlsRow.classList.toggle('is-your-turn', view.isYours);
+      if (view.isYours) controlsRow.style.setProperty('--turn-color', rgb(color));
     },
 
     /**
@@ -586,11 +712,11 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
      * overridable so a preview can show every wording and every color without
      * a device or a match for each.
      *
-     * The color name is a chip rather than tinted text: a player color *as
-     * ink* on this panel lands around 4:1, which is under AA for a sentence
-     * this size, while the same color as a background under
-     * `readableTextColor` is the pairing the stats row already proves legible
-     * across the whole palette.
+     * The color name is a chip rather than tinted text: a player color used as
+     * ink on this panel lands around 4:1, which is under AA for a sentence this
+     * size, while the same color as a background under `readableTextColor` is
+     * the pairing the stats row already proves legible across the whole
+     * palette.
      */
     showHint(status) {
       const view = attackHintView({
@@ -613,7 +739,7 @@ export function createHud(root, { playerColors, playerNames = new Map() } = {}) 
       if (view.color) {
         const color = playerColors.get(status.humanPlayerId) ?? [0.5, 0.5, 0.5];
         const chip = document.createElement('b');
-        chip.className = 'hud-hint-color';
+        chip.className = 'hud-color-chip';
         chip.textContent = view.color;
         chip.style.setProperty('--player-color', rgb(color));
         chip.style.setProperty('--player-ink', rgb(readableTextColor(color)));

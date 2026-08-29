@@ -76,7 +76,7 @@ function addScenario({ title, note, stageClass = '', outcome, status, hasReplay,
   host.className = 'hud-host';
   stage.append(host);
 
-  const hud = createHud(host, { playerColors, playerNames });
+  const hud = createHud(host, { playerColors, playerNames, humanPlayerId: playerIds[0] });
   hud.showPlayers(playerStatsFor(state, playerIds));
   hud.showTurn(status);
 
@@ -153,15 +153,20 @@ const status = (over = {}) => ({
 
 addScenario({
   title: 'Playing — your turn',
-  note: 'The normal state, here so the endings below have something to be different from.',
+  note: 'The normal state, here so the endings below have something to be different from. The '
+    + 'corner is about you rather than about whoever is playing: on your own turn it is a dot in '
+    + 'your color and the words, and the rail along the top of the controls carries the same '
+    + 'color for as long as the turn lasts.',
   holdings: [9, 8, 8, 8, 8, 8],
   status: status(),
 });
 
 addScenario({
   title: 'Playing — someone else’s turn',
-  note: 'The end-turn button hides rather than greying out, so it is never a target while an '
-    + 'opponent is mid-move.',
+  note: 'The same corner, one sentence back: it names your color as a chip rather than naming the '
+    + 'player currently moving, which the stats row already borders. The dot is gone and the rail '
+    + 'is dark — between them that is the whole of “not yours yet”. The end-turn button hides '
+    + 'rather than greying out, so it is never a target while an opponent is mid-move.',
   holdings: [9, 8, 8, 8, 8, 8],
   currentIndex: 1,
   status: status({ currentPlayerId: 'p2' }),
@@ -235,7 +240,9 @@ addScenario({
 
 addScenario({
   title: 'Watching on, after being knocked out',
-  note: 'What the banner leaves behind: the indicator says you are out and watching, your tile is '
+  note: 'What the banner leaves behind: the corner says you are out and watching — with “You” '
+    + 'set in your own color rather than a dot, because the dot is whoever is playing and once '
+    + 'you are out that is never you again. Your tile is '
     + 'greyed in the row, and there is no turn to take. Reachable above by pressing "Spectate". '
     + 'Note what did *not* go with the banner — the Replay button is still on the row. An offer '
     + 'once made is never withdrawn, and dismissing this banner used to put the replay one press '

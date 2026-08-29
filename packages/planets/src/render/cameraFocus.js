@@ -3,6 +3,7 @@ import {
   DEFAULT_FRAMING,
   clusterAim,
   framingDistance,
+  holdingsFocus,
   narrowHalfFov,
   needsRefocus,
   swingDirection,
@@ -92,6 +93,13 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
       return swing !== null;
     },
 
+    // Everything the camera is doing of its own accord, turning and drawing
+    // back alike — what a caller waiting for the camera to settle wants, where
+    // `isSwinging` is only about direction.
+    get isMoving() {
+      return swing !== null || zoom !== null;
+    },
+
     /**
      * Bring `point` (a direction from the planet's center) into view, unless
      * it is comfortably framed already. Returns whether it started a swing,
@@ -116,6 +124,36 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
       if (aim === null) return false;
 
       startSwingTo(aim);
+      return true;
+    },
+
+    /**
+     * Turn the planet back to the player's own ground, for the moment a turn
+     * hands back to them. `points` is a direction per territory they hold.
+     *
+     * Only fires when *none* of them is in view — see `holdingsFocus`, which
+     * is where that rule and the choice of aim live. It will draw back as well
+     * as turn, but only outwards and only when the wider view strictly shows
+     * more, so the two animations `tick` already runs together are exactly the
+     * two this needs.
+     */
+    lookAtHoldings(points) {
+      const { direction, distance } = orbit();
+      const view = { distance, halfFov: halfFov() };
+      const wide = Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
+
+      const focus = holdingsFocus(points, direction, view, wide, framing);
+      if (focus === null) return false;
+
+      startSwingTo(focus.aim);
+      if (focus.distance > distance + 1e-3) {
+        zoom = {
+          from: distance,
+          to: focus.distance,
+          elapsed: 0,
+          duration: zoomDuration(distance, focus.distance, framing),
+        };
+      }
       return true;
     },
 

@@ -70,6 +70,9 @@ function addScenario({ title, note, stageClass = '', fights, rolling = false, ..
   const hud = createHud(section.querySelector('.stage'), {
     playerColors: assignPlayerColors(playerIds),
     playerNames: new Map(playerIds.map((id, i) => [id, NAMES[i]])),
+    // Every stage here is seen from the first seat, so the caret marking which
+    // tile is yours shows up on the row it is meant to be judged on.
+    humanPlayerId: playerIds[0],
   });
   hud.showPlayers(playerStatsFor(state, playerIds));
 

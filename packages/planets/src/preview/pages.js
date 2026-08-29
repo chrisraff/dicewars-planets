@@ -58,6 +58,14 @@ export const PREVIEW_PAGES = [
       + 'the double encoding that used to leave the whole palette pale on the globe.',
   },
   {
+    href: '/preview/handover.html',
+    title: 'Turn handover',
+    description:
+      'The flash that marks the planet being handed back to you, on a real board at desktop and '
+      + 'phone framing — vignette against full veil against a scene-background flash, every knob '
+      + 'live, and the ramped version for anyone who has asked not to be flashed at.',
+  },
+  {
     href: '/preview/payout.html',
     title: 'Payout tray',
     description:

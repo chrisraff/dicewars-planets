@@ -364,3 +364,15 @@ h1 {
   letter-spacing: 0.03em;
   color: #75757e;
 }
+
+/* ---- the handover preview: two framings of one planet -----------------
+
+   The wide stage takes whatever room the row has left over once the phone
+   beside it has taken its fixed 360px, because the point of the pair is that
+   the planet is framed differently at the two widths — matching them would
+   throw away the comparison. */
+
+.handover-wide {
+  flex: 1 1 22rem;
+  min-width: 0;
+}

@@ -200,6 +200,120 @@ export function clusterAim(points, viewDirection, view, framing = DEFAULT_FRAMIN
   return aim;
 }
 
+/**
+ * How many of `points` are comfortably framed from `aim`, and how well — the
+ * score `holdingsAim` maximizes, in that order.
+ */
+function coverage(points, aim, view, framing) {
+  let framed = 0;
+  let quality = 0;
+  for (const point of points) {
+    const seen = framingOf(aim, point, view);
+    if (seen >= framing.margin) {
+      framed++;
+      quality += seen;
+    }
+  }
+  return { framed, quality };
+}
+
+// How many times an aim is allowed to slide towards the middle of whatever it
+// can see before it is scored. Two is enough to walk a seed sitting on the rim
+// of a clump into the middle of it; more buys nothing measurable and this runs
+// once per turn over every territory.
+const AIM_SETTLE = 2;
+
+const isFinitePoint = (p) => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+
+/**
+ * Where to aim to see as many of `points` as possible at once.
+ *
+ * Deliberately "the most of them", not "the biggest connected region". What a
+ * camera can show is decided by angle, and connectedness is a fact about the
+ * territory graph — two territories can share a border and still want
+ * different framings, while two with no border between them may sit in the
+ * same glance. Counting what actually lands on screen is the question being
+ * asked, so it is also the thing scored.
+ *
+ * Every point is tried as a seed, and each seed is slid a couple of times
+ * towards the middle of whatever it can see — a mean shift, which walks a seed
+ * on the edge of a clump into the centre of that clump. Every aim along the
+ * way is scored, so a seed that drifts somewhere worse cannot lose the good
+ * position it started from. Seeding from the points themselves rather than
+ * sampling the sphere evenly is what keeps this affordable: the best aim is
+ * always near a point, since an aim near nothing sees nothing.
+ *
+ * The tie-break is total framing rather than another count, so among aims that
+ * show the same territories the one that shows them nearest the middle wins.
+ */
+export function holdingsAim(points, view, framing = DEFAULT_FRAMING) {
+  let best = null;
+  const consider = (aim) => {
+    const score = coverage(points, aim, view, framing);
+    if (
+      !best
+      || score.framed > best.framed
+      || (score.framed === best.framed && score.quality > best.quality)
+    ) {
+      best = { aim, ...score };
+    }
+  };
+
+  for (const seed of points) {
+    let aim = normalize(seed);
+    if (!isFinitePoint(aim)) continue;
+    consider(aim);
+
+    for (let i = 0; i < AIM_SETTLE; i++) {
+      const seen = points.filter((p) => framingOf(aim, p, view) >= framing.margin);
+      if (seen.length === 0) break;
+      // Points spread over more than a hemisphere can cancel out entirely, and
+      // a centroid of nothing is not a direction — keep the aim that got here.
+      const next = normalize(centroid(seen.map(normalize)));
+      if (!isFinitePoint(next)) break;
+      aim = next;
+      consider(aim);
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Where to put the camera so the player can see their own ground again, or
+ * null to leave it where it is.
+ *
+ * Null whenever *any* of `points` is already comfortably framed. Seeing some
+ * of your own ground is enough to know where you are, and a camera that moved
+ * anyway would be taking away a view from somebody who already has one — the
+ * same bargain `framePlanet` makes about distance, applied to direction.
+ *
+ * `wideDistance` is how far back the whole planet fits (`framingDistance`).
+ * Drawing back is offered rather than assumed: it is taken only when it
+ * strictly shows more territories than turning alone would, and never when it
+ * would mean coming in, so a player already further out than the whole planet
+ * needs keeps the distance they chose.
+ */
+export function holdingsFocus(
+  points,
+  viewDirection,
+  view,
+  wideDistance,
+  framing = DEFAULT_FRAMING
+) {
+  if (points.length === 0) return null;
+  if (points.some((p) => framingOf(viewDirection, p, view) >= framing.margin)) return null;
+
+  const near = holdingsAim(points, view, framing);
+  if (near === null) return null;
+  if (!(wideDistance > view.distance)) return { aim: near.aim, distance: view.distance };
+
+  const wide = holdingsAim(points, { distance: wideDistance, halfFov: view.halfFov }, framing);
+  return wide && wide.framed > near.framed
+    ? { aim: wide.aim, distance: wideDistance }
+    : { aim: near.aim, distance: view.distance };
+}
+
 // A swing long enough to read as the planet turning rather than as a cut,
 // short enough that the dice haven't landed before the camera arrives.
 export function swingDuration(travel, framing = DEFAULT_FRAMING) {

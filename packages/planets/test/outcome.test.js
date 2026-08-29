@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  turnIndicatorText,
   turnIndicatorView,
   outcomeView,
   replayButtonView,
@@ -22,61 +23,168 @@ const playing = (over = {}) => ({
 
 // --- whose turn it is -----------------------------------------------------
 
+const line = (status) => turnIndicatorText(turnIndicatorView(status, nameOf));
+
 test('your own turn offers the end-turn button', () => {
   const view = turnIndicatorView(playing(), nameOf);
-  assert.equal(view.text, 'Your turn');
+  assert.equal(turnIndicatorText(view), 'Your turn');
   assert.equal(view.endTurn, 'ready');
 });
 
 test('your turn mid-roll shows the button but will not take it', () => {
   const view = turnIndicatorView(playing({ canAct: false }), nameOf);
-  assert.equal(view.text, 'Your turn');
+  assert.equal(turnIndicatorText(view), 'Your turn');
   assert.equal(view.endTurn, 'waiting', 'the button stays put rather than vanishing under the cursor');
 });
 
-test('someone else’s turn names them and hides the button', () => {
+// The corner is about *you*, not about whoever is playing. Naming the current
+// player was three ways redundant — the stats row borders them, the rail
+// carries your color while the turn is yours — and it answered a question
+// nobody was asking. What a random seat leaves you needing is which of these
+// colors you are.
+test('between your turns it names your color, not the player taking one', () => {
   const view = turnIndicatorView(playing({ currentPlayerId: 'p2' }), nameOf);
-  assert.equal(view.text, 'Blue is playing');
-  assert.equal(view.playerId, 'p2', 'the dot takes their color');
+  assert.equal(turnIndicatorText(view), 'You are red');
+  assert.equal(view.color, 'red', 'a word set in that color, so it is its own part');
+  assert.equal(view.playerId, 'p1', 'and the color is yours, not the player playing');
   assert.equal(view.endTurn, 'hidden');
+});
+
+// One sentence at two moments: told you are red, a red dot is what makes
+// "Your turn" mean the same red. A second chip spelling the word out again
+// would read as a change of subject.
+test('the color is a word between your turns and a dot on them', () => {
+  assert.equal(turnIndicatorView(playing({ currentPlayerId: 'p2' }), nameOf).dot, false);
+  assert.equal(turnIndicatorView(playing(), nameOf).dot, true);
+  assert.equal(turnIndicatorView(playing(), nameOf).color, null, 'the dot is the color here');
+});
+
+// Persistent means persistent: your color is your seat, the seat is drawn
+// fresh every match, and the line is there for every turn of it.
+test('it says which color you are on every turn that is not yours', () => {
+  for (const current of ['p2', 'p3']) {
+    assert.equal(line(playing({ currentPlayerId: current })), 'You are red');
+  }
 });
 
 // A finished game never moves its turn index off the winner, so asking whose
 // turn it is afterwards gives a live-looking answer to a dead question.
 test('once it is over the indicator reports the result, not a turn', () => {
   const won = turnIndicatorView(playing({ isOver: true, winner: 'p1' }), nameOf);
-  assert.equal(won.text, 'You win', 'not "Your turn", which is what the raw state still implies');
+  assert.equal(turnIndicatorText(won), 'You win', 'not "Your turn", which the raw state still implies');
   assert.equal(won.endTurn, 'hidden');
 
   const lost = turnIndicatorView(
     playing({ isOver: true, winner: 'p2', currentPlayerId: 'p2' }),
     nameOf
   );
-  assert.equal(lost.text, 'Blue wins');
+  assert.equal(turnIndicatorText(lost), 'Blue wins');
   assert.equal(lost.playerId, 'p2');
 });
 
+// Every ending marks whoever it is about, in their own color — which for your
+// own win is the word "You" and for anyone else's is their name.
+test('an ending marks who it is about, in their color', () => {
+  const won = turnIndicatorView(playing({ isOver: true, winner: 'p1' }), nameOf);
+  assert.equal(won.color, 'You');
+  assert.equal(won.playerId, 'p1');
+
+  const lost = turnIndicatorView(playing({ isOver: true, winner: 'p2' }), nameOf);
+  assert.equal(lost.color, 'Blue', 'their name, in their color');
+  assert.equal(lost.playerId, 'p2');
+});
+
+// The rule that makes the dot worth anything: it appears on exactly one line
+// in the whole game, so its arrival is part of what says the planet is yours
+// again rather than a decoration that has been sitting there changing color.
+test('the dot means "yours, now", and appears nowhere else', () => {
+  assert.equal(turnIndicatorView(playing(), nameOf).dot, true, 'your own turn');
+
+  const others = [
+    playing({ currentPlayerId: 'p2' }),
+    playing({ isOver: true, winner: 'p1' }),
+    playing({ isOver: true, winner: 'p2' }),
+    playing({ isOver: true, winner: null }),
+    playing({ humanEliminated: true, currentPlayerId: 'p2' }),
+  ];
+  for (const status of others) {
+    assert.equal(turnIndicatorView(status, nameOf).dot, false, turnIndicatorText(turnIndicatorView(status, nameOf)));
+  }
+});
+
+// Names nobody, so it marks nobody — neither a chip nor a dot, just the line.
+test('a drawn game marks nothing at all', () => {
+  const view = turnIndicatorView(playing({ isOver: true, winner: null }), nameOf);
+  assert.equal(view.color, null);
+  assert.equal(view.dot, false);
+});
+
+// Marked rather than dotted, and marked in *your* color. The dot is whoever
+// is playing, and once you are out that is never you again — a dot following
+// the match around would be the corner quietly going back to reporting other
+// people, which is the thing it was rewritten to stop doing.
 test('a player knocked out mid-game is told they are watching', () => {
   const view = turnIndicatorView(
     playing({ currentPlayerId: 'p2', humanEliminated: true }),
     nameOf
   );
-  assert.equal(view.text, 'You are out — watching');
+  assert.equal(turnIndicatorText(view), 'You are out — watching');
+  assert.equal(view.color, 'You', 'the word that is set in a color');
+  assert.equal(view.playerId, 'p1', 'and the color is yours, not the player still playing');
+  assert.equal(view.dot, false);
   assert.equal(view.endTurn, 'hidden');
 });
 
-test('the result outranks being knocked out earlier', () => {
+// `humanEliminated` is derived from whether the human seat still holds ground,
+// so an empty seat reads as eliminated. Without the autoplay check coming
+// first, an unattended match would announce that somebody had been knocked out
+// of a game they were never in.
+test('an unattended match is not announced as somebody being knocked out', () => {
   const view = turnIndicatorView(
-    playing({ isOver: true, winner: 'p2', humanEliminated: true }),
+    playing({ humanPlayerId: Symbol('autoplay'), humanEliminated: true }),
     nameOf
   );
-  assert.equal(view.text, 'Blue wins');
+  assert.equal(view.show, false);
+});
+
+// But a result is worth reading whoever was playing, so it still outranks the
+// empty seat.
+test('an unattended match still reports how it ended', () => {
+  const view = turnIndicatorView(
+    playing({ humanPlayerId: Symbol('autoplay'), isOver: true, winner: 'p2' }),
+    nameOf
+  );
+  assert.equal(view.show, true);
+  assert.equal(turnIndicatorText(view), 'Blue wins');
+});
+
+test('the result outranks being knocked out earlier', () => {
+  assert.equal(line(playing({ isOver: true, winner: 'p2', humanEliminated: true })), 'Blue wins');
 });
 
 test('a game with no winner at all still says something sensible', () => {
   const view = turnIndicatorView(playing({ isOver: true, winner: null }), nameOf);
-  assert.equal(view.text, 'Nobody wins');
+  assert.equal(turnIndicatorText(view), 'Nobody wins');
   assert.equal(view.endTurn, 'hidden');
+});
+
+// An unattended match — `createGame`'s AUTOPLAY leaves nobody in the human
+// seat. A line about which color you are has no subject, so it says nothing
+// rather than naming a seat nobody is sitting in.
+test('with nobody at the keyboard it says nothing at all', () => {
+  const view = turnIndicatorView(playing({ humanPlayerId: Symbol('autoplay') }), nameOf);
+  assert.equal(view.show, false);
+});
+
+// What the rail under the controls is driven from. Deliberately not "is the
+// current player the human" recomputed at the call site: a finished game never
+// moves its turn index off the winner, so that keeps answering yes long after
+// there is a turn to take.
+test('the rail is lit for your turn and for nothing else', () => {
+  assert.equal(turnIndicatorView(playing(), nameOf).isYours, true);
+  assert.equal(turnIndicatorView(playing({ currentPlayerId: 'p2' }), nameOf).isYours, false);
+  assert.equal(turnIndicatorView(playing({ isOver: true, winner: 'p1' }), nameOf).isYours, false);
+  assert.equal(turnIndicatorView(playing({ humanEliminated: true }), nameOf).isYours, false);
 });
 
 // --- the banner -----------------------------------------------------------
@@ -259,3 +367,5 @@ test('a match with nothing fought in it offers nothing, however it ended', () =>
 test('an empty status is answered rather than thrown at', () => {
   assert.equal(replayButtonView({}), 'hidden');
 });
+
+

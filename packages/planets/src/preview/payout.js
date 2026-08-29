@@ -65,7 +65,7 @@ function addTray(container, { count, wrap = null, stageClass = '' }) {
   host.className = 'hud-host';
   stage.append(host);
 
-  const hud = createHud(host, { playerColors, playerNames });
+  const hud = createHud(host, { playerColors, playerNames, humanPlayerId: 'p1' });
   hud.showPlayers(playerStatsFor(state, playerIds));
   hud.showTurn(TURN);
 

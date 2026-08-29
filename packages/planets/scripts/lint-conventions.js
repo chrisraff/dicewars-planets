@@ -102,7 +102,7 @@ check('the query-handle exemptions really are handles', () => {
 });
 
 check('the state classes the stats row depends on are all defined', () => {
-  const wanted = ['is-current', 'is-out', 'is-winner', 'is-empty', 'is-full'];
+  const wanted = ['is-you', 'is-current', 'is-out', 'is-winner', 'is-empty', 'is-full'];
   return wanted.filter((n) => !source.stylesheet.includes(`.${n}`)).map((n) => `.${n} has no rule`);
 });
 

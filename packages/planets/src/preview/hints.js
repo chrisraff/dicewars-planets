@@ -56,7 +56,7 @@ function addScenario({ title, note, stageClass = '', status, reinforce = null, .
   host.className = 'hud-host';
   stage.append(host);
 
-  const hud = createHud(host, { playerColors, playerNames });
+  const hud = createHud(host, { playerColors, playerNames, humanPlayerId: 'p1' });
   hud.showPlayers(playerStatsFor(state, playerIds));
   hud.showTurn(status);
   if (reinforce) hud.showReinforce(reinforce);
