@@ -3,7 +3,7 @@ import { createViewer } from './render/createViewer.js';
 import { createDiePipMaterials } from './render/diceTextures.js';
 import { createMenu } from './render/menu.js';
 import { createSession } from './game/session.js';
-import { pointerToNdc } from './render/pickTerritory.js';
+import { createSelectHandler } from './render/selectPress.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
 import { readSavedGame, writeSavedGame } from './game/saveGame.js';
 import { ATTACK_HINT, markHintSeen, readSeenHints } from './game/hints.js';
@@ -73,28 +73,16 @@ if (savedGame) {
 
 // --- input ----------------------------------------------------------------
 
-// A click is a press and release in roughly the same spot — anything further
-// than that was someone orbiting the planet, and must not also select a
-// territory just because the drag happened to end over one. A finger wanders
-// much further than a mouse does while still meaning "tap".
-const DRAG_SLOP = { mouse: 5, pen: 6, touch: 14 }; // pixels
-let pressedAt = null;
-
-canvas.addEventListener('pointerdown', (e) => {
-  pressedAt = { x: e.clientX, y: e.clientY, slop: DRAG_SLOP[e.pointerType] ?? DRAG_SLOP.mouse };
-});
-canvas.addEventListener('pointercancel', () => {
-  pressedAt = null;
-});
-canvas.addEventListener('pointerup', (e) => {
-  if (!pressedAt) return;
-  const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y);
-  const { slop } = pressedAt;
-  pressedAt = null;
-
-  if (moved > slop || !session || menu.isOpen()) return;
-  session.clickAt(pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect()));
-});
+// Every press on the planet goes to one of these two, and this is the whole
+// of the order: tapping a territory gets first refusal, and turning the
+// planet takes whatever it hands on. See `pointerArbiter.js` — the half worth
+// knowing is that a press is *owned* while it is still down, so the board can
+// show what letting go would do while there is still time to drag away
+// instead.
+viewer.pointers.register('select', createSelectHandler(canvas, () => session, {
+  blocked: () => menu.isOpen(),
+}));
+viewer.pointers.register('orbit', viewer.orbitHandler);
 
 // --- the loop -------------------------------------------------------------
 

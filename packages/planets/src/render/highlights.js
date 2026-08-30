@@ -21,6 +21,15 @@ export const HIGHLIGHT = {
   attacker: HELD,
   target: { color: WHITE, amount: 0.18 },
   defender: { color: WHITE, amount: 0.5 },
+  // The territory a finger is on *right now*, still down. It answers a
+  // different question from every other mark here — not "what could you do"
+  // but "this is the one you are touching, let go and it happens" — so it has
+  // to be told apart from the pale lift the legal targets wear, which is the
+  // mark it will most often be sitting on top of. Hence a lift far past
+  // anything else on the board rather than a slightly brighter one: three
+  // times the target's, and the only mark that ever appears and disappears
+  // with a hand. It outranks every other mark for the same reason.
+  pressed: { color: WHITE, amount: 0.55 },
 };
 
 /**
@@ -29,12 +38,22 @@ export const HIGHLIGHT = {
  * up when are readable in one place instead of scattered through the render
  * loop.
  *
+ * `pressed` is the territory a finger or a mouse button is down on, which is
+ * a fact about the pointer rather than about the game — see
+ * `pointerArbiter.js` for why the board can now say that at all.
+ *
  * `pulse` (0..1) throbs the *defender* of a fight so it's obvious which pair
  * the dice on screen belong to. The attacker doesn't throb: its ground is
  * where its dice are being thrown, and a mark that exists partly to make pale
  * dice legible has no business fading out from under them.
  */
-export function highlightsFor({ selection = null, targets = [], attack = null, pulse = 1 } = {}) {
+export function highlightsFor({
+  selection = null,
+  targets = [],
+  attack = null,
+  pressed = null,
+  pulse = 1,
+} = {}) {
   const marks = new Map();
 
   for (const id of targets) marks.set(id, HIGHLIGHT.target);
@@ -44,6 +63,9 @@ export function highlightsFor({ selection = null, targets = [], attack = null, p
     marks.set(attack.from, HIGHLIGHT.attacker);
     marks.set(attack.to, { ...HIGHLIGHT.defender, amount: HIGHLIGHT.defender.amount * pulse });
   }
+  // Last, so it wins: a press is the most immediate thing on the board, and
+  // the one mark the player is actively holding in place.
+  if (pressed !== null) marks.set(pressed, HIGHLIGHT.pressed);
   return marks;
 }
 

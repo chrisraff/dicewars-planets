@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — press &amp; ownership preview</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Press, drag, and who owns it</h1>
+      <p class="lede">
+        Two things want every press on the planet: tapping a territory, and turning the planet.
+        They used to run side by side — the camera moved from the first pixel, and whether the
+        press had been a tap was worked out afterwards, once it was too late to say anything about
+        it. Now a press is <em>owned</em>: tapping gets first refusal and holds it until the press
+        has moved far enough to plainly be a drag, at which point it is handed on for good. What
+        that buys is the mark below — the territory under your finger lights up while there is
+        still time to choose, so releasing is a confirmation rather than a guess.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/touch.js"></script>
+  </body>
+</html>

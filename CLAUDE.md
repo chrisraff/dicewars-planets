@@ -1155,6 +1155,76 @@ texture and the flat SVG dice in the battle readout, and `diceStacks.js`
 the planet and the stack marks in the readout. `scripts/lint-conventions.js`
 asserts neither has grown a second copy.
 
+### Who owns a press
+
+Two things want every press on the planet — tapping a territory to attack, and
+dragging to turn the planet — and `pointerArbiter.js` decides which of them has
+it. Presses are handed to the registered handlers **in order**: the first one
+keeps a press until it returns `YIELD`, and ownership only ever moves forward,
+so a press that has become a drag can never go back to being a tap. `main.js`
+registers exactly two, and reading those two lines is the whole of the policy:
+`select` first, `orbit` last.
+
+Before this the two ran side by side. The orbit controls turned the planet from
+the first pixel, and whether a press had been a tap was worked out at the *end*
+from how far it had travelled. That reads the gesture backwards: nothing could
+be said about a press until it was over, so nothing could be **shown** about it
+either. Now a press is owned while it is still down, which is what makes the
+press mark below possible at all — and the planet no longer slides under a
+finger that only meant to point at something.
+
+**Arbitration is `stopImmediatePropagation`, and that is why the arbiter is
+created before the controls** in `createViewer`. The orbit controls act on the
+press they are given, so the only way to hold them off is not to give them one,
+and listeners on one element run in the order they were added. The other half
+of the bargain is `onAdopt`: a handler taking a press mid-gesture was never
+told it started, so `viewer.orbitHandler` hands the controls a press of its own
+— a synthetic `pointerdown` at the point the drag has reached — and they take
+it from there on their own document listeners. The drag therefore picks up from
+where the slop was crossed rather than from where the finger first landed,
+which is what a drag threshold always feels like.
+
+Three rules keep the edges honest. **Only a first, primary press can be a
+tap**: a second finger is a pinch, so it goes straight to the controls and the
+candidate still holding out is handed on before it, in the order they were
+pressed. **A press with nothing under it is given up at once** rather than
+sitting dead for a slop's worth of travel — pressing the ocean turns the planet
+from the first pixel. And **a press already being tracked is not started
+again**, which is what lets the hand-off re-dispatch a press without the finger
+being tracked twice.
+
+`DRAG_SLOP` is unchanged from the release-time check it replaced — 5px for a
+mouse, 6 for a pen, 14 for a finger, which lands on a soft contact patch
+several millimetres across and drifts inside it. What changed is *when* it is
+consulted: the moment it is exceeded, rather than at the end.
+
+### The press mark
+
+`HIGHLIGHT.pressed` is the territory a finger is on right now, still down. It
+answers a different question from every other mark on the board — not "what
+could you do here" but "this is the one you are touching, let go and it
+happens" — so releasing is a confirmation rather than a guess, and dragging
+away is a visible cancel.
+
+It has to be told apart from the pale lift a legal target wears, which is the
+mark it will most often be sitting *on top of*, so it is a white lift three
+times that one's rather than a slightly brighter version of it, and it outranks
+every other mark. `preview/touch.html` puts all five marks on all eight player
+colours side by side, which is where that "distinct enough" judgement is made
+by eye rather than argued about here; the amount is the one number to turn.
+
+What the mark promises is `createGame`'s `pressActionOn` — `'attack'`,
+`'select'`, `'drop'` or nothing — and `clickTerritory` is written in terms of
+the same function rather than repeating the rules, so the mark shown under a
+finger and the thing that happens when it lifts cannot drift apart. The session
+holds the pressed territory, not the game: it is a fact about a pointer rather
+than about the match, and nothing about it belongs in a save.
+
+The one press with nothing to mark is a tap on the ocean while holding a
+territory. It still has to be *taken* — letting go there is how you put that
+territory back down — so it is the one case where a press is owned with nothing
+on screen to show for it.
+
 ## Rendering conventions
 
 - The planet mesh gives each cell its own private vertices so a cell can carry

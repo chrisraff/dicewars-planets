@@ -23,6 +23,34 @@ test('a territory that is both selected and a target reads as selected', () => {
   assert.deepEqual(marks.get('a'), HIGHLIGHT.selected);
 });
 
+// The press mark is the one the player is holding in place, and the mark it
+// will most often be sitting on top of is the pale lift a legal target wears.
+// Telling those two apart is the whole point of it, so it is asserted rather
+// than left to whoever next tunes a number.
+test('a press reads as nothing else on the board does', () => {
+  const marks = highlightsFor({ selection: 'a', targets: ['b', 'c'], pressed: 'b' });
+  assert.deepEqual(marks.get('b'), HIGHLIGHT.pressed);
+  assert.deepEqual(marks.get('c'), HIGHLIGHT.target, 'and only the one under the finger');
+
+  assert.ok(
+    HIGHLIGHT.pressed.amount > HIGHLIGHT.target.amount * 2,
+    'a press must not read as a slightly brighter target'
+  );
+});
+
+test('a press outranks whatever the territory was already wearing', () => {
+  // pressing the territory you are holding is how you put it back down, so the
+  // mark has to come through the dark it is already tinted with
+  const marks = highlightsFor({ selection: 'a', targets: ['b'], pressed: 'a' });
+  assert.deepEqual(marks.get('a'), HIGHLIGHT.pressed);
+});
+
+test('nothing is pressed unless something is', () => {
+  const marks = highlightsFor({ selection: 'a', targets: ['b'] });
+  assert.deepEqual(marks.get('a'), HIGHLIGHT.selected);
+  assert.equal(marks.size, 2, 'no room is held open for a press that is not happening');
+});
+
 test('a fight lights up both sides and nothing else', () => {
   const marks = highlightsFor({ attack: { from: 'a', to: 'b' }, pulse: 1 });
   assert.deepEqual([...marks.keys()].sort(), ['a', 'b']);

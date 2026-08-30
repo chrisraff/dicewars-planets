@@ -157,6 +157,10 @@ h1 {
 .faces.is-tints {
   grid-template-columns: 5rem repeat(6, auto);
 }
+/* every mark a territory can wear, one column each */
+.faces.is-marks {
+  grid-template-columns: 5rem repeat(5, minmax(0, 1fr));
+}
 .faces .swatch {
   display: flex;
   align-items: center;

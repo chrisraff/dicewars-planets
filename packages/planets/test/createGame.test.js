@@ -22,6 +22,72 @@ function advance(game, seconds, step = 1 / 60) {
 }
 
 
+// --- what a press would do, before it does it ------------------------------
+
+// The board shows a press while the finger is still down, so the mark and the
+// tap have to be the same answer. They are one set of rules — `clickTerritory`
+// asks `pressActionOn` — and this is the claim that keeps them that way:
+// whatever the press was said to be, that is what the tap turns out to do.
+test('what a press says it would do is what the tap does', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const ids = ['a', 'b', 'c', 'd', null];
+
+  const acted = (id) => {
+    const before = { selection: game.selection, busy: game.isBusy() };
+    game.clickTerritory(id);
+    if (game.isBusy() !== before.busy) return 'attack';
+    if (game.selection === before.selection) return null;
+    return game.selection === null ? 'drop' : 'select';
+  };
+
+  for (const held of [null, 'a', 'c']) {
+    for (const id of ids) {
+      game.clickTerritory(null); // put everything down between checks
+      if (held) game.clickTerritory(held);
+      assert.equal(
+        game.pressActionOn(id),
+        acted(id),
+        `pressing ${id} while holding ${held}`
+      );
+    }
+  }
+});
+
+test('a press on ground that cannot be picked up says so, rather than saying nothing', () => {
+  const game = createGame({ world: balanced() });
+
+  assert.equal(game.pressActionOn('b'), null, "somebody else's ground, with nothing held");
+  assert.equal(game.pressActionOn('c'), 'select');
+
+  game.clickTerritory('a');
+  assert.equal(game.pressActionOn('b'), 'attack', 'the same enemy ground is now a fight');
+  assert.equal(game.pressActionOn('d'), 'drop', 'and ground it cannot reach only puts it down');
+  assert.equal(game.pressActionOn('a'), 'drop', 'as does the one already held');
+});
+
+test('a press on the ocean is only ever a way to put a territory back down', () => {
+  const game = createGame({ world: balanced() });
+  assert.equal(game.pressActionOn(null), null, 'with nothing held there is nothing to put down');
+  game.clickTerritory('a');
+  assert.equal(game.pressActionOn(null), 'drop');
+});
+
+// A mark shown at a moment the tap would be ignored is a mark that lies, and
+// these are exactly the moments the interface is most likely to try: the AI is
+// playing, or dice are still in the air.
+test('nothing responds to a press while the game is not the player’s to touch', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b'); // an attack is now rolling
+  assert.equal(game.isBusy(), true);
+  for (const id of ['a', 'b', 'c', 'd', null]) assert.equal(game.pressActionOn(id), null);
+
+  const theirTurn = createGame({ world: balanced(), humanPlayerId: 'p2' });
+  assert.equal(theirTurn.isHumanTurn(), false, 'p1 opens, and the player is p2');
+  for (const id of ['a', 'b', 'c', 'd', null]) assert.equal(theirTurn.pressActionOn(id), null);
+});
+
 test('clicking your own territory picks it up, clicking it again puts it down', () => {
   const game = createGame({ world: balanced() });
   game.clickTerritory('a');

@@ -224,6 +224,7 @@ export function createSession({
   let replayFight = null; // the fight the replay is stopped on, throbbing as a live one does
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
+  let pressed = null; // the territory a finger is down on, marked while it is
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
   // The two things that take the match out of the player's hands. Nothing in
   // it moves while either is true — see tick() at the bottom.
@@ -474,6 +475,7 @@ export function createSession({
       selection: game.selection,
       targets: game.legalTargets(),
       attack: roll?.event ?? null,
+      pressed,
       pulse,
     });
     surface.refresh(game.state, (territoryId) => marks.get(territoryId) ?? null);
@@ -700,8 +702,49 @@ export function createSession({
     game,
     settings,
 
-    clickAt(ndc) {
-      game.clickTerritory(pickTerritoryAt(ndc));
+    /**
+     * A press has landed on the planet. Answers with what letting go there
+     * would do — `pressActionOn`'s `'attack'`, `'select'` or `'drop'` — or
+     * `null` for a press with nothing to act on, which hands it straight to
+     * the camera, so a drag that started on the ocean turns the planet from
+     * its first pixel rather than after a dead zone (see `pointerArbiter.js`).
+     *
+     * A press worth taking is *shown*: the territory it would act on is
+     * marked while the finger is still down, so releasing is a confirmation
+     * rather than a guess. The one press with nothing to mark is a tap on the
+     * ocean while holding a territory — it still has to be taken, since
+     * letting go there is how you put that territory back down, and there is
+     * nowhere to put a mark for it.
+     */
+    pressAt(ndc) {
+      const territoryId = pickTerritoryAt(ndc);
+      const action = game.pressActionOn(territoryId);
+      // `drop` is the one that can mean somewhere other than where the finger
+      // is: dropping by tapping the held territory marks it, dropping by
+      // tapping anywhere else has nothing of its own to say.
+      pressed = action === 'attack' || action === 'select' || territoryId === game.selection
+        ? territoryId
+        : null;
+      if (action !== null) refreshBoard();
+      return action;
+    },
+
+    /**
+     * The press came up where it went down, so it meant it. The territory
+     * acted on is the one the mark was on rather than whatever is under the
+     * pointer now: what was shown is what happens.
+     */
+    releasePress() {
+      const territoryId = pressed;
+      pressed = null;
+      game.clickTerritory(territoryId);
+      refreshBoard();
+    },
+
+    /** It turned into a drag, or the system took it away. Nothing happens. */
+    cancelPress() {
+      if (pressed === null) return;
+      pressed = null;
       refreshBoard();
     },
 

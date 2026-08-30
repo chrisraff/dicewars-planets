@@ -74,6 +74,14 @@ export const PREVIEW_PAGES = [
       + 'the two directions that wrapping can empty in, side by side.',
   },
   {
+    href: '/preview/touch.html',
+    title: 'Press, drag, and who owns it',
+    description:
+      'Who owns a press while it is still down — tapping a territory first, turning the planet '
+      + 'once it has moved far enough — on a real match, with the mark a pressed territory wears '
+      + 'and every other mark it has to be told apart from.',
+  },
+  {
     href: '/preview/replay.html',
     title: 'Replay',
     description:

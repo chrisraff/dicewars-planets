@@ -14,6 +14,7 @@ const PAGES = [
   'dice',
   'replay',
   'replay-perf',
+  'touch',
   'surrender',
   'terrain',
 ];

@@ -115,6 +115,40 @@ export function createGame({
     emit('selection', selection);
   }
 
+  /**
+   * What tapping `territoryId` would do right now, without doing any of it:
+   * `'attack'`, `'select'`, `'drop'` — put the held territory back down — or
+   * `null` for a tap that would change nothing at all.
+   *
+   * This exists because the interface now has to answer that question
+   * *before* the tap happens rather than after it. A press is shown on the
+   * board while a finger is still down, so the player can see what releasing
+   * would do while there is still time to drag away instead — and a mark that
+   * promised something the tap then did not do would be worse than no mark.
+   * `clickTerritory` is written in terms of this for exactly that reason:
+   * there is one set of rules, so the two cannot drift apart.
+   */
+  function pressActionOn(territoryId) {
+    if (isOver() || isBusy() || !isHumanTurn()) return null;
+    // Anywhere that is not a territory — ocean, or space past the planet's
+    // edge — is a place to put a held territory down, and nothing otherwise.
+    if (territoryId === null || territoryId === undefined) {
+      return selection === null ? null : 'drop';
+    }
+
+    if (selection !== null && isLegalAttack(state, selection, territoryId)) return 'attack';
+
+    const node = state.nodes.get(territoryId);
+    const mine = node?.owner === humanPlayerId;
+    // Somebody else's ground, ground of yours too thin to attack from, or the
+    // one already held — none of them can be picked up, so the tap is only
+    // ever the same "put it down" as tapping the ocean.
+    if (territoryId === selection || !mine || node.dice <= 1) {
+      return selection === null ? null : 'drop';
+    }
+    return 'select';
+  }
+
   // Territories the selected one could attack right now.
   function legalTargets(from = selection) {
     if (from === null || from === undefined) return [];
@@ -325,23 +359,28 @@ export function createGame({
       };
     },
 
+    pressActionOn,
+
     /**
      * The one entry point for clicking the planet. Click your own territory
      * to pick it up, click an enemy neighbor to attack it, click anywhere
      * else to put it back down.
+     *
+     * Which of those it is has already been decided by `pressActionOn`, and
+     * is asked rather than worked out again: the board may have been showing
+     * that answer under the player's finger for a second before they let go.
      */
     clickTerritory(territoryId) {
-      if (isOver() || isBusy() || !isHumanTurn()) return;
-      if (territoryId === null || territoryId === undefined) return setSelection(null);
-
-      if (selection !== null && isLegalAttack(state, selection, territoryId)) {
-        return performAttack(selection, territoryId);
+      switch (pressActionOn(territoryId)) {
+        case 'attack':
+          return performAttack(selection, territoryId);
+        case 'select':
+          return setSelection(territoryId);
+        case 'drop':
+          return setSelection(null);
+        default:
+          return undefined;
       }
-
-      const node = state.nodes.get(territoryId);
-      const mine = node?.owner === humanPlayerId;
-      if (territoryId === selection || !mine || node.dice <= 1) return setSelection(null);
-      setSelection(territoryId);
     },
 
     endTurn() {
