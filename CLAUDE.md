@@ -1123,15 +1123,21 @@ stacking past `peak` — otherwise the number named "how grey it gets" would be 
 lie at some settings. `preview/handover.html` is where the shape and the timing
 are judged, at both framings, with the pan on the same page.
 
-The flash **follows the pan rather than running with it**: `session.js` sets
-`pendingFlash` when `lookAtHoldings` starts a move and fires once
-`cameraFocus.isMoving` goes false, because an announcement over a planet still
-turning underneath it is two things at once and the player has to read both.
-A pan cancelled by a hand on the planet lands in the same place and still
-flashes — it is an announcement, not a camera move, and the player has not
-stopped needing it. The suppression rules are re-checked at that moment rather
-than trusted from when the pan started, since a knockout or a replay can arrive
-in the second the camera is moving.
+The flash **runs with the pan rather than following it**: `focusOwnGround`
+starts the swing and plays the flash in the same breath. They are two halves of
+one handover — the planet coming back to you, and being told so — and the flash
+is what marks the moment that happens. Held until the camera settled, as it was
+before, it announced the handover up to half a second after the handover, which
+reads as a second event rather than as the same one. Overlapping them is safe
+because of the shape the flash already has: a vignette is clear over the middle,
+so the planet turning underneath it is never the part that gets covered.
+
+That also puts the whole guard in one place. The four suppression rules are
+checked once, where the pan is decided, and there is no longer a gap for a
+knockout or a replay to arrive in between deciding to flash and flashing —
+which is what `pendingFlash` and its re-check in `tick` existed for. A pan
+cancelled by a hand on the planet needs nothing either: the flash has already
+been and gone by the time a hand can reach it.
 
 `prefersReducedMotion` is read **at play time** rather than latched at startup,
 so switching the system setting takes effect on the next turn with nothing

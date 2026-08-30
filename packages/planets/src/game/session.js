@@ -186,18 +186,22 @@ export function createSession({
     for (const [id, node] of game.state.nodes) {
       if (node.owner === humanPlayerId) mine.push(dice.standFor(id).normal);
     }
-    // The flash waits for the camera to settle: an announcement over a planet
-    // still turning underneath it is two things happening at once, and the
-    // player has to read both. `pendingFlash` is cleared in `tick`, which is
-    // also where a pan cancelled by a hand on the planet ends up — the flash
-    // still fires there, because it is an announcement rather than a camera
-    // move and the player has not stopped needing it.
-    if (cameraFocus.lookAtHoldings(mine)) {
-      pendingFlash = true;
-      return true;
-    }
+    // The flash runs *with* the pan rather than after it. They are two halves
+    // of one handover — the planet coming back to you and being told so — and
+    // the flash is what marks the moment it happens: held until the camera
+    // settled, it announced up to half a second after the thing it was
+    // announcing, which reads as a second event rather than as the same one.
+    // Overlapping them is safe because of the shape the flash already has: a
+    // vignette is clear over the middle, so the planet turning underneath it
+    // is never the part that gets covered.
+    //
+    // The suppression rules above are the whole of the guard now. They were
+    // re-checked when the flash finally fired, because a knockout or a replay
+    // could arrive in the second the camera was moving; firing here, there is
+    // no gap for anything to arrive in.
+    const moved = cameraFocus.lookAtHoldings(mine);
     turnFlash.play();
-    return false;
+    return moved;
   }
 
   const pickTerritoryAt = createTerritoryPicker({
@@ -225,7 +229,6 @@ export function createSession({
   // it moves while either is true — see tick() at the bottom.
   let replayOpen = false;
   let bannerHolding = false;
-  let pendingFlash = false; // a handover pan is running and the flash follows it
 
   // Repaints the planet as the replay's own board at `step` — surface, dice,
   // the stats row, the battle readout and its history all drawn from the
@@ -704,13 +707,6 @@ export function createSession({
 
     tick(dt) {
       cameraFocus.tick(dt);
-      // Re-checked rather than trusted from when the pan started: a knockout
-      // or a replay can arrive in the second the camera is moving, and every
-      // one of those is a reason not to flash after all.
-      if (pendingFlash && !cameraFocus.isMoving) {
-        pendingFlash = false;
-        if (!humanEliminated && !game.isOver() && !replayOpen && !bannerHolding) turnFlash.play();
-      }
       turnFlash.tick(dt);
 
       if (pendingReplayStep && !cameraFocus.isSwinging) {

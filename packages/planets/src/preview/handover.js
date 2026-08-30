@@ -256,7 +256,9 @@ const panning = addScenario({
     + 'board handed back to you is often somebody else’s half of the planet. Drag the planet away '
     + 'from the red territories — or press Look away — and then hand over. It only moves when none '
     + 'of your ground is on screen at all, and it draws back only when turning alone cannot show '
-    + 'more, so a view you chose is never taken off you.',
+    + 'more, so a view you chose is never taken off you. Hand over flashes as it pans, the way the '
+    + 'game does: the two are one event, and the vignette is clear over the middle, so the planet '
+    + 'turning underneath it is the part you can still see.',
 });
 
 const panStage = addStage(panning, {
@@ -294,7 +296,13 @@ function reportPan() {
 }
 
 for (const [label, onClick] of [
-  ['Hand over', () => panStage.focus.lookAtHoldings(mine())],
+  // Both halves of the handover at once, exactly as `focusOwnGround` does it:
+  // the flash runs *with* the pan rather than waiting for it to settle, which
+  // is the timing this button exists to show.
+  ['Hand over', () => {
+    panStage.focus.lookAtHoldings(mine());
+    panStage.flash.play();
+  }],
   // The condition is fiddly to reach by dragging, so here is a shortcut to it:
   // aim at the point furthest from everything the player holds.
   ['Look away', () => {
