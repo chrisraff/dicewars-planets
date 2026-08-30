@@ -380,8 +380,8 @@ test('nothing is offered while the camera is still following the match', () => {
 // following came back without the player asking, which is the behaviour this
 // replaced.
 test('a drag puts the offer up and leaves it up', () => {
-  assert.equal(autoFollowButtonView({ freed: true }), 'shown');
-  assert.equal(autoFollowButtonView({ freed: true, humanEliminated: true }), 'shown');
+  assert.equal(autoFollowButtonView({ freed: true }), 'controls');
+  assert.equal(autoFollowButtonView({ freed: true, humanEliminated: true }), 'controls');
 });
 
 // Whose turn it is deliberately does *not* appear here. A drag during an AI's
@@ -391,15 +391,28 @@ test('a drag puts the offer up and leaves it up', () => {
 // board they cannot see and nothing on screen to fix it. Whether a drag counts
 // at all is `session.js`'s question, asked once when the drag happens.
 test('the offer survives the handover into the player\'s own turn', () => {
-  assert.equal(autoFollowButtonView({ freed: true }), 'shown');
+  assert.equal(autoFollowButtonView({ freed: true }), 'controls');
 });
 
 // Neither of these is a third answer; they are places where the offer would be
 // a lie. A finished match has no following left to resume, and the replay's own
 // card is over this exact spot, steering a camera this button is not about.
-test('a finished match and an open replay both silence the offer', () => {
+test('a finished match has no following left to resume', () => {
   assert.equal(autoFollowButtonView({ freed: true, isOver: true }), 'hidden');
-  assert.equal(autoFollowButtonView({ freed: true, replayOpen: true }), 'hidden');
+});
+
+// A replay follows too — it swings to every step it plays — so the offer is
+// not silenced there, only moved: the replay card is docked over the band the
+// button normally sits in, so it takes a seat in the card's own head instead.
+test('a replay takes the offer rather than silencing it', () => {
+  assert.equal(autoFollowButtonView({ freed: true, replayOpen: true }), 'replay');
+});
+
+// The ordering inside the view, and the reason it is not an accident: almost
+// every replay watched is of a finished match, so reading `isOver` first would
+// have hidden the button in the one place it is most useful.
+test('a replay of a finished match still offers it', () => {
+  assert.equal(autoFollowButtonView({ freed: true, isOver: true, replayOpen: true }), 'replay');
 });
 
 test('an empty status offers nothing rather than throwing', () => {

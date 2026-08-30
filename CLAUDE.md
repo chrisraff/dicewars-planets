@@ -954,6 +954,20 @@ left and the payout tray fills from the left, so it is the only thing in the
 middle. It is the recenter button a map offers once you have scrolled away
 from where you are driving.
 
+**A replay follows too, so the offer is made there as well**, and the view
+answers *where* rather than just whether: `'replay'` seats it in the replay
+card's own head beside Graph, because the card is docked over exactly the band
+`'controls'` uses. One rule and one handler, two seats. What it buys is
+watching one corner of the planet while the track runs — a replay otherwise
+swings to every step's fight, which is right for watching a match back and
+wrong for watching one region of it.
+
+Note which silencer had to survive that: **`isOver` is read after
+`replayOpen`, not before.** A finished match silences the offer because nothing
+moves the camera again — but a replay of a finished match moves it constantly,
+and almost every replay watched is of one, so the obvious ordering would have
+hidden the button in the place it is most useful.
+
 **Whether a drag counts is decided by whose turn it was, and the offer then
 outlives that turn.** Those are two different rules and conflating them was the
 first thing got wrong here.
@@ -973,7 +987,18 @@ the drag happens, and that one question is the whole of the distinction.
 
 Three things then answer an offer that is standing: the button, **picking a
 territory to attack from** (silently — they are looking straight at ground they
-just found), and ending the turn as the backstop for one simply ignored.
+just found), and ending the turn as the backstop for one simply ignored. In a
+replay only the button does; opening or closing one resets the flag outright,
+since there is one planet with two things that drive it and whichever has just
+been handed it starts out driving.
+
+**Dragging the track is not a seek the camera chases.** A hand scrubbing passes
+through dozens of steps, and the board deliberately *waits* for a swing to land
+before it paints (`pendingReplayStep`), so chasing them made the one thing a
+scrub is for lag behind the hand doing it. The track's `input` therefore seeks
+unsettled — repaint, no camera — and its `change` is the release the camera
+answers. Everything else (the arrows, the timer, a click on the track) is
+settled by definition.
 
 There is a second moment besides the handover where a turn can fail to open on
 your own ground: **a save reopened.** `endTurn` will not fire again for a turn

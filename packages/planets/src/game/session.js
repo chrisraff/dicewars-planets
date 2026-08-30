@@ -265,12 +265,18 @@ export function createSession({
    * nothing. Raising an offer to hand back a camera nobody was going to take
    * would be a button up through the one part of the match they are playing.
    *
+   * That exemption is about the *live* match, hence the replay check in front
+   * of it: a replay swings to every step it plays whoever's turn the paused
+   * board happens to be sitting on, so a drag during one always has something
+   * to suppress.
+   *
    * Not saved. It is a fact about the hand on the planet in this sitting,
    * like the pressed territory and unlike anything about the position, and a
    * reload is somebody arriving at the board fresh.
    */
   function freeCamera() {
-    if (cameraFreed || game.isHumanTurn()) return;
+    if (cameraFreed) return;
+    if (!replayOpen && game.isHumanTurn()) return;
     cameraFreed = true;
     refreshAutoFollow();
   }
@@ -310,6 +316,14 @@ export function createSession({
    * answer to somebody who pressed a button asking to be taken there.
    */
   function autoFollowAim() {
+    // A replay is following something of its own — the step the track is
+    // standing on — and the live board underneath it is not what is being
+    // watched. Same aim `showReplayStep` would have taken, so a press catches
+    // up with the replay rather than landing somewhere it never went.
+    if (replayOpen) {
+      return replayStep > 0
+        && focusFights(replay.attacks.slice(replayStep - 1), { force: true });
+    }
     if (game.currentPlayer() !== humanPlayerId && aiFights.length > 0) {
       if (focusFights(aiFights, { force: true })) return true;
     }
@@ -465,7 +479,7 @@ export function createSession({
   // because the track moved, so revealing it before the camera has actually
   // arrived just looks like the planet changed for no reason. So here, and
   // only here, the swing runs first and the board waits for it.
-  function showReplayStep(step) {
+  function showReplayStep(step, { moveCamera = true } = {}) {
     const nodes = replay.boardAt(step);
     const entry = step > 0 ? replay.attacks[step - 1] : null;
     // Only a step *forward* throws dice. Playing and the › button both move
@@ -481,7 +495,13 @@ export function createSession({
     // Looks ahead through every attack still to come, not just this one, so
     // a run of nearby fights gets one swing instead of several — the replay
     // order is never reordered (unlike a live AI turn), only clustered.
-    if (entry && focusFights(replay.attacks.slice(step - 1))) {
+    //
+    // `moveCamera` is off for a step passed through mid-scrub, and `cameraFreed`
+    // for a viewer who has dragged the planet to watch one corner of it while
+    // the track runs. Both leave the board to repaint on the spot: it is only
+    // the *swing* that is suppressed, and skipping it skips the wait for it
+    // too, which is what makes a scrub keep up with the hand doing it.
+    if (moveCamera && !cameraFreed && entry && focusFights(replay.attacks.slice(step - 1))) {
       pendingReplayStep = { step, entry, nodes, animate };
       return; // applied once the swing lands, in tick() below
     }
@@ -512,13 +532,20 @@ export function createSession({
     // there may still be a move in flight to put down first.
     settleLiveBoard();
     replayOpen = true;
-    refreshAutoFollow(); // the replay's own card is over where the offer sits
+    // Opening or closing a replay is arriving at a view rather than keeping
+    // one: there is one planet and two things that drive it, and whichever has
+    // just been handed it starts out driving. The offer is about the camera
+    // you are looking through now, not the one you were looking through a
+    // moment ago.
+    cameraFreed = false;
+    refreshAutoFollow(); // and in here it sits in the card, not the controls
     hud.hideOutcome();
     hud.showReplay(replay.attacks.length, { standings: replay.standings(playerIds) });
   }
 
   function closeReplay() {
     replayOpen = false;
+    cameraFreed = false; // see openReplay
     hud.hideReplay();
     pendingReplayStep = null;
     replayFight = null;
@@ -809,7 +836,10 @@ export function createSession({
     refreshBoard();
   });
 
-  hud.onReplaySeek(showReplayStep);
+  // A step passed through mid-drag repaints the board and leaves the camera
+  // alone; the release that follows is the one the camera answers.
+  hud.onReplaySeek((step, { settled = true } = {}) =>
+    showReplayStep(step, { moveCamera: settled }));
   hud.onReplayClose(closeReplay);
   hud.onReplayOpen(openReplay);
 

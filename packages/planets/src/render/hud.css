@@ -933,6 +933,32 @@
   gap: 0.5rem;
 }
 
+/* The same offer, in the seat it takes while a replay owns the bottom of the
+   screen. Sized to the head row it joins rather than to the controls column —
+   but it keeps the pill, because the pill is what makes it recognisable as the
+   thing that came up when you dragged. It grows the button span leftwards, so
+   Graph and the × do not move when it appears.
+
+   Lighter than it is over the planet, and deliberately a shade brighter than
+   Graph beside it. Out there it is a dark pill on a bright planet; in here the
+   card is already that same near-black, so keeping the planet's fill would
+   make it read as a hole punched in the head rather than as a control. Above
+   Graph rather than level with it because Graph is a fixture and this is an
+   offer that came and will go. The blur goes for the same reason as the
+   shadow: the card is already blurred, and blurring it twice buys nothing. */
+.hud-replay-follow {
+  font-size: 0.75rem;
+  min-height: 0;
+  padding: 0.2rem 0.7rem;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.hud-replay-follow:hover { background: rgba(255, 255, 255, 0.26); }
+.hud-replay-follow:active { background: rgba(255, 255, 255, 0.34); }
+.hud-replay-follow[hidden] { display: none; }
+
 .hud-replay-graph {
   font: inherit;
   font-size: 0.75rem;

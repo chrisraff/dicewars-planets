@@ -346,7 +346,9 @@ const offer = addScenario({
     + 'along with the board. A drag during your own turn raises nothing, because during your own '
     + 'turn there is nothing for it to suppress — but a drag during an AI’s turn keeps the offer '
     + 'standing once the turn comes back to you, which is exactly the case where the pan home was '
-    + 'suppressed and your turn opens on somebody else’s half of the planet.',
+    + 'suppressed and your turn opens on somebody else’s half of the planet. A replay follows too '
+    + '— it swings to every step it plays — so the same offer is made there, in the replay card’s '
+    + 'own head beside Graph, since the card is docked over the band this one sits in.',
 });
 
 const offerStage = addStage(offer, {

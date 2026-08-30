@@ -240,12 +240,24 @@ export function replayButtonView(status) {
  * raised at all, and `session.js` says why: on your own turn there is nothing
  * for it to suppress, so there is nothing to hand back.
  *
- * Two states silence it, both places where it would be about nothing. A
- * finished match has no following left to resume — nothing moves the camera
- * again — so the offer would be a button that does nothing. And a replay has
- * the planet: its own card is over this very spot, and the camera it is moving
- * is not the one this is about. (A banner needs no rule; it covers the whole
- * HUD.)
+ * **A replay follows too, so the offer belongs there as well** — and answering
+ * *where* is most of what this returns. A replay swings to every step's fight,
+ * which is right for watching a match back and wrong for watching one corner
+ * of the planet through it; a drag says which, and the button says how to
+ * change your mind. It cannot be offered in the same place, because the replay
+ * card is docked over exactly that band, so `'replay'` puts it in the card's
+ * own head beside Graph and `'controls'` puts it where it lives the rest of
+ * the time. One rule, one handler, two seats.
+ *
+ * Note which silencer that had to survive: **a finished match is silent only
+ * while no replay is open.** `isOver` is a silencer at all because nothing
+ * moves the camera again once a match ends — but a replay of a finished match
+ * moves it constantly, and almost every replay watched is of one. Reading
+ * `isOver` first would have hidden the button in the one place it is most
+ * useful.
+ *
+ * The other silencer is unconditional: a banner needs no rule, since it covers
+ * the whole HUD.
  *
  * A player who is *out* is still offered it, and so is an unattended match:
  * the camera goes on following the fights for whoever is watching, and that is
@@ -253,7 +265,9 @@ export function replayButtonView(status) {
  */
 export function autoFollowButtonView(status) {
   const { freed = false, isOver = false, replayOpen = false } = status;
-  return freed && !isOver && !replayOpen ? 'shown' : 'hidden';
+  if (!freed) return 'hidden';
+  if (replayOpen) return 'replay';
+  return isOver ? 'hidden' : 'controls';
 }
 
 /**
@@ -433,6 +447,9 @@ export function createHud(
         <div class="hud-replay-head">
           <span class="hud-replay-title">Replay</span>
           <span class="hud-replay-head-buttons">
+            <button class="hud-auto-follow-button hud-replay-follow" type="button" hidden>
+              Auto-follow
+            </button>
             <button class="hud-replay-graph" type="button" aria-pressed="false">Graph</button>
             <button class="hud-replay-close" type="button" aria-label="Close replay">×</button>
           </span>
@@ -460,6 +477,7 @@ export function createHud(
   const turnText = root.querySelector('.hud-turn-text');
   const autoFollow = root.querySelector('.hud-auto-follow');
   const autoFollowButton = root.querySelector('.hud-auto-follow-button');
+  const replayFollowButton = root.querySelector('.hud-replay-follow');
   let autoFollowShown = null; // so a repaint doesn't rewrite `hidden` every frame
   const hint = root.querySelector('.hud-hint');
   const hintText = root.querySelector('.hud-hint-text');
@@ -526,18 +544,28 @@ export function createHud(
   // board there — the one path every control (drag, the buttons, the timer)
   // goes through, so the track's value is never out of step with what is on
   // screen.
-  function paintReplayStep(step) {
+  //
+  // `settled` is whether this is a step the player has actually stopped on. A
+  // hand dragging the track passes through dozens on the way, and a camera
+  // that swung to each of them would be a camera swinging at a board nobody
+  // has looked at yet — worse, the board itself waits for those swings to land
+  // (see `showReplayStep`), so chasing them makes the one thing a scrub is for
+  // lag behind the hand doing it. So a drag repaints and does not move the
+  // camera, and the release that follows is the seek the camera answers.
+  // Everything else — the arrows, the timer, a click on the track — is settled
+  // by definition and passes straight through.
+  function paintReplayStep(step, settled = true) {
     const max = Number(replayTrack.max);
     const clamped = Math.max(0, Math.min(max, step));
     replayTrack.value = String(clamped);
     chart.setStep(clamped);
-    replaySeekHandler?.(clamped);
+    replaySeekHandler?.(clamped, { settled });
     return clamped;
   }
 
-  function seekReplay(step) {
+  function seekReplay(step, settled = true) {
     stopReplaying();
-    paintReplayStep(step);
+    paintReplayStep(step, settled);
   }
 
   function startReplaying() {
@@ -556,7 +584,9 @@ export function createHud(
   root.querySelector('.hud-replay-next').addEventListener('click', () => {
     seekReplay(Number(replayTrack.value) + 1);
   });
-  replayTrack.addEventListener('input', () => seekReplay(Number(replayTrack.value)));
+  // `input` fires the whole way through a drag, `change` once it is let go.
+  replayTrack.addEventListener('input', () => seekReplay(Number(replayTrack.value), false));
+  replayTrack.addEventListener('change', () => seekReplay(Number(replayTrack.value)));
   replayPlay.addEventListener('click', () => (replayTimer ? stopReplaying() : startReplaying()));
   root.querySelector('.hud-replay-close').addEventListener('click', () => {
     stopReplaying();
@@ -837,11 +867,13 @@ export function createHud(
       const view = autoFollowButtonView(status);
       if (view === autoFollowShown) return;
       autoFollowShown = view;
-      autoFollow.hidden = view === 'hidden';
+      autoFollow.hidden = view !== 'controls';
+      replayFollowButton.hidden = view !== 'replay';
     },
 
     onAutoFollow(handler) {
       autoFollowButton.addEventListener('click', handler);
+      replayFollowButton.addEventListener('click', handler);
     },
 
     /**
