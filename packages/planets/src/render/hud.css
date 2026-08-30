@@ -1212,12 +1212,28 @@
   min-height: 2.6rem;
   cursor: pointer;
 }
-.menu-choice:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+/* `:not(.is-selected)` is load-bearing and the reason is specificity, not
+   taste. `:not(:disabled)` costs this rule a class's worth on its own account,
+   so at three it outranks `.is-selected`'s two however they are ordered — and
+   it sets only `background`, so the selected chip kept `.is-selected`'s
+   near-black ink and took a dark background underneath it. Black on black,
+   from the moment you clicked a difficulty with a pointer still resting on it.
+
+   The trap is that the two halves of a state can be split between rules of
+   different weight: the loser here still won `color`, so the bug does not look
+   like a rule being ignored. Anything that hovers over `.is-selected` has to
+   say so, and give it a hover of its own. */
+.menu-choice:hover:not(:disabled):not(.is-selected) {
+  background: rgba(255, 255, 255, 0.14);
+}
 .menu-choice.is-selected {
   background: rgba(255, 255, 255, 0.92);
   border-color: #fff;
   color: #101014;
 }
+/* Brighter, never darker — a chosen chip under the pointer is the one place
+   the whole palette has to move the other way. */
+.menu-choice.is-selected:hover:not(:disabled) { background: #fff; }
 .menu-choice:disabled { cursor: default; }
 
 /* ---- the turn order, as a row of seats --------------------------------- */
