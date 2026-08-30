@@ -129,6 +129,35 @@ test('a game resumed after the offer was refused does not reopen it', () => {
   assert.deepEqual(offers, []);
 });
 
+test('the offer is remembered from the moment it is made', () => {
+  // So the very next save carries it. Nothing wrote this down before, and the
+  // only thing that did was `playOn` — so a player who took the replay door
+  // out of the banner, or simply reloaded while it was up, had been asked a
+  // question no part of the saved game remembered.
+  const { game } = watched();
+  assert.equal(game.surrenderOffered, false);
+
+  game.endTurn();
+  advance(game, 5);
+
+  assert.equal(game.surrenderOffered, true);
+});
+
+test('an offer that was never answered is still owed after a reload', () => {
+  // `playedOn` is false — the player never refused — but the question has been
+  // asked, and "asked once per match" has to mean once per *match* rather than
+  // once per load. The session puts the banner back instead; re-emitting would
+  // ask again at the end of the next turn and leave the player with no sign of
+  // it in between, which is exactly the hole this closes.
+  const { game, offers } = watched({ surrenderOffered: true });
+
+  game.endTurn();
+  advance(game, 5);
+
+  assert.deepEqual(offers, [], 'not asked a second time');
+  assert.equal(game.surrenderOffered, true, 'and still owed, so it can be restored');
+});
+
 test('a match with nobody in the human seat is never offered anything', () => {
   // there is no one to make the offer to, and a demo playing itself out should
   // play itself out

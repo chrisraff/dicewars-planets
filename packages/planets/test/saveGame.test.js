@@ -111,6 +111,19 @@ test('a match saved on Hard is resumed on Hard', () => {
   assert.equal(readSavedGame(stored(save)).settings.difficulty, 'hard');
 });
 
+test('an unanswered surrender travels in the save, and an old one reads as unasked', () => {
+  // Both halves matter. Without the first, a player asked whether they had won
+  // and reloaded before answering came back to an ordinary game in progress —
+  // no banner, and no Replay button either, since that reads off `playedOn`.
+  // Without the second, every save written before this field existed would
+  // have to be refused.
+  const asked = saveOf(12, { surrenderOffered: true });
+  assert.equal(readSavedGame(stored(asked)).surrenderOffered, true);
+
+  const { surrenderOffered, ...before } = saveOf(12);
+  assert.ok(!readSavedGame(stored(before)).surrenderOffered);
+});
+
 test('there is nothing to continue when nothing was ever saved', () => {
   assert.equal(readSavedGame(fakeStorage()), null);
 });

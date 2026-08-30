@@ -31,6 +31,7 @@ const STORAGE_KEY = 'dicewars-planets:game';
 /** The one shape everything below agrees on. */
 export function gameSave({
   seed, settings, humanPlayerId, world, state, replay, camera, playedOn = false,
+  surrenderOffered = false,
 }) {
   return {
     version: SAVE_VERSION,
@@ -41,10 +42,18 @@ export function gameSave({
     state,
     replay,
     camera,
-    // Whether a surrender has already been waved away. Read as optional
-    // rather than required, so a save written before this existed simply
-    // means "not yet asked" instead of being refused as damaged.
+    // Whether a surrender has already been waved away, and whether it has been
+    // put to the player at all. Both read as optional rather than required, so
+    // a save written before either existed simply means "not yet asked"
+    // instead of being refused as damaged.
+    //
+    // The second is the one that is easy to leave out, and it was: `playedOn`
+    // is only ever set by answering, so a player who was asked and reloaded
+    // before answering — including one who went to the replay first, which is
+    // the other door out of that banner — came back to a match with no record
+    // that anything had happened.
     playedOn,
+    surrenderOffered,
   };
 }
 

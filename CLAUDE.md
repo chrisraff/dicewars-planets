@@ -597,8 +597,30 @@ before any of this, which is what the handicaps are measured against.
   stored as the **seed it grew from**, not as its geometry: a world is a
   deterministic function of `(seed, settings)`, so one number rebuilds every
   cell. Everything that cannot be recomputed — owners, dice, whose turn,
-  banked dice, the replay, whether a surrender has already been waved away —
-  is stored outright.
+  banked dice, the replay, whether a surrender has been *offered* and whether
+  it has been waved away — is stored outright.
+
+  Those last two are separate fields on purpose, and storing only the second
+  was a bug. `playedOn` is set by answering, and the surrender banner has three
+  buttons of which only one answers: "New game", "Play on", and **"Watch
+  replay", which answers nothing**. A player who took the replay door and then
+  reloaded came back to an ordinary game in progress — no banner, because the
+  offer is emitted at the end of a turn and is asked once per match, and no
+  Replay button either, because `replayButtonView` reads `playedOn`. The win
+  they had been handed simply stopped existing until they played another whole
+  turn. So `surrenderOffered` travels too, `session.js` writes it the moment
+  the offer is made rather than waiting for the next `change` (the match is
+  held behind the banner, so there may not be another one), and a restore with
+  it set but `playedOn` clear puts the banner back by hand — the same hand a
+  restored finished game gets, one step earlier.
+
+  **The surrender is the only interrupt that needed this**, which is why it was
+  the one that got missed. A knockout banner is recoverable without any stored
+  flag, because `humanEliminated` is read back off the board and is exactly
+  what `replayButtonView` keys on; "you are out" is a question already
+  answered. A surrender is the one piece of match state that is *not* derivable
+  from the position — the board looks identical whether or not the player has
+  been told about it.
 
   That trade has exactly one failure mode: change the generator and the same
   seed grows a *different* planet. Hence `worldFingerprint`, a hash of the

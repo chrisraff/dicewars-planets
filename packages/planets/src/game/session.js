@@ -86,8 +86,11 @@ export function createSession({
     world,
     humanPlayerId,
     savedState: restored ? reviveState(restored.state) : null,
-    // a player who already waved a surrender away is not asked again
+    // a player who already waved a surrender away is not asked again, and one
+    // who was asked but never answered is not asked twice — the banner goes
+    // back up below instead
     playedOn: restored?.playedOn ?? false,
+    surrenderOffered: restored?.surrenderOffered ?? false,
     // A resumed game brings its own settings with it, so the difficulty a
     // match was started on is the one it is finished on.
     strategy: strategyFor(settings),
@@ -420,6 +423,7 @@ export function createSession({
       state: serializeState(game.state),
       replay: serializeReplay(replay),
       playedOn: game.playedOn,
+      surrenderOffered: game.surrenderOffered,
       camera: cameraSnapshot(viewer.camera),
     });
   }
@@ -619,6 +623,12 @@ export function createSession({
   game.on('surrendered', () => {
     lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
     interrupt(lastOutcome);
+    // Straight away rather than at the next `change`, for the same reason
+    // `playOn` writes immediately: the match is now held behind the banner, so
+    // there may not *be* another change until the question is answered — and
+    // one of the answers is "watch the replay", which leaves the board exactly
+    // where it is.
+    onSave?.(snapshot());
   });
 
   game.on('over', (winner) => {
@@ -667,7 +677,19 @@ export function createSession({
   // A game restored after it had already been won gets no `over` event —
   // nothing happens in it any more — so the ending it finished on goes back up
   // by hand, which is what makes "Watch replay" reachable after a reload.
+  //
+  // A surrender that was offered and never answered is the same problem one
+  // step earlier, and it needs the same hand. `surrendered` is emitted at the
+  // end of a turn and will not fire again — it is asked once per match — so
+  // without this the player came back to an ordinary game in progress: no
+  // banner, and no Replay button either, since that reads off `playedOn`. The
+  // way out of the banner that made this easy to miss is "Watch replay", which
+  // answers nothing and leaves the question owed.
   if (game.isOver()) showEnding(game.state.winner);
+  else if (game.surrenderOffered && !game.playedOn) {
+    lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
+    interrupt(lastOutcome);
+  }
 
   game.start();
 

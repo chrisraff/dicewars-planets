@@ -37,13 +37,17 @@ export const AUTOPLAY = Symbol('autoplay');
  *
  * `savedState` resumes a match instead of dealing a new one. Nothing else
  * changes: the same world still has to be supplied, because it is the planet
- * that board was fought over. `playedOn` comes back with it — a player who
- * has already waved the surrender away is not asked again after a reload.
+ * that board was fought over. `playedOn` and `surrenderOffered` come back with
+ * it — a player who has already waved the surrender away is not asked again
+ * after a reload, and one who was asked but never answered is not asked twice.
+ * The session restores that banner instead, which is the only way the question
+ * survives a reload as the question it was.
  */
 export function createGame({
   world,
   savedState = null,
   playedOn: startPlayedOn = false,
+  surrenderOffered: startSurrenderOffered = false,
   humanPlayerId = world.playerIds[0],
   // The opponent, for a caller that has no opinion. A real match always has
   // one: the session picks from the difficulty setting (`strategyFor`), and
@@ -88,7 +92,7 @@ export function createGame({
   // Whether the player has been offered the match, and whether they turned it
   // down. Refusing is final: somebody who said they would rather finish the
   // job should not be asked again every turn while they do it.
-  let surrenderOffered = false;
+  let surrenderOffered = startSurrenderOffered;
   let playedOn = startPlayedOn;
 
   const listeners = new Map();
@@ -294,6 +298,15 @@ export function createGame({
     /** Whether the player has already refused a surrender this match. */
     get playedOn() {
       return playedOn;
+    },
+
+    /**
+     * Whether the offer has been made — asked once per *match*, so this has to
+     * be saved alongside `playedOn` rather than reset with the page. It is
+     * what tells a restoring session there is a banner owed.
+     */
+    get surrenderOffered() {
+      return surrenderOffered;
     },
 
     /** Refuses one: the match runs to a real finish and is never offered again. */
