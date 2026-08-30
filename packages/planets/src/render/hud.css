@@ -827,6 +827,12 @@
 .hud-banner[hidden] { display: none; }
 
 .hud-banner-card {
+  /* Positioned for one reason, and it is the fireworks: an absolutely
+     positioned element paints above its in-flow siblings whatever the document
+     order says, so a static card would be *under* the layer that is supposed
+     to be behind it. Given a position of its own, the two settle by document
+     order instead, and the layer goes in first. */
+  position: relative;
   text-align: center;
   max-width: min(24rem, 100%);
 }
@@ -869,6 +875,72 @@
   border-color: #fff;
 }
 .hud-banner-action.is-primary:hover { background: #fff; }
+
+/* ---- fireworks, over a won banner ----------------------------------
+
+   Pure decoration, and the one thing on the screen that says nothing at all —
+   see `fireworks.js` for why that is what makes reduced motion turn it off
+   rather than soften it.
+
+   `overflow: hidden` because a spark's reach is jittered and the outermost
+   bursts sit at 95% of the way out, so some of them are aimed off the edge on
+   purpose; clipping is cheaper than refusing them, and a firework that leaves
+   the frame is a firework, while one that stops dead at the edge is not. */
+.hud-fireworks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Where one burst goes off: a point, with no size of its own, that every one
+   of its sparks travels out from. */
+.hud-firework {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* One spark. `--dx`/`--dy` are its flight and `--drop` the sag at the end,
+   all three written in pixels by `fireworks.js` from a single measurement of
+   the layer — so the show scales to a phone banner and to a preview stage
+   without this sheet knowing how big either is.
+
+   `translate3d` rather than `left`/`top` so the whole show is composited
+   rather than laid out: two hundred dots moving at once is the one place in
+   this interface where that distinction is worth caring about. */
+.hud-firework-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--firework-size, 0.42rem);
+  height: var(--firework-size, 0.42rem);
+  margin: calc(var(--firework-size, 0.42rem) / -2);
+  border-radius: 50%;
+  background: var(--firework-color, #fff);
+  /* The glow is what makes a flat dot read as burning rather than as a
+     sticker, and it is in the spark's own color so each burst carries it. */
+  box-shadow: 0 0 0.5rem var(--firework-color, #fff);
+  opacity: 0;
+  animation-name: hud-firework-spark;
+  animation-timing-function: cubic-bezier(0.12, 0.62, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+/* Out fast, then slowing as it goes — the easing above does that half. This
+   does the two things easing cannot: the spark is invisible until its delay is
+   up (so a burst late in the show is not a dot sitting on screen waiting for
+   its turn), and it keeps drifting outward and downward while it fades, so it
+   goes out rather than stopping. */
+@keyframes hud-firework-spark {
+  0% { transform: translate3d(0, 0, 0) scale(0.5); opacity: 0; }
+  12% { opacity: 1; }
+  72% { transform: translate3d(var(--dx), var(--dy), 0) scale(1); opacity: 1; }
+  100% {
+    transform: translate3d(var(--dx), calc(var(--dy) + var(--drop)), 0) scale(0.35);
+    opacity: 0;
+  }
+}
 
 /* ---- replay ------------------------------------------------------- */
 

@@ -1,4 +1,4 @@
-import { createHud, turnIndicatorView } from '../render/hud.js';
+import { createHud, outcomeView, turnIndicatorView } from '../render/hud.js';
 import { playerStatsFor } from '../game/playerStats.js';
 import { assignPlayerColors } from '../render/palette.js';
 
@@ -76,7 +76,14 @@ function addScenario({ title, note, stageClass = '', outcome, status, hasReplay,
   host.className = 'hud-host';
   stage.append(host);
 
-  const hud = createHud(host, { playerColors, playerNames, humanPlayerId: playerIds[0] });
+  // Motion pinned rather than asked about, so a machine with reduced motion
+  // switched on still sees the fireworks this page exists partly to show.
+  const hud = createHud(host, {
+    playerColors,
+    playerNames,
+    humanPlayerId: playerIds[0],
+    reducedMotion: false,
+  });
   hud.showPlayers(playerStatsFor(state, playerIds));
   hud.showTurn(status);
 
@@ -123,6 +130,21 @@ function addScenario({ title, note, stageClass = '', outcome, status, hasReplay,
 
   if (outcome) {
     hud.showOutcome(outcome);
+
+    // A won banner comes with fireworks, and they are over in four seconds —
+    // which is exactly long enough to miss while reading the caption. Showing
+    // the outcome again is the same call the game makes, so this replays what
+    // the game does rather than a preview's imitation of it.
+    if (outcomeView(outcome).kind === 'won') {
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = 'Fireworks again';
+      again.addEventListener('click', () => hud.showOutcome(outcome));
+      controls.append(again);
+      section.append(controls);
+    }
 
     hud.onOutcomeAction((action) => {
       readout.textContent = `action fired: ${action}`;

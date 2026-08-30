@@ -1248,6 +1248,40 @@ asking the browser, so the page shows what it says it is showing on a machine
 that has reduced motion switched on — the same bargain `coarsePointer` makes
 on the hints page.
 
+`fireworks.js` is the other DOM animation over the canvas, and it is the
+contrast that makes the paragraph above mean something. It fires on a banner
+opening as `'won'` — which `outcomeView` folds a surrender into alongside
+running the board out, the right seam because the two are one thing to the
+player and the difference between them is a sentence under the title. And
+**reduced motion turns it off outright rather than softening it**, which is the
+opposite of what the flash does, for the reason the flash gives: the flash
+carries the fact that a turn has been handed over and somebody who asked for
+less movement did not ask to be told less, while this says nothing the title
+does not already say. Decoration is the one thing it is safe to simply not
+show.
+
+It is also the one animation in the game that is **not ticked**. Everything
+else runs off the session's frame loop because it has to agree with the planet
+— a roll lands when the dice land — but a banner has no planet and no loop, and
+a spark's whole life is "travel there, fade out", which is what a keyframe is
+for. So `play` builds the show as a couple of hundred absolutely positioned
+dots with their delays already on them, hands it to the compositor, and clears
+it with one timer; no JavaScript runs while it plays. The layer is measured
+exactly once, at `play`, which is why it is fired *after* `banner.hidden =
+false` — a layer inside a `display: none` banner measures zero, and a show
+measured against nothing is dots that travel nowhere.
+
+Two decisions inside `fireworksShow` are worth keeping, and both are about
+reading as fireworks rather than as particles. Bursts go off in a **ring**, at
+`clear` to `edge` of the way out — an ellipse in percentage space, so it takes
+the banner's own proportions, which is right because what it is keeping clear
+is a card wider than it is tall. And sparks are laid on **even spokes and then
+jittered** by under one spoke, so a burst always covers the full circle;
+uniformly random angles clump, and a clumped burst reads as a spill. Both are
+what `fireworks.test.js` asserts, along with the two that are really about the
+mechanism: nothing lands over the card, and every spark is out before
+`duration`, since `duration` is also the timer that empties the layer.
+
 Two constants are shared deliberately and must not be duplicated:
 `pips.js` (where the dots sit on a die face) is read by both the 3D dice
 texture and the flat SVG dice in the battle readout, and `diceStacks.js`

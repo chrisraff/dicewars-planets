@@ -18,7 +18,7 @@ export const PREVIEW_PAGES = [
     description:
       'Where play stops — winning, losing, and being knocked out of a game that carries on '
       + 'without you — with the turn indicator each one leaves behind, and the replay a fought-out '
-      + 'match offers.',
+      + 'match offers. The won banners fire their fireworks on open, and again on a button.',
   },
   {
     href: '/preview/hud.html',

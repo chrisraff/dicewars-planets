@@ -1,6 +1,7 @@
 import { readableTextColor } from './palette.js';
 import { createBattleReadout, dieChip } from './battleReadout.js';
 import { createReplayChart } from './replayChart.js';
+import { createFireworks } from './fireworks.js';
 import { showScrollFades } from './scrollFades.js';
 import { MAX_RESERVE } from '../game/playerStats.js';
 
@@ -410,7 +411,7 @@ export const REPLAY_STEP_MS = 900;
  */
 export function createHud(
   root,
-  { playerColors, playerNames = new Map(), humanPlayerId = null } = {}
+  { playerColors, playerNames = new Map(), humanPlayerId = null, reducedMotion = null } = {}
 ) {
   root.innerHTML = `
     <div class="hud-top">
@@ -491,6 +492,16 @@ export function createHud(
   const bannerTitle = banner.querySelector('.hud-banner-title');
   const bannerDetail = banner.querySelector('.hud-banner-detail');
   const bannerActions = banner.querySelector('.hud-banner-actions');
+  // Behind the card — see `.hud-banner-card`'s `position` for why that takes
+  // both an insertion point and a rule.
+  //
+  // `reducedMotion` is null in the game, which means ask the browser at the
+  // moment of playing; a preview pins it false so the page shows what it says
+  // it is showing on a machine that has the setting switched on.
+  const fireworks = createFireworks(banner, {
+    before: banner.querySelector('.hud-banner-card'),
+    reducedMotion,
+  });
   let onAction = null;
 
   const replayOverlay = root.querySelector('.hud-replay');
@@ -938,14 +949,37 @@ export function createHud(
 
       banner.hidden = false;
       bannerActions.querySelector('button')?.focus({ preventScroll: true });
+
+      // Won, however it was won: `outcomeView` folds a surrender into the same
+      // `'won'` as running the board out, which is the right seam to hang this
+      // on — the two are one thing to the player, and the difference between
+      // them is a sentence under the title rather than a different ending.
+      //
+      // After `hidden = false`, and that is load-bearing rather than tidy: the
+      // show is measured against the layer, and a layer inside a `display:
+      // none` banner measures zero.
+      if (view.kind === 'won') fireworks.play();
+      else fireworks.cancel();
     },
 
     hideOutcome() {
       banner.hidden = true;
+      fireworks.cancel();
     },
 
     onOutcomeAction(handler) {
       onAction = handler;
+    },
+
+    /**
+     * Everything in here that outlives its markup. The replay's timer is
+     * stopped by `session.js` closing the replay; the fireworks' is not
+     * reachable that way, and while a stray one would only empty a layer that
+     * has already been thrown away, a match being disposed should not leave a
+     * timer running for four seconds on the strength of that.
+     */
+    dispose() {
+      fireworks.dispose();
     },
 
     /**

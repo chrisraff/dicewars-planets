@@ -989,6 +989,7 @@ export function createSession({
       // asking this session to paint steps onto a planet that has been taken
       // out of the scene. Closing the replay is what stops it.
       hud.hideReplay();
+      hud.dispose();
       cameraFocus.dispose();
       turnFlash.dispose();
       viewer.scene.remove(surface.group, dice.group, poles.group);
