@@ -886,6 +886,100 @@
 }
 .hud-replay-close:hover { color: #fff; }
 
+.hud-replay-head-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hud-replay-graph {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #cfcfd6;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.hud-replay-graph:hover { color: #fff; background: rgba(255, 255, 255, 0.16); }
+.hud-replay-graph.is-selected {
+  color: #14141a;
+  background: #e8e8ea;
+  border-color: #e8e8ea;
+}
+
+/* ---- the match as a graph ------------------------------------------ */
+
+/* Sits between the head and the transport, so opening it grows the card
+   upwards off the bottom edge and leaves the track exactly where the hand
+   reaching for it expects. */
+.hud-chart {
+  margin-bottom: 0.6rem;
+}
+.hud-chart[hidden] { display: none; }
+
+.hud-chart-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.hud-chart-tab {
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #cfcfd6;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+.hud-chart-tab:hover { color: #fff; }
+.hud-chart-tab.is-selected {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+/* The plot scales uniformly to the card's width — `viewBox` and nothing
+   else decides its height, so every stroke below is in the plot's own
+   units and none of them has to be re-stated per screen size. */
+.hud-chart-plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hud-chart-axis {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+}
+
+.hud-chart-peak {
+  fill: #cfcfd6;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Where the track is standing, so the graph and the planet are one view of
+   one moment rather than two things to hold in your head at once. */
+.hud-chart-cursor {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.hud-chart-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .hud-replay-transport {
   display: flex;
   align-items: center;
@@ -935,6 +1029,10 @@
 /* landscape phones: very little vertical room, so shrink the chrome */
 @media (max-height: 480px) {
   .battle-history-list { max-height: 40vh; }
+  /* The plot is square-scaled to the card's width, which on a short screen is
+     most of the height there is. Capped rather than squashed: the aspect
+     ratio is left alone and the drawing simply comes in from the sides. */
+  .hud-chart-plot { max-height: 22vh; }
   .hud-players { padding-top: calc(var(--safe-top) + 0.35rem); padding-bottom: 0.35rem; }
   .hud-player-territories { font-size: 1.1rem; }
   .hud-controls { padding-top: 0.4rem; padding-bottom: calc(var(--safe-bottom) + 0.4rem); }

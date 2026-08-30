@@ -1,5 +1,6 @@
 import { readableTextColor } from './palette.js';
 import { createBattleReadout, dieChip } from './battleReadout.js';
+import { createReplayChart } from './replayChart.js';
 import { showScrollFades } from './scrollFades.js';
 import { MAX_RESERVE } from '../game/playerStats.js';
 
@@ -385,8 +386,12 @@ export function createHud(
       <div class="hud-replay-card">
         <div class="hud-replay-head">
           <span class="hud-replay-title">Replay</span>
-          <button class="hud-replay-close" type="button" aria-label="Close replay">×</button>
+          <span class="hud-replay-head-buttons">
+            <button class="hud-replay-graph" type="button" aria-pressed="false">Graph</button>
+            <button class="hud-replay-close" type="button" aria-label="Close replay">×</button>
+          </span>
         </div>
+        <div class="hud-chart" hidden></div>
         <div class="hud-replay-transport">
           <button class="hud-replay-prev" type="button" aria-label="Previous attack">‹</button>
           <button class="hud-replay-play" type="button" aria-label="Play">▶</button>
@@ -431,6 +436,25 @@ export function createHud(
   const replayOpenButton = root.querySelector('.hud-replay-open');
   let replayOffered = false; // what the match last said; the overlay outranks it
 
+  // The match drawn as two lines per player — territories held and dice
+  // standing — over every step the track can reach. It is the one thing the
+  // replay cannot say by playing: the planet shows a moment, and a run of
+  // moments watched one after another is still not the shape of the game.
+  const chartPanel = root.querySelector('.hud-chart');
+  const chartButton = root.querySelector('.hud-replay-graph');
+  const chart = createReplayChart(chartPanel, { playerColors, playerNames });
+
+  // Shut, every time the replay opens. What was asked for is the match on the
+  // planet; the chart is a second question, and it costs the planet the
+  // bottom of the screen for as long as it is up.
+  function showChart(open) {
+    chartPanel.hidden = !open;
+    chartButton.setAttribute('aria-pressed', String(open));
+    chartButton.classList.toggle('is-selected', open);
+  }
+
+  chartButton.addEventListener('click', () => showChart(chartPanel.hidden));
+
   // Two questions decide whether the button is there and they are answered in
   // different places, so both go through here: whether the match has an ending
   // to look back at, and whether the replay is already open — while it is, the
@@ -457,6 +481,7 @@ export function createHud(
     const max = Number(replayTrack.max);
     const clamped = Math.max(0, Math.min(max, step));
     replayTrack.value = String(clamped);
+    chart.setStep(clamped);
     replaySeekHandler?.(clamped);
     return clamped;
   }
@@ -844,9 +869,17 @@ export function createHud(
      * The controls row stands down while this is open — both the menu and the
      * button that may have opened it: the × is the way back, and a second way
      * out sitting right next to it is one too many.
+     *
+     * `standings` is the whole match as `standingsOverReplay` gives it, for
+     * the graph behind the Graph button. It arrives here rather than being
+     * asked for when that button is pressed because it is a fact about a
+     * match that has already finished being recorded — there is nothing to
+     * wait for, and nothing that can change it while the replay is open.
      */
-    showReplay(count) {
+    showReplay(count, { standings = [] } = {}) {
       stopReplaying();
+      chart.setSeries(standings);
+      showChart(false);
       replayTrack.max = String(count);
       replayOverlay.hidden = false;
       menuButton.style.visibility = 'hidden';
@@ -857,6 +890,7 @@ export function createHud(
 
     hideReplay() {
       stopReplaying();
+      showChart(false);
       replayOverlay.hidden = true;
       menuButton.style.visibility = 'visible';
       // back to whatever the match last said, rather than unconditionally on:

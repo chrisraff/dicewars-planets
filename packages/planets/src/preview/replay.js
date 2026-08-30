@@ -32,7 +32,7 @@ function playToGameOver(session, maxTicks = 60000) {
  * whole point of this page: seeing the surface, the dice and the camera
  * actually do their thing, without playing a game by hand to get there.
  */
-function addScenario({ title, note, stageClass = '', settings = {} }) {
+function addScenario({ title, note, stageClass = '', settings = {}, openGraph = false }) {
   const section = document.createElement('section');
   section.className = 'scenario';
   section.innerHTML = '<h2></h2><p></p><div class="stage is-hud is-planet"></div>';
@@ -72,6 +72,9 @@ function addScenario({ title, note, stageClass = '', settings = {} }) {
     const replayButton = [...hudHost.querySelectorAll('.hud-banner-action')]
       .find((button) => button.textContent === 'Watch replay');
     replayButton?.click();
+    // Pressed rather than opened by hand, so what this page shows is what the
+    // button does — including the panel starting shut on every open.
+    if (openGraph) hudHost.querySelector('.hud-replay-graph')?.click();
   }
 
   // Its own render loop — this is a live scene the visitor can orbit and
@@ -97,8 +100,22 @@ addScenario({
 });
 
 addScenario({
+  title: 'The match as a graph',
+  note: 'The same replay with the Graph panel open — how much of the planet each player held '
+    + 'over the whole match, and their dice on the other tab. The dashed cursor is where the '
+    + 'track is standing, so the shape and the planet are one view of one moment: let it play '
+    + 'and watch the cursor walk across, or drag the track and watch it follow. Note the lines '
+    + 'are the *whole* match from the first frame, rather than growing as the replay plays — '
+    + 'the shape is the thing somebody opened this to see, and revealing it a step at a time '
+    + 'would hide it.',
+  openGraph: true,
+});
+
+addScenario({
   title: 'Phone width',
-  note: 'The same thing at 360px — the transport bar has to hold together without growing tall '
-    + 'enough to eat into the planet behind it.',
+  note: 'The same thing at 360px, with the graph open — the transport bar has to hold together '
+    + 'without growing tall enough to eat into the planet behind it, and the plot scales with the '
+    + 'card rather than fixing a size, so the two tabs and the peak stay readable at this width.',
   stageClass: 'is-phone',
+  openGraph: true,
 });

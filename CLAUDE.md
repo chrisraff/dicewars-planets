@@ -741,6 +741,35 @@ when its dice *count* changes — a defender taken with exactly as many dice as
 it was holding keeps its count while every one of its dice is lying scattered
 on the ground. Live play calls `reroll` by hand for the same reason.
 
+**Graph** opens the match as a shape rather than as a sequence:
+`replayChart.js` draws a line per player over every step the track can reach,
+on two tabs — territories held, and dice standing on them. It is the one thing
+watching a replay cannot say. The planet shows a moment, and a run of moments
+watched one after another is still not a shape: who was ahead at halfway, when
+somebody's collapse actually started, and whether an empire was wide or deep
+are all questions about a curve.
+
+The series is `standingsOverReplay`, a third view of the one record alongside
+the board and the history, derived on demand rather than tallied as the match
+is played — a whole match's shape is nothing the moves do not already say, and
+a step is one pass over the board with `REPLAY_LIMIT` bounding the steps. It
+samples immediately after each attack and nowhere else, which is exactly where
+`boardAfterAttacks` stops for the same step, so the chart and the planet under
+it cannot disagree about where the track is standing. `dice` is the dice on
+the planet rather than those plus the banked reserve: what the chart is read
+against is the board, and banked dice are a promise rather than an army —
+already called out on their own as the "+n" on a tile.
+
+Three decisions in it are worth keeping. The **lines are the whole match from
+the moment the panel opens**, and only a dashed cursor moves with the track: a
+chart that grew as the replay played would hide exactly what somebody opened
+it to see. The **scale is the peak itself**, not a round number above it —
+rounding 60 territories up to 100 spends two fifths of a short plot on
+nothing, and a peak is a fact about the match worth reading in its own right.
+And the panel **starts shut on every open**, because what "Watch replay" was
+pressed for is the match on the planet, and the chart costs the planet the
+bottom of the screen for as long as it is up.
+
 Attacking dice don't tumble in place: they are thrown out across the
 territory and land flat, so a roll of eight can be read at a glance instead of
 being stacked inside itself. Two rules make that work, and they meet in

@@ -78,7 +78,8 @@ export const PREVIEW_PAGES = [
     title: 'Replay',
     description:
       'A real match played out by itself and dropped straight into its own replay on the actual '
-      + 'planet — surface, dice and camera all live, and at phone width too.',
+      + 'planet — surface, dice and camera all live, the graph of how the match went beside '
+      + 'them, and at phone width too.',
   },
   {
     href: '/preview/surrender.html',

@@ -19,7 +19,9 @@ const read = (relative) => readFileSync(fileURLToPath(new URL(relative, import.m
 
 const source = {
   // the interface's markup is split across these, and they all draw on one sheet
-  hud: ['hud', 'battleReadout', 'menu'].map((m) => read(`../src/render/${m}.js`)).join('\n'),
+  hud: ['hud', 'battleReadout', 'menu', 'replayChart']
+    .map((m) => read(`../src/render/${m}.js`))
+    .join('\n'),
   stylesheet: read('../src/render/hud.css'),
   previewStyles: read('../src/preview/preview.css'),
   page: read('../index.html'),
@@ -37,6 +39,7 @@ const check = (name, fn) => checks.push({ name, fn });
 // carry no appearance of their own, so having no rule is correct.
 const QUERY_HANDLES = new Set([
   'hud-turn-text', // sits inside .hud-turn, which is what's styled
+  'hud-chart-lines', // the group the chart's lines are swapped in and out of
 ]);
 
 function classesUsedBy(text) {

@@ -385,7 +385,7 @@ export function createSession({
     settleLiveBoard();
     replayOpen = true;
     hud.hideOutcome();
-    hud.showReplay(replay.attacks.length);
+    hud.showReplay(replay.attacks.length, { standings: replay.standings(playerIds) });
   }
 
   function closeReplay() {

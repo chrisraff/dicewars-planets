@@ -25,6 +25,19 @@ const world = () =>
     ['d', { owner: 'p2', dice: 1 }],
   ]);
 
+// A longer board than `world()`, so a match runs past the two attacks that
+// finish that one — the standings are about a shape over time, and two points
+// are not a shape.
+const longWorld = () =>
+  chainWorld([
+    ['a', { owner: 'p1', dice: 8 }],
+    ['b', { owner: 'p2', dice: 1 }],
+    ['c', { owner: 'p1', dice: 8 }],
+    ['d', { owner: 'p2', dice: 1 }],
+    ['e', { owner: 'p2', dice: 8 }],
+    ['f', { owner: 'p2', dice: 4 }],
+  ]);
+
 // Wires a replay log to a game the same way the session does: anchored on the
 // board the game opens with, and recorded once the attack has actually
 // resolved rather than the moment it is merely declared.
@@ -352,6 +365,88 @@ test('a step past the end has the same history as the end itself', () => {
   advance(game, 3);
 
   assert.deepEqual(historyThroughStep(replay.attacks, 999), historyThroughStep(replay.attacks, 1));
+});
+
+// --- the match as a shape --------------------------------------------------
+
+// The chart is drawn over the same planet the track is scrubbing, so the one
+// thing it must never do is disagree with it. Both come off the same walk;
+// this is the claim that they stay that way.
+test('every step of the standings is the board that step actually draws', () => {
+  const { game, replay } = replayedGame(longWorld(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.clickTerritory('c');
+  game.clickTerritory('d');
+  advance(game, 3);
+  game.endTurn();
+  advance(game, 10);
+
+  const standings = replay.standings(['p1', 'p2']);
+  assert.ok(replay.attacks.length >= 2, 'sanity: there is more than one step to check');
+
+  for (let step = 0; step <= replay.attacks.length; step++) {
+    const board = replay.boardAt(step);
+    for (const player of standings) {
+      const held = [...board.values()].filter((node) => node.owner === player.playerId);
+      assert.equal(player.territories[step], held.length, `territories at step ${step}`);
+      assert.equal(
+        player.dice[step],
+        held.reduce((total, node) => total + node.dice, 0),
+        `dice at step ${step}`
+      );
+    }
+  }
+});
+
+test('there is a step per attack, plus the board the match opened on', () => {
+  const { game, replay } = replayedGame(longWorld(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+
+  const [p1] = replay.standings(['p1', 'p2']);
+  assert.equal(p1.territories.length, replay.attacks.length + 1);
+  assert.equal(p1.territories[0], 2, 'step zero is the board before anybody attacked');
+});
+
+// The stats row never drops a knocked-out player's tile, for the same reason:
+// a line that vanished would read as missing data rather than as a defeat.
+test('a knocked-out player keeps a line, at zero', () => {
+  const { game, replay } = replayedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.clickTerritory('c');
+  game.clickTerritory('d');
+  advance(game, 3);
+
+  const p2 = replay.standings(['p1', 'p2']).find((entry) => entry.playerId === 'p2');
+  assert.deepEqual(p2.territories, [2, 1, 0]);
+  assert.deepEqual(p2.dice.at(-1), 0, 'wiped out, rather than absent');
+});
+
+// Reinforcement lands between attacks, and the step it belongs to is decided
+// by `boardAfterAttacks` — a payout after the last attack of a turn is part of
+// the *next* step, not a bump on the end of this one.
+test('a payout shows up on the step whose board it is already on', () => {
+  const { game, replay } = replayedGame(longWorld(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, 3);
+  game.endTurn();
+  advance(game, 10);
+
+  const [p1] = replay.standings(['p1', 'p2']);
+  const afterFirstAttack = [...replay.boardAt(1).values()]
+    .filter((node) => node.owner === 'p1')
+    .reduce((total, node) => total + node.dice, 0);
+  assert.equal(p1.dice[1], afterFirstAttack, 'the payout is not folded back into the fight');
 });
 
 // --- the cap, and the anchor that makes trimming lossless -----------------

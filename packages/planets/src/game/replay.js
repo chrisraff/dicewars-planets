@@ -131,6 +131,10 @@ export function createReplay({
     historyAt(step) {
       return historyThroughStep(log, step);
     },
+
+    standings(playerIds) {
+      return standingsOverReplay(anchorNodes, log, playerIds);
+    },
   };
 }
 
@@ -257,6 +261,62 @@ export function reservesAfterAttacks(initialReserves, moves, count) {
   const reserves = new Map(initialReserves);
   walk(moves, count, null, reserves);
   return new Map([...reserves].map(([playerId, reserve]) => [playerId, { reserve }]));
+}
+
+/**
+ * How much every player held at every step, for the whole replay at once —
+ * territories owned and dice standing on them, one number per player per
+ * step, in the same order `boardAt` walks.
+ *
+ * This is the third view of the one record, alongside the board and the
+ * history: a whole match's shape is nothing the moves do not already say, so
+ * it is derived on demand rather than tallied as the match is played and
+ * stored. It is cheap enough to be — a step is a pass over the board, and
+ * `REPLAY_LIMIT` bounds the steps.
+ *
+ * Sampled immediately after each attack and nowhere else, which is exactly
+ * where `boardAfterAttacks` stops for the same step: a reinforcement that
+ * lands after this step's attack belongs to the next one, and a chart drawn
+ * any other way would disagree with the board the track is showing.
+ *
+ * `dice` is the dice on the planet rather than those plus the banked reserve.
+ * What the chart is worth reading against is the board, and banked dice are a
+ * promise rather than an army — they are already called out on their own, as
+ * the "+n" on a player's tile.
+ *
+ * Players are named rather than discovered, so a knocked-out one keeps its
+ * line at zero instead of vanishing from the chart the moment it stops owning
+ * anything — the same reason `playerStatsFor` never drops a row.
+ */
+export function standingsOverReplay(
+  initialNodes,
+  moves,
+  playerIds = [...new Set([...initialNodes.values()].map((node) => node.owner))]
+) {
+  const nodes = new Map(initialNodes);
+  const series = playerIds.map((playerId) => ({ playerId, territories: [], dice: [] }));
+  const byId = new Map(series.map((entry) => [entry.playerId, entry]));
+
+  function sample() {
+    for (const entry of series) {
+      entry.territories.push(0);
+      entry.dice.push(0);
+    }
+    for (const node of nodes.values()) {
+      const entry = byId.get(node.owner);
+      if (!entry) continue; // a board holding somebody nobody asked about
+      entry.territories[entry.territories.length - 1]++;
+      entry.dice[entry.dice.length - 1] += node.dice;
+    }
+  }
+
+  sample(); // step 0 is the board as the replay opens, before any attack
+  for (const move of moves) {
+    applyMove(move, nodes, null);
+    if (move.kind !== 'reinforce') sample();
+  }
+
+  return series;
 }
 
 // --- a replay, written down -----------------------------------------------
