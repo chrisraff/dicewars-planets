@@ -38,7 +38,7 @@ const scratchStorage = {
  * that take tens of thousands of moves to finish.
  */
 function playMatch({ players, subdivisions, seed, stopAtMoves = Infinity }) {
-  const settings = normalizeSettings({ players, difficulty: 'hard' });
+  const settings = normalizeSettings({ players, difficulty: 'expert' });
   const playerIds = playerIdsFor(settings);
   const world = generatePlanetWorld({
     subdivisions: subdivisions ?? subdivisionsFor(settings),

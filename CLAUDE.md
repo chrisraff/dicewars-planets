@@ -94,23 +94,102 @@ Three are shipped, weakest first:
   69% against the defensive one, six-handed. Costs about 0.5ms for the median
   AI turn on a default planet, against 0.05ms for the simple one.
 
-The `difficulty` setting picks between the first and the last: Normal is
-`createSimpleStrategy`, Hard is `createExpertStrategy`, and `strategyFor` in
-`settings.js` is the whole of the mapping. A save carries its settings, so a
-match started on Hard is finished on Hard.
+The `difficulty` setting picks three rungs off those, and `strategyFor` in
+`settings.js` is the whole of the mapping: Normal is `createSimpleStrategy`,
+Expert is `createExpertStrategy`, and **Hard is the expert with `income` at
+zero** (`HARD_WEIGHTS`).
+
+**`hard` changed meaning when Expert was added above it**, and there is no save
+migration — a match saved as Hard before that resumes against the weaker of the
+two. That is a deliberate call rather than an oversight: the alternative was a
+version bump on every save to correct an opponent nobody had complained about,
+and `readSavedGame` already normalizes by membership, so an old `hard` lands on
+a real rung rather than nowhere. What still holds is the invariant that
+matters — a save carries its settings, so nothing changes difficulty *while*
+it is being played.
+
+The middle rung exists because the gap it fills was the real one. Normal to
+Expert is 79.7% — nearly four to one in odds — while every variant of the
+expert sits within a point or three of every other, so a tier carved off the
+*top* would have been one nobody could tell from the one below it. There is no
+headroom up there either: unpruning the second ply entirely (`breadth` 8,
+`decided` 3, no `dominance` cutoff) measures 51.2% ±1.6 against the shipped
+budgets, which is not significant, for 47% more CPU and a two-handed worst turn
+of 17.8ms against 7. A genuinely stronger opponent needs new judgement, not
+more search.
+
+**It is one weight rather than a third strategy**, so the rungs stay ordered
+when either is touched: Hard is Expert with the *first* thing that separates
+the expert from everything else taken away. It still knows the real odds, still
+prices the counter-attack, still spends a doomed stack — it just does not know
+that reinforcement is paid on the largest connected region, so it wins ground
+that never pays for itself.
+
+One consequence to know before writing a test for it: **`sprawl` partly covers
+for the missing term**, since it reads `board.income` — the region size on the
+board — rather than the weight. So Hard still avoids growing a detached outpost
+and will still take a join for that reason, which means a board that separates
+Expert from Normal does not necessarily separate it from Hard. The test that
+does gives every candidate a capture out of the largest region, so `sprawl`
+cannot break the tie and only income is left to.
+
+`risk: 0` was the other candidate and is the instructive rejection, because
+head-to-head it looks *better*: it beats Normal 66.5% six-handed where
+`income: 0` manages 69.1%, and both look like a rung. Measured against the
+strongest opponent instead, they are nothing alike:
+
+| players | Normal | `risk: 0` | **`income: 0`** |
+|---------|--------|-----------|-----------------|
+| 2       | 31.9%  | 34.0%     | **39.4%**       |
+| 4       | 23.5%  | 31.3%     | **39.3%**       |
+| 6       | 20.3%  | 22.8%     | **41.6%**       |
+| 8       | 19.0%  | 19.5%     | **41.2%**       |
+
+(win rate against Expert, 2,400 games a cell.) A middle rung has to be between
+its neighbours *and stay there across the table size*. `risk: 0` collapses onto
+Normal from the strong side at six and eight players — 22.8% against 20.3% — so
+it is not a middle rung at all, it is Normal with a different personality.
+`income: 0` holds about 40% at every table size, a 2.3-point spread against
+`risk: 0`'s 14.5, while beating Normal everywhere (53.9 / 62.6 / 69.1 / 69.2).
+It is also the cheapest of the three: a median AI turn of 0.10ms against
+Expert's 0.31 and `risk: 0`'s 0.67, which attacks far more per turn for having
+stopped caring what a fight costs.
+
+Two things were tried and rejected inside the choice. Half weight (`income: 1`)
+is not a rung — 48.8% ±1.8 against Expert, statistically the same opponent. And
+Hard keeps `sprawl`: turning it off made it *weaker* against Normal with no
+change against Expert.
 
 The defensive one is not offered. It is the translated legacy AI, kept because
-it is a second opinion to measure against, and at the default six players it is
-genuinely weaker than Normal: 45.2% against it, over 1,008 games. **But that
-ordering is not stable across the table size.** Two-handed it wins 36.5%, and
-eight-handed it wins 53.3% — the same two AIs, the same planet generator, and
-the stronger of them depends on how many are sitting at the table:
+it is a second opinion to measure against, and because **which of the two weak
+AIs is stronger depends on how many are sitting at the table.** Two-handed it
+wins under a third of its games against Normal; eight-handed it wins more than
+half. Same two AIs, same planet generator:
 
-| players | defensive vs simple |
-|---------|---------------------|
-| 2       | 36.5% ±3.0          |
-| 6       | 45.2% ±3.1          |
-| 8       | 53.3% ±3.1          |
+| players | defensive vs simple | (as first measured) |
+|---------|---------------------|---------------------|
+| 2       | 30.6% ±1.0          | 36.5% ±3.0          |
+| 6       | 52.9% ±0.9          | 45.2% ±3.1          |
+| 8       | 55.4% ±1.1          | 53.3% ±3.1          |
+
+The right-hand column is what this said until it was re-measured, and it is
+kept because the gap is a warning rather than a curiosity. The shape held — the
+curve climbs with the table, steeply — but the *level* moved by eight points at
+six players, enough to cross over: the defensive AI is no longer the weaker of
+the two there, which is what the original text claimed and used to justify not
+offering it. Two things landed in between, both of which change the board
+rather than either AI: the seating correction, and the terrain rework that took
+mean territory adjacency from 4.79 to 4.48 and traded land borders for
+chokepoints. Refusing fights you cannot hold is worth more on a board with more
+chokepoints, so the second is the likely mover, but that has not been isolated.
+The lesson to take is that **an AI-versus-AI number is a measurement of the
+generator as much as of the AIs**, and does not survive a change to the
+generator. The left-hand column is 12,060 games at six players and about 8,000
+at each of the others, over independent seed blocks.
+
+It is still not offered, but the reason is now taste rather than strength: it is
+a legacy translation kept as a yardstick, and a difficulty ladder wants rungs
+that are reliably ordered at every table size, which these two are not.
 
 That flip is the most interesting thing either of the weak AIs does, because
 neither of them knows how many players there are — so nothing about *them*
@@ -168,7 +247,7 @@ a defence of *d*, as whole numbers of ways divided once at the end, so a battle
 that cannot be lost is exactly 1. Dice difference is a poor stand-in for it —
 "one die up" runs from 84% down to 67% across the range.
 
-Three things about the expert are worth knowing before touching it.
+Four things about the expert are worth knowing before touching it.
 
 Its `EXPERT_WEIGHTS` were found by playing rather than derived, and they pull
 against each other hard: `denial` at 0 was harmless until `relief` moved and
@@ -201,6 +280,72 @@ edge grows with the table and vanishes without one: 50.6% two-handed (3,200
 games), 52.0% four-handed, about 56% eight-handed. That is the shape to expect
 from it. A crowded board is where the close calls and the two-step joins are;
 a duel has neither, and there it is a wash rather than a loss.
+
+**Those numbers predate `sprawl`, and it took most of them.** Re-measured with
+the term in, the second ply is worth 51.0% ±0.9 of 12,000 six-player games and
+51.4% ±1.3 of 6,000 eight-player ones — still real, and about a third of what
+it was. The overlap is not a coincidence: half of what the lookahead existed to
+see was ground worth taking only for what it joined up, and `sprawl` reaches
+the same conclusion one ply earlier and for a different reason. What is left is
+a point of strength for 60% more CPU a turn (0.98ms against 0.61ms), which is
+still a trade worth having on a budget that peaks at 10ms — but it is now close
+enough to the line that it is the first thing to reconsider if the frame ever
+needs the room.
+
+And it will not grow ground that earns nothing. Reinforcement is paid on the
+largest connected region but *scattered over every territory owned*, so a
+capture that leaves an outpost still detached wins land that pays nothing and
+then soaks `income / held` dice a turn away from the land that does. `sprawl`
+charges exactly that, and only ever fires on a capture launched out of a
+detached region: an attack from the largest region is by definition adjacent to
+it, so it always grows it by at least one, and — the part that matters — a
+capture that *rejoins* an outpost scores its whole region and is never charged.
+Without that last exemption the AI could be walled off from its own ground for
+good.
+
+It is worth more than it looks. Only about 4.6% of its attacks were candidates
+— by round 10 the expert already keeps 97% of its holdings on its main region —
+but against the same AI with `sprawl` at 0 it wins **55.6% of 8,010 six-player
+games**, 54.5% four-handed (6,000) and 53.7% eight-handed (6,000). It costs
+nothing on the clock — the tail is slightly *cheaper*, because a refused move is
+a move not looked at twice.
+
+**Self-play alone would not be evidence**, since an AI can be tuned into
+beating a copy of itself without playing any better. So it is measured against
+the two opponents it did not come from as well, 2,400 games a cell:
+
+| players | vs simple | vs defensive | vs itself |
+|---------|-----------|--------------|-----------|
+| 2       | 68.2 → 68.1 | 75.5 → 75.6 | 51.1      |
+| 4       | 72.3 → **76.5** | 67.3 → **72.2** | 54.5 |
+| 6       | 74.9 → **78.7** | 63.1 → **69.8** | 55.6 |
+| 8       | 75.5 → **81.0** | 60.6 → **63.8** | 53.7 |
+
+Three independent opponents, the same sign and very nearly the same shape:
+nothing at all in a duel, and worth four to six points from four players up.
+That the *duel* column is flat across all three is what makes the two-player
+result a finding rather than noise — there are simply few detached outposts on
+a board split between two players, so there is nothing for the term to be right
+about.
+
+The control is what makes the mechanism believable, because "refuse some
+attacks" is the obvious confound. Blanket caution is strictly bad: `minGain` at
+0.5 is a wash, at 1 it wins 40.6%, at 2 it wins 20.2%, and at 4 it does not win
+a single game in two thousand. The gain is in *which* attacks are refused, not
+how many.
+
+**2 is not the strongest setting, it is the strongest one that harms nothing.**
+The curve plateaus from about 4 upwards and never comes back down — 4, 8, 16
+and even 1000 all measure the same 57.5–58% six-handed, and 4 beats 2 head to
+head at 52.1% ±1.6 — because past that point the term simply refuses every
+detached capture and the whole effect is binary. But a duel is the one table
+where that is a real cost: `sprawl` at 4 measured **48.6% ±1.1 of 8,010
+two-player games**, a small but genuine loss, where 2 measured 51.1%. Two-handed
+the board is two masses rather than a scatter, so there are few detached
+outposts to be disciplined about and the refusals land on the only fights going.
+Keeping the bound under `elimination` (12) is the same argument from the other
+end: the penalty can never exceed `sprawl` itself, since `income <= held`, so a
+last-territory capture out of an outpost still goes through.
 
 Three budgets keep the cost of that off the frame, and none of them costs
 anything measurable in strength — `decided` at 1 measured 53.3% against 53.3%
@@ -986,6 +1131,21 @@ from the game is worse than none.
   planet and the replay. Pinning `rollDie` and `rng` as well as the world seed
   is what makes "the game where the surrender was wrong" a thing that can be
   looked at twice.
+
+  **Both of its matches are currently stale, and the way they went stale is the
+  point.** A seed is only a match while everything it feeds stays put; the
+  terrain rework grows a different planet from the same number, so neither
+  pinned game is the game its caption describes and neither fires a surrender
+  at all. That is checkable at any commit by playing the two seeds headlessly.
+  Re-choosing exhibit 2 is a seed search — sound surrenders are common, 2,719
+  firings in a 13,609-seat sweep. Exhibit 1 has no replacement: re-measured
+  against the current generator and AI, a quarter makes **zero** wrong calls in
+  2,726 firings across 2–8 players and both expert rungs, where the original
+  measurement found one in 694. So the match that argued the ratio down is a
+  shape this generator no longer deals, and re-doing that page means deciding
+  what it is now arguing before choosing seeds for it. `difficulty` in both was
+  repointed from `hard` to `expert` when the ladder gained a rung, which keeps
+  the *intent* — the strongest opponent — whatever the seeds end up being.
 - `terrain.html` opens on a pinned seed for the same reason, and the seed is
   chosen to be *typical* rather than damning: its old carving scores 0.317,
   which is the old carver's median. A comparison page that opened on the worst

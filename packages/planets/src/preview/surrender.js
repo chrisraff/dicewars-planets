@@ -224,7 +224,7 @@ function readoutFor(match, verdict) {
 // match that argued the ratio down, and at the tuning the game actually uses
 // it never fires at all.
 const upset = playMatch({
-  players: 6, difficulty: 'hard', worldSeed: 5304, gameSeed: 1015472, watching: 'p2',
+  players: 6, difficulty: 'expert', worldSeed: 5304, gameSeed: 1015472, watching: 'p2',
   tuning: { diceRatio: 4, regionRatio: 4 },
 });
 
@@ -244,7 +244,7 @@ addScenario({
 });
 
 const sound = playMatch({
-  players: 6, difficulty: 'hard', worldSeed: 4017, gameSeed: 901163, watching: 'p2',
+  players: 6, difficulty: 'expert', worldSeed: 4017, gameSeed: 901163, watching: 'p2',
 });
 
 addScenario({

@@ -208,6 +208,7 @@ test('a difficulty is chosen by name, and an unknown one is simply the default',
   // onto the nearest one offered. There is no nearest `hard`, so anything that
   // is not one of the names on the menu falls back rather than landing
   // somewhere arbitrary.
+  assert.equal(normalizeSettings({ difficulty: 'expert' }).difficulty, 'expert');
   assert.equal(normalizeSettings({ difficulty: 'hard' }).difficulty, 'hard');
   assert.equal(normalizeSettings({ difficulty: 'normal' }).difficulty, 'normal');
   for (const nonsense of ['brutal', 'HARD', 2, '', null, undefined, {}]) {
@@ -234,7 +235,7 @@ test('the difficulty travels in a link and comes back out of one', () => {
   );
 });
 
-test('the two difficulties really are two different opponents', () => {
+test('the difficulties really are different opponents', () => {
   // Named rather than identified: on this board the two strategies disagree.
   // 'far' can take 'spoils' with eight dice against one, which is the biggest
   // advantage anywhere on the map and what Normal goes for. 'join' is the only
@@ -265,9 +266,60 @@ test('the two difficulties really are two different opponents', () => {
   );
 });
 
+test('Hard is Expert with one thing taken away, and the board can show which', () => {
+  // Every attack here is launched from p1's largest region, so the ground is
+  // worth taking on all three counts none of them disagree about. What is left
+  // to disagree over is what a capture is *for*.
+  //
+  // 'join' is one die and joins two regions of two into five. 'edge' is four
+  // dice of material and grows the region by one. Normal takes the eight
+  // against one because it is the fattest advantage on the board; Expert takes
+  // the same territory for the income; Hard, which cannot see income at all,
+  // takes the four dice instead. Three opponents, one board, and Normal and
+  // Expert agreeing on the move for entirely different reasons.
+  const board = graphState(
+    [
+      ['a1', { owner: 'p1', dice: 1 }],
+      ['a2', { owner: 'p1', dice: 8 }],
+      ['join', { owner: 'p2', dice: 1 }],
+      ['b1', { owner: 'p1', dice: 1 }],
+      ['b2', { owner: 'p1', dice: 1 }],
+      ['edge', { owner: 'p2', dice: 4 }],
+    ],
+    [['a1', 'a2'], ['a2', 'join'], ['join', 'b1'], ['b1', 'b2'], ['a2', 'edge']]
+  );
+
+  assert.deepEqual(strategyFor({ difficulty: 'expert' })(board, 'p1'), { from: 'a2', to: 'join' });
+  assert.deepEqual(strategyFor({ difficulty: 'hard' })(board, 'p1'), { from: 'a2', to: 'edge' });
+  assert.deepEqual(strategyFor({ difficulty: 'normal' })(board, 'p1'), { from: 'a2', to: 'join' });
+});
+
+test('and it keeps the half of Expert that makes it a step up from Normal', () => {
+  // 'trap' is a free capture with eight dice behind it, so whoever takes it
+  // hands the stack straight back; 'safe' is a smaller prize with nothing
+  // waiting. Normal counts the dice advantage and walks in. Hard prices the
+  // counter-attack exactly as Expert does — it is the same code with a
+  // different `income` — which is what stops the middle rung being Normal in a
+  // hat.
+  const board = graphState(
+    [
+      ['x', { owner: 'p1', dice: 8 }],
+      ['trap', { owner: 'p2', dice: 1 }],
+      ['big', { owner: 'p2', dice: 8 }],
+      ['w', { owner: 'p1', dice: 5 }],
+      ['safe', { owner: 'p2', dice: 1 }],
+    ],
+    [['x', 'trap'], ['trap', 'big'], ['w', 'safe']]
+  );
+
+  assert.deepEqual(strategyFor({ difficulty: 'normal' })(board, 'p1'), { from: 'x', to: 'trap' });
+  assert.deepEqual(strategyFor({ difficulty: 'hard' })(board, 'p1'), { from: 'w', to: 'safe' });
+  assert.deepEqual(strategyFor({ difficulty: 'expert' })(board, 'p1'), { from: 'w', to: 'safe' });
+});
+
 test('every setup names an opponent, including one that names no difficulty', () => {
-  for (const settings of [normalizeSettings({}), normalizeSettings({ difficulty: 'hard' })]) {
-    assert.equal(typeof strategyFor(settings), 'function');
+  for (const difficulty of [undefined, 'normal', 'hard', 'expert']) {
+    assert.equal(typeof strategyFor(normalizeSettings({ difficulty })), 'function');
   }
 });
 

@@ -35,6 +35,13 @@ import { winProbability } from './battleOdds.js';
  *   share — because reinforcement only lands where there is room, and drops a
  *   territory out of the running once it fills: the emptiest ground collects
  *   the most, which is exactly the ground this term is asked about.
+ * - `sprawl` — what it costs to take ground that does not grow the largest
+ *   region. Reinforcement is paid on that region but *scattered over every
+ *   territory owned*, so a capture that adds no income still soaks
+ *   `income / (held + 1)` dice a turn away from the ground that earns them.
+ *   Only satellite captures can be in this position: an attack launched from
+ *   the largest region is by definition adjacent to it, so it always grows it
+ *   by at least one.
  * - `minGain` — what a move has to be worth before it is worth making. Above
  *   0 it passes rather than take a marginal fight.
  * - `follow` — how much of what a capture *leads to* counts towards making it.
@@ -65,6 +72,7 @@ export const EXPERT_WEIGHTS = Object.freeze({
   risk: 1,
   relief: 0.6,
   refill: 1.5,
+  sprawl: 2,
   minGain: 0,
   follow: 0.6,
   breadth: 4,
@@ -266,9 +274,12 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
 
   // A counter-attack lands *after* the end of my turn, so what my territories
   // will actually be standing on is what is on them now plus their share of
-  // the reinforcement to come. It is the sprawl term: the same income spread
-  // over twice the ground is half as much cover, so an empire that has grown
-  // thin knows to stop emptying its border.
+  // the reinforcement to come. The same income spread over twice the ground is
+  // half as much cover, so an empire that has grown thin knows to stop
+  // emptying its border. That share is what `sprawl` charges a *detached*
+  // capture for below: this one is the standing state of the board, and it is
+  // read once before any move is priced, so nothing here can see what the move
+  // in hand would do to it.
   const refill = w.refill * (board.income / Math.max(1, board.mine.length));
   const holding = (dice) => Math.min(MAX_DICE_PER_NODE, dice + refill);
 
@@ -327,7 +338,10 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
         // loss would hand back the income that made it worth taking
         - w.risk * exposure(state, from, holding(1), playerId, to) * spent
         - w.risk * exposure(state, to, holding(strength - 1), playerId)
-          * (w.land + w.dice * (strength - 1) + w.income * gained);
+          * (w.land + w.dice * (strength - 1) + w.income * gained)
+        // and the income this diverts if it grows nothing: the dice a turn
+        // that would have landed on earning ground and now land here instead
+        - (gained === 0 ? w.sprawl * (board.income / (board.mine.length + 1)) : 0);
 
       const lost =
         -w.dice * (strength - 1) // the stack, spent for nothing

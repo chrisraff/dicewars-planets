@@ -1,4 +1,4 @@
-import { createExpertStrategy, createSimpleStrategy } from '@dicewars/core';
+import { createExpertStrategy, createSimpleStrategy, EXPERT_WEIGHTS } from '@dicewars/core';
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
@@ -40,14 +40,16 @@ export const SETTING_DEFINITIONS = [
   {
     key: 'difficulty',
     label: 'Difficulty',
-    help: 'Normal takes the best fight in front of it. Hard plays for the reinforcement its '
-      + 'largest region earns — and will cut yours in half to take that away from you.',
+    help: 'Normal takes the best fight in front of it. Hard knows what every fight really '
+      + 'costs, but not that connected land is what pays. Expert plays for the reinforcement '
+      + 'its largest region earns — and will cut yours in half to take that away from you.',
     kind: 'choice',
     default: 'normal',
     available: true,
     choices: [
       { value: 'normal', label: 'Normal' },
       { value: 'hard', label: 'Hard' },
+      { value: 'expert', label: 'Expert' },
     ],
   },
   {
@@ -285,7 +287,26 @@ export function subdivisionsFor({ size }) {
  * A fresh strategy per call rather than a shared one: `createSimpleStrategy`
  * closes over its own tie-breaking generator, and two matches should not be
  * drawing from the same one.
+ *
+ * Hard is Expert with `income` at nothing, which is the *first* thing that
+ * separates the expert from the other two: it still knows the real odds of a
+ * fight, still prices what a counter-attack would cost it, still spends a stack
+ * that is doomed anyway — it just does not know that reinforcement is paid on
+ * the largest connected region, so it wins ground that never pays for itself.
+ * One weight rather than a third strategy, because a rung of a ladder wants to
+ * be the tier above it with something taken away, so the two stay ordered when
+ * either is touched. See CLAUDE.md for why it is this weight and not `risk`.
+ *
+ * Note that `hard` changed meaning when Expert was added above it, and there is
+ * no save migration: a match saved as Hard before that resumes against the
+ * weaker of the two. Deliberate — the alternative was a version bump on every
+ * save to correct an opponent nobody had complained about.
  */
 export function strategyFor({ difficulty }) {
-  return difficulty === 'hard' ? createExpertStrategy() : createSimpleStrategy();
+  if (difficulty === 'expert') return createExpertStrategy();
+  if (difficulty === 'hard') return createExpertStrategy(HARD_WEIGHTS);
+  return createSimpleStrategy();
 }
+
+/** @see strategyFor */
+export const HARD_WEIGHTS = Object.freeze({ ...EXPERT_WEIGHTS, income: 0 });

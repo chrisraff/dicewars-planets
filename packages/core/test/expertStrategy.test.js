@@ -219,6 +219,74 @@ test('the weights are what it believes, and turning them off shows it', () => {
 });
 
 
+// --- ground that earns nothing ----------------------------------------------
+//
+// Reinforcement is paid on the largest connected region but *scattered over
+// every territory owned*, so a capture that leaves an outpost still detached
+// wins ground that pays nothing and then takes a share of every payout from
+// then on. `sprawl` is what that share costs.
+
+test('growing a detached outpost is charged the income it diverts', () => {
+  // p1 holds a region of three and a lone outpost. `loot` is four dice of
+  // material for a near-certain fight and does not touch the main region;
+  // `edge` is one die and grows the ground the payout is counted on.
+  const state = outpostBoard();
+  const scored = (sprawl) => {
+    const moves = expertMovesFor(state, 'p1', { ...EXPERT_WEIGHTS, follow: 0, sprawl });
+    return Object.fromEntries(moves.map((m) => [`${m.from}->${m.to}`, m]));
+  };
+  const free = scored(0);
+  const priced = scored(2);
+
+  assert.equal(
+    priced['m3->edge'].score,
+    free['m3->edge'].score,
+    'a capture that grows the largest region is not charged at all'
+  );
+
+  // three territories of income over the four held, and the fifth would take
+  // its share too — paid only in the branch where the attack actually wins
+  const diverted = free['post->loot'].chance * 2 * (3 / 5);
+  assert.ok(
+    Math.abs((free['post->loot'].score - priced['post->loot'].score) - diverted) < 1e-9,
+    'the outpost pays exactly the payout it would soak up'
+  );
+});
+
+test('a capture that reconnects the outpost is never charged for it', () => {
+  // The trap this avoids: an AI that simply refused to attack out of a
+  // detached region could be walled off from its own ground for good. Taking
+  // `gap` joins the outpost back on, so `gained` is positive and the term does
+  // not fire — the same attacker, one neighbour over from the one that is.
+  const state = outpostBoard();
+  const at = (sprawl) => expertMovesFor(state, 'p1', { ...EXPERT_WEIGHTS, follow: 0, sprawl })
+    .find((m) => m.from === 'post' && m.to === 'gap').score;
+
+  assert.equal(at(2), at(0));
+  assert.deepEqual(
+    createExpertStrategy({ follow: 0 })(state, 'p1'),
+    { from: 'post', to: 'gap' },
+    'and it is the move, because rejoining is worth the whole region'
+  );
+});
+
+// m1-m2-m3 is p1's income; `post` is cut off from it by `gap`. The outpost can
+// spend itself on `loot` and stay cut off, or on `gap` and come home.
+function outpostBoard() {
+  return graphState(
+    [
+      ['m1', { owner: 'p1', dice: 2 }],
+      ['m2', { owner: 'p1', dice: 2 }],
+      ['m3', { owner: 'p1', dice: 8 }],
+      ['edge', { owner: 'p2', dice: 1 }],
+      ['post', { owner: 'p1', dice: 8 }],
+      ['loot', { owner: 'p2', dice: 4 }],
+      ['gap', { owner: 'p2', dice: 4 }],
+    ],
+    [['m1', 'm2'], ['m2', 'm3'], ['m3', 'edge'], ['post', 'loot'], ['post', 'gap'], ['gap', 'm1']]
+  );
+}
+
 // --- looking one move further -----------------------------------------------
 //
 // A turn is a run of attacks, so a capture is worth what it leads to as well
