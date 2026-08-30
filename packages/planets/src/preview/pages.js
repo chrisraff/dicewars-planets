@@ -63,7 +63,8 @@ export const PREVIEW_PAGES = [
     description:
       'The flash that marks the planet being handed back to you, on a real board at desktop and '
       + 'phone framing — vignette against full veil against a scene-background flash, every knob '
-      + 'live, and the ramped version for anyone who has asked not to be flashed at.',
+      + 'live, and the ramped version for anyone who has asked not to be flashed at. Then the pan '
+      + 'itself, and the offer to hand the camera back once a drag has taken it.',
   },
   {
     href: '/preview/payout.html',

@@ -103,6 +103,72 @@ test('touching the planet ends the swing on the spot', () => {
   assert.deepEqual(camera.position.toArray(), grabbed.toArray(), 'the camera stopped fighting back');
 });
 
+// `onDrag` is what tells the session the player has taken the camera. It has
+// to fire on the same thing that ends a swing and nothing else: a wheel says
+// where you want to be, not where you want to look, and the swing already
+// carries on through one.
+test('a drag is reported to the session; a wheel is not', () => {
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(0, 0, 3.2);
+  const controls = new FakeControls();
+  let drags = 0;
+  const focus = createCameraFocus({ camera, controls, onDrag: () => drags++ });
+
+  controls.wheel();
+  assert.equal(drags, 0);
+
+  controls.drag();
+  assert.equal(drags, 1);
+
+  focus.dispose();
+  controls.drag();
+  assert.equal(drags, 1, 'a disposed focus reports nothing to a match that is over');
+});
+
+// The button's press is this call, and it has to move a camera that is
+// *nearly* right — which is exactly the case the handover declines.
+test('a forced lookAtHoldings swings even from a view that already shows some', () => {
+  const { camera, focus } = setup();
+  const here = direction(camera);
+  // A lone territory dead ahead and the empire itself round the side: exactly
+  // the board this is for. The straggler is enough to make a handover decline.
+  const away = (degrees) =>
+    FRONT.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (degrees * Math.PI) / 180);
+  const points = [here, away(80), away(90), away(100)].map(({ x, y, z }) => ({ x, y, z }));
+
+  assert.equal(focus.lookAtHoldings(points), false, 'a handover leaves this view alone');
+  assert.equal(focus.lookAtHoldings(points, { force: true }), true);
+  play(focus);
+
+  const landed = direction(camera);
+  assert.ok(landed.angleTo(here) > 0.5, 'it went to the ground, not to the straggler');
+  assert.ok(landed.angleTo(away(90)) < 0.3);
+});
+
+// Opening a saved game on the player's own turn: the camera comes back where
+// it was saved, which is very often the last attack an AI made. It has to be
+// corrected without a swing — there is no previous view to travel from, so an
+// animation would be the planet lurching the instant it appeared.
+test('an instant lookAtHoldings arrives without a swing to watch', () => {
+  const { camera, focus } = setup();
+  const points = [{ x: 0, y: 0, z: -1 }];
+
+  assert.equal(focus.lookAtHoldings(points, { instant: true }), true);
+  assert.equal(focus.isMoving, false, 'nothing left running to watch');
+  assert.ok(direction(camera).angleTo(BACK) < 1e-9);
+  assert.ok(Math.abs(camera.position.length() - 3.2) < 1e-9, 'and it kept its distance');
+});
+
+// Same rule as the handover it stands in for: a camera the player deliberately
+// left on their own ground is left exactly where they left it.
+test('an instant lookAtHoldings still leaves a view that already shows some alone', () => {
+  const { camera, focus } = setup();
+  const before = camera.position.clone();
+
+  assert.equal(focus.lookAtHoldings([{ x: 0, y: 0, z: 1 }], { instant: true }), false);
+  assert.deepEqual(camera.position.toArray(), before.toArray());
+});
+
 test('lookAtCluster leaves an already-framed run alone, same as lookAt', () => {
   const { camera, focus } = setup();
   const before = camera.position.clone();

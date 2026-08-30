@@ -214,6 +214,49 @@ export function replayButtonView(status) {
 }
 
 /**
+ * Whether to offer to hand the camera back.
+ *
+ * The camera follows the match on its own — round the back for an AI's fights,
+ * home again when the turn is yours. A hand on the planet takes it off that
+ * job, because a player turning the planet is nearly always studying it and a
+ * camera that swings away mid-look is the game arguing with them. But then the
+ * following has to be *offered back*, or it is gone for the rest of the match
+ * and there is nothing on the screen to say so.
+ *
+ * So: a button, up from the drag until it is answered, in the middle of the
+ * column above the controls where nothing else sits. It is the recenter button
+ * a map gives you when you have scrolled away from where you are driving — the
+ * whole of what it means is "the camera is yours right now, press to give it
+ * back", and it is worth a permanent seat only for as long as that is true.
+ *
+ * **It outlives the turn it was raised on, and that is the point.** A drag
+ * during an AI's turn suppresses the pan home at the handover, so the turn
+ * that follows *opens* on the view the player chose rather than on their own
+ * ground — which is exactly right, and exactly why the offer has to still be
+ * standing when they get there. Taking it down at the handover would leave
+ * them holding a board they cannot see with nothing on screen to fix it.
+ *
+ * Which is not the same as a drag *during* your own turn. That one is never
+ * raised at all, and `session.js` says why: on your own turn there is nothing
+ * for it to suppress, so there is nothing to hand back.
+ *
+ * Two states silence it, both places where it would be about nothing. A
+ * finished match has no following left to resume — nothing moves the camera
+ * again — so the offer would be a button that does nothing. And a replay has
+ * the planet: its own card is over this very spot, and the camera it is moving
+ * is not the one this is about. (A banner needs no rule; it covers the whole
+ * HUD.)
+ *
+ * A player who is *out* is still offered it, and so is an unattended match:
+ * the camera goes on following the fights for whoever is watching, and that is
+ * a real thing to be handed back.
+ */
+export function autoFollowButtonView(status) {
+  const { freed = false, isOver = false, replayOpen = false } = status;
+  return freed && !isOver && !replayOpen ? 'shown' : 'hidden';
+}
+
+/**
  * The prompt a first-time player gets on their turn, or `null` when there is
  * nothing worth saying.
  *
@@ -361,6 +404,9 @@ export function createHud(
       <div class="hud-battle"></div>
     </div>
     <div class="hud-controls">
+      <div class="hud-auto-follow" hidden>
+        <button class="hud-auto-follow-button" type="button">Auto-follow</button>
+      </div>
       <div class="hud-hint" role="status" hidden>
         <p class="hud-hint-text"></p>
         <button class="hud-hint-close" type="button" aria-label="Dismiss">×</button>
@@ -412,6 +458,9 @@ export function createHud(
   const turnIndicator = root.querySelector('.hud-turn');
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
+  const autoFollow = root.querySelector('.hud-auto-follow');
+  const autoFollowButton = root.querySelector('.hud-auto-follow-button');
+  let autoFollowShown = null; // so a repaint doesn't rewrite `hidden` every frame
   const hint = root.querySelector('.hud-hint');
   const hintText = root.querySelector('.hud-hint-text');
   const hintClose = root.querySelector('.hud-hint-close');
@@ -776,6 +825,23 @@ export function createHud(
 
     onHintDismiss(handler) {
       hintClose.addEventListener('click', handler);
+    },
+
+    /**
+     * The offer to hand the camera back — see `autoFollowButtonView`. Guarded
+     * on the answer it last gave, because `refreshBoard` runs this every frame
+     * while dice are in the air and `hidden` is a reflected attribute: writing
+     * the same value sixty times a second is sixty attribute mutations.
+     */
+    showAutoFollow(status) {
+      const view = autoFollowButtonView(status);
+      if (view === autoFollowShown) return;
+      autoFollowShown = view;
+      autoFollow.hidden = view === 'hidden';
+    },
+
+    onAutoFollow(handler) {
+      autoFollowButton.addEventListener('click', handler);
     },
 
     /**

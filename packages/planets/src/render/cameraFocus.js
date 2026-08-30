@@ -33,7 +33,7 @@ import { normalize } from '../geometry/vec3.js';
  * turning the planet ends the swing on the spot, because a camera fighting
  * the hand on it is worse than a missed battle.
  */
-export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING }) {
+export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING, onDrag }) {
   let swing = null; // { from, to, elapsed, duration } — where the camera is looking
   let zoom = null; // the same, for how far away it is
 
@@ -81,10 +81,18 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
   // lands on. (`state` is OrbitControls' own; if it ever stops being there,
   // every `start` cancels the swing too, which is the safe way round to be
   // wrong.)
+  //
+  // `onDrag` is told about the same drags — the camera reports the hand on the
+  // planet and says nothing about what it means, because what it means is a
+  // question about the *match* (see `session.js`, where a drag is what hands
+  // the camera to the player until they hand it back).
   const NOT_DRAGGING = -1; // OrbitControls' internal STATE.NONE
   const onControlsStart = () => {
     zoom = null;
-    if (controls.state !== NOT_DRAGGING) swing = null;
+    if (controls.state !== NOT_DRAGGING) {
+      swing = null;
+      onDrag?.();
+    }
   };
   controls.addEventListener('start', onControlsStart);
 
@@ -117,10 +125,15 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
      * Like `lookAt`, but given the upcoming moves in the order they're about
      * to be shown rather than just the next one — see `clusterAim` for how
      * much of that run ends up framed in one swing instead of several.
+     *
+     * `force` swings even from a view that already frames the run, for the
+     * same reason `lookAtHoldings` has it: a press is a request, not a
+     * handover, and "close enough already" is not an answer to one.
      */
-    lookAtCluster(points) {
+    lookAtCluster(points, { force = false } = {}) {
       const { direction, distance } = orbit();
-      const aim = clusterAim(points, direction, { distance, halfFov: halfFov() }, framing);
+      const view = { distance, halfFov: halfFov() };
+      const aim = clusterAim(points, direction, view, framing, { force });
       if (aim === null) return false;
 
       startSwingTo(aim);
@@ -136,14 +149,29 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING 
      * as turn, but only outwards and only when the wider view strictly shows
      * more, so the two animations `tick` already runs together are exactly the
      * two this needs.
+     *
+     * `force` is for the same move made on request rather than on a handover:
+     * a player who pressed a button to be brought back does not want to be
+     * told they can already see a sliver of their own ground.
+     *
+     * `instant` is for the same move made at the moment a board first appears,
+     * and it is `framePlanet`'s argument exactly: there is no previous view to
+     * travel from, so animating would only be the planet lurching the instant
+     * it showed up.
      */
-    lookAtHoldings(points) {
+    lookAtHoldings(points, { force = false, instant = false } = {}) {
       const { direction, distance } = orbit();
       const view = { distance, halfFov: halfFov() };
       const wide = Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
 
-      const focus = holdingsFocus(points, direction, view, wide, framing);
+      const focus = holdingsFocus(points, direction, view, wide, framing, { force });
       if (focus === null) return false;
+
+      if (instant) {
+        cancel();
+        aimAt(focus.aim, focus.distance);
+        return true;
+      }
 
       startSwingTo(focus.aim);
       if (focus.distance > distance + 1e-3) {

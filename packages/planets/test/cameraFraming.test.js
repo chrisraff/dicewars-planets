@@ -214,6 +214,25 @@ test('clusterAim leaves a comfortably framed run alone, same as needsRefocus', (
   assert.equal(clusterAim([spherical(10)], FACING, FAR), null);
 });
 
+// The press mid-AI-turn: the player wants the fight, and "it is nearly framed
+// already" is not an answer to a button they pressed. Forcing drops that rule
+// and nothing else — the aim is the one the swing would have chosen.
+test('a forced clusterAim aims at a run the swing would have left alone', () => {
+  const run = [spherical(10), spherical(16)];
+  assert.equal(clusterAim(run, FACING, FAR), null);
+
+  const aim = clusterAim(run, FACING, FAR, DEFAULT_FRAMING, { force: true });
+  assert.ok(aim !== null);
+  assert.ok(framingOf(aim, run[0], FAR) >= DEFAULT_FRAMING.margin);
+  assert.ok(framingOf(aim, run[1], FAR) >= DEFAULT_FRAMING.margin);
+});
+
+// Forcing is about a camera that could have stayed put, not about inventing a
+// fight — an AI turn with nothing in flight has nowhere for a press to go.
+test('a forced clusterAim with no fights still has nothing to look at', () => {
+  assert.equal(clusterAim([], FACING, FAR, DEFAULT_FRAMING, { force: true }), null);
+});
+
 test('clusterAim swings to a lone fight round the back, same as fightCenter would for one point', () => {
   const target = spherical(150);
   const aim = clusterAim([target], FACING, FAR);

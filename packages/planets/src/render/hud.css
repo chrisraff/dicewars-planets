@@ -621,6 +621,47 @@
   flex: 0 0 auto;
 }
 
+/* ---- handing the camera back --------------------------------------
+
+   Up from the moment the player turns the planet themselves until they answer
+   it, because the camera has stopped following the match and nothing else on
+   the screen would say so.
+
+   Centred, and the only thing in this column that is: the hint sits left, the
+   payout tray fills from the left, the controls run the width of the row. A
+   button in the middle of an otherwise empty band is findable without being
+   loud, and it lands over the planet rather than over anything else it might
+   be mistaken for.
+
+   Quieter than End turn on purpose — the same argument the Menu and Replay
+   buttons make. The loud thing on this screen should be the move. */
+.hud-auto-follow {
+  align-self: center;
+  display: flex;
+}
+.hud-auto-follow[hidden] { display: none; }
+
+.hud-auto-follow-button {
+  pointer-events: auto;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e8e8ea;
+  background: rgba(10, 10, 14, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  /* a pill rather than the controls' rounded rectangle: it is an offer that
+     comes and goes, not one of the fixtures along the bottom */
+  border-radius: 999px;
+  min-height: 2.25rem;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.hud-auto-follow-button:hover { color: #fff; background: rgba(30, 30, 38, 0.9); }
+.hud-auto-follow-button:active { background: rgba(50, 50, 60, 0.9); }
+
 /* ---- the first-timer's prompt ------------------------------------
 
    Docked into the controls column above the turn row rather than floated over

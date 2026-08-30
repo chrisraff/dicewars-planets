@@ -178,10 +178,21 @@ export function fightCenter(from, to) {
  * never widen the aim just because it happens to be next in line; stopping
  * at the first rejection (rather than skipping over it) is what keeps that
  * from happening.
+ *
+ * `force` drops only that first rule, the same way it does in `holdingsFocus`
+ * and for the same reason: a player who pressed the button asking to be taken
+ * to the fight is not answered by "it is nearly framed already". How the aim
+ * is chosen is untouched, so a press lands where the swing would have.
  */
-export function clusterAim(points, viewDirection, view, framing = DEFAULT_FRAMING) {
+export function clusterAim(
+  points,
+  viewDirection,
+  view,
+  framing = DEFAULT_FRAMING,
+  { force = false } = {}
+) {
   if (points.length === 0) return null;
-  if (!needsRefocus(viewDirection, points[0], view, framing)) return null;
+  if (!force && !needsRefocus(viewDirection, points[0], view, framing)) return null;
 
   let accepted = [points[0]];
   let aim = normalize(points[0]);
@@ -293,16 +304,26 @@ export function holdingsAim(points, view, framing = DEFAULT_FRAMING) {
  * strictly shows more territories than turning alone would, and never when it
  * would mean coming in, so a player already further out than the whole planet
  * needs keeps the distance they chose.
+ *
+ * `force` drops only the first of those rules — the one about not moving a
+ * camera that can already see something. It is for a player who has *asked*
+ * to be brought back to their ground, where "you can already see a corner of
+ * it" is not an answer: they pressed the button precisely because the corner
+ * was not the view they wanted. Nothing else changes, so the aim a press lands
+ * on is the same aim the handover would have chosen.
  */
 export function holdingsFocus(
   points,
   viewDirection,
   view,
   wideDistance,
-  framing = DEFAULT_FRAMING
+  framing = DEFAULT_FRAMING,
+  { force = false } = {}
 ) {
   if (points.length === 0) return null;
-  if (points.some((p) => framingOf(viewDirection, p, view) >= framing.margin)) return null;
+  if (!force && points.some((p) => framingOf(viewDirection, p, view) >= framing.margin)) {
+    return null;
+  }
 
   const near = holdingsAim(points, view, framing);
   if (near === null) return null;

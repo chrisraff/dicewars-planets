@@ -37,6 +37,27 @@ test('holding nothing is not a reason to move the camera', () => {
   assert.equal(holdingsFocus([], at(0), VIEW, WIDE), null);
 });
 
+// The rule above is right for a handover and wrong for a press. Somebody who
+// asked to be taken back to their ground has already seen whatever sliver of
+// it is on screen and said it was not the view they wanted; answering "you can
+// see some of it" is refusing the one thing the button promises.
+test('a forced focus moves even when some of your ground is already framed', () => {
+  const points = [at(0), at(150)];
+  const focus = holdingsFocus(points, at(0), VIEW, WIDE, DEFAULT_FRAMING, { force: true });
+
+  assert.notEqual(focus, null);
+  // and it is the same aim the handover would have picked — forcing drops the
+  // "don't bother" rule and nothing else about how the aim is chosen
+  const aim = holdingsAim(points, VIEW, DEFAULT_FRAMING);
+  assert.deepEqual(focus.aim, aim.aim);
+});
+
+// Forcing is about a camera that could have stayed put, not about conjuring an
+// aim out of nothing: a player with no ground left has nothing to be shown.
+test('forcing still finds nothing to look at when you hold nothing', () => {
+  assert.equal(holdingsFocus([], at(0), VIEW, WIDE, DEFAULT_FRAMING, { force: true }), null);
+});
+
 // The whole point of the aim: a clump on the far side and a straggler
 // somewhere else, and the camera has to pick the clump. Seeding from the
 // points alone would tie — every seed frames itself — so this is really a test

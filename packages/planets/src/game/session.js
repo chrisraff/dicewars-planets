@@ -138,7 +138,13 @@ export function createSession({
   // last fight already fought rather than sitting empty until the next one.
   if (battles.latestBattle) hud.showBattle(battles.latestBattle);
 
-  const cameraFocus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
+  const cameraFocus = createCameraFocus({
+    camera: viewer.camera,
+    controls: viewer.controls,
+    // A hand on the planet is the player taking the camera off the match — see
+    // `cameraFreed` below.
+    onDrag: () => freeCamera(),
+  });
 
   // Whatever camera this match opened with — the viewer's default, or the one
   // a save just put back — the planet has to actually fit the screen it is
@@ -148,17 +154,37 @@ export function createSession({
   // restored faithfully into an unplayable view.
   cameraFocus.framePlanet({ instant: true });
 
+  // ...and if the board being opened is one the player is about to move on, it
+  // opens on *their* ground.
+  //
+  // A handover pans home (`focusOwnGround`), but a save reopened is a handover
+  // that already happened, in a tab that no longer exists — `endTurn` will not
+  // fire again, so without this a game reloaded on the player's own turn comes
+  // back pointing wherever the camera was saved, which is very often the last
+  // attack an AI made before handing over. The turn then opens on somebody
+  // else's half of the planet, and nothing is going to move it until the turn
+  // is over.
+  //
+  // Same rule as the handover, so a camera the player deliberately left on
+  // their own ground is left exactly where they left it: it only fires when
+  // none of that ground is on screen. Instant, for `framePlanet`'s reason —
+  // there is no previous view to travel from, and a swing would be the planet
+  // lurching the moment it appeared.
+  if (game.isHumanTurn() && !game.isOver() && isPlayerAlive(game.state, humanPlayerId)) {
+    cameraFocus.lookAtHoldings(ownGround(), { instant: true });
+  }
+
   // Swings the camera to cover as many of the *upcoming* fights as will
   // comfortably fit in one frame, rather than swinging to just the next one
   // — `pairs` is `{from, to}` in the order they're about to be shown,
   // starting with whichever one is about to trigger the swing. Returns
   // whatever `cameraFocus.lookAtCluster` returns — whether it actually
   // started a swing — since a caller may need to wait for it to land.
-  function focusFights(pairs) {
+  function focusFights(pairs, { force = false } = {}) {
     const points = pairs.map(({ from, to }) =>
       fightCenter(dice.standFor(from).normal, dice.standFor(to).normal)
     );
-    return cameraFocus.lookAtCluster(points);
+    return cameraFocus.lookAtCluster(points, { force });
   }
 
   /**
@@ -182,10 +208,12 @@ export function createSession({
   function focusOwnGround() {
     if (humanEliminated || game.isOver() || replayOpen || bannerHolding) return false;
 
-    const mine = [];
-    for (const [id, node] of game.state.nodes) {
-      if (node.owner === humanPlayerId) mine.push(dice.standFor(id).normal);
-    }
+    // The camera is the player's until they hand it back, so the pan is the
+    // half of this that a drag suppresses. The flash is not: it is a fact
+    // about the match rather than a movement of the camera, and somebody
+    // studying the board is exactly who most needs telling that their turn has
+    // come round while they were looking at it.
+    const moved = cameraFreed ? false : cameraFocus.lookAtHoldings(ownGround());
     // The flash runs *with* the pan rather than after it. They are two halves
     // of one handover — the planet coming back to you and being told so — and
     // the flash is what marks the moment it happens: held until the camera
@@ -199,9 +227,97 @@ export function createSession({
     // re-checked when the flash finally fired, because a knockout or a replay
     // could arrive in the second the camera was moving; firing here, there is
     // no gap for anything to arrive in.
-    const moved = cameraFocus.lookAtHoldings(mine);
     turnFlash.play();
     return moved;
+  }
+
+  /** A direction per territory the player holds — what a pan home aims at. */
+  function ownGround() {
+    const mine = [];
+    for (const [id, node] of game.state.nodes) {
+      if (node.owner === humanPlayerId) mine.push(dice.standFor(id).normal);
+    }
+    return mine;
+  }
+
+  /**
+   * The player has turned the planet, so the camera is theirs until they give
+   * it back.
+   *
+   * The camera follows the match on its own, and that is right nearly all of
+   * the time — but not while somebody is *reading* the board. A player who
+   * drags round to count an opponent's stacks was, before this, allowed about
+   * one AI attack's worth of looking before the camera swung off to a fight
+   * somewhere else, and there was no way to ask it not to. Now the drag says
+   * so, and every automatic move is off until they say otherwise.
+   *
+   * The one thing that must not follow from that is the following being lost
+   * for the rest of the match with nothing on screen to say so — hence the
+   * button, which is up for exactly as long as this is true. It stays up
+   * *into* the player's own turn when the drag happened before it, because
+   * that is the case where the pan home was suppressed and the turn opens on
+   * somebody else's half of the planet.
+   *
+   * A drag taken during the player's own turn is not recorded at all, and the
+   * reason is that there would be nothing to record: every automatic move
+   * belongs either to a turn that is not theirs or to the handover at one end
+   * of it, so during their own turn `cameraFreed` suppresses precisely
+   * nothing. Raising an offer to hand back a camera nobody was going to take
+   * would be a button up through the one part of the match they are playing.
+   *
+   * Not saved. It is a fact about the hand on the planet in this sitting,
+   * like the pressed territory and unlike anything about the position, and a
+   * reload is somebody arriving at the board fresh.
+   */
+  function freeCamera() {
+    if (cameraFreed || game.isHumanTurn()) return;
+    cameraFreed = true;
+    refreshAutoFollow();
+  }
+
+  /**
+   * ...and giving it back. Either by pressing the button, which pans home in
+   * the same breath, or by attacking on your own turn, which does not.
+   *
+   * `pan` is that difference and it is the whole of the design. A press is a
+   * request to be shown something, and answering it by only *promising* to
+   * move the camera the next time the match happens to want to would be no
+   * answer at all — so it goes wherever the camera would have been had it
+   * never been taken (`autoFollowAim`). An attack is somebody who has finished
+   * studying and started playing, at a territory they have found for
+   * themselves and are looking straight at; moving the planet under that is
+   * the very thing this whole mechanism exists to stop.
+   */
+  function resumeAutoFollow({ pan = false } = {}) {
+    if (!cameraFreed) return;
+    cameraFreed = false;
+    if (pan) autoFollowAim();
+    refreshAutoFollow();
+  }
+
+  /**
+   * Where the camera would be standing right now if it had never been taken —
+   * which is the only honest answer to a press, and is *not* the same place
+   * all match long.
+   *
+   * On somebody else's turn the camera's job is the fight: the run of attacks
+   * being shown is the thing the player pressed the button to catch up with,
+   * and taking them home to their own ground instead would be showing them the
+   * one part of the planet nothing is happening on. On their own turn, and in
+   * the gaps where an AI has nothing in flight, home is the answer.
+   *
+   * Both are `force`d, because "you can already see a corner of it" is not an
+   * answer to somebody who pressed a button asking to be taken there.
+   */
+  function autoFollowAim() {
+    if (game.currentPlayer() !== humanPlayerId && aiFights.length > 0) {
+      if (focusFights(aiFights, { force: true })) return true;
+    }
+    return cameraFocus.lookAtHoldings(ownGround(), { force: true });
+  }
+
+  function refreshAutoFollow() {
+    hud.showAutoFollow({ freed: cameraFreed, isOver: game.isOver(), replayOpen });
   }
 
   const pickTerritoryAt = createTerritoryPicker({
@@ -225,6 +341,14 @@ export function createSession({
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
   let pressed = null; // the territory a finger is down on, marked while it is
+  // Whether the player has taken the camera off the match by turning the
+  // planet themselves — see `freeCamera`. Nothing automatic moves it while
+  // this is true, and the offer to hand it back is up for exactly that long.
+  let cameraFreed = false;
+  // The run of attacks the turn being shown is working through — kept only so
+  // a press mid-AI-turn has the fight to aim at rather than the player's own
+  // ground. Emptied when the turn ends.
+  let aiFights = [];
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
   // The two things that take the match out of the player's hands. Nothing in
   // it moves while either is true — see tick() at the bottom.
@@ -388,6 +512,7 @@ export function createSession({
     // there may still be a move in flight to put down first.
     settleLiveBoard();
     replayOpen = true;
+    refreshAutoFollow(); // the replay's own card is over where the offer sits
     hud.hideOutcome();
     hud.showReplay(replay.attacks.length, { standings: replay.standings(playerIds) });
   }
@@ -496,6 +621,7 @@ export function createSession({
       humanEliminated,
       playedOn: game.playedOn,
     });
+    refreshAutoFollow();
     hud.showHint({
       seen: hintSeen,
       humanPlayerId, // the panel names the color you are, so it has to know
@@ -515,8 +641,15 @@ export function createSession({
     // are on screen by definition, since they just clicked them. `upcoming`
     // is this attack plus whatever's already queued behind it this turn, so
     // a run of nearby attacks gets one swing instead of one each.
-    if (game.currentPlayer() !== humanPlayerId) focusFights(upcoming);
-    else hintDone(); // they have just done the thing the prompt describes
+    // ...unless the player has taken the camera. Somebody who dragged round to
+    // study the board asked for the planet to stay where they put it, and the
+    // fights they are missing are the price of that until they say otherwise.
+    if (game.currentPlayer() !== humanPlayerId) {
+      aiFights = upcoming; // and where a press would take them, if the camera is theirs
+      if (!cameraFreed) focusFights(upcoming);
+    } else {
+      hintDone(); // they have just done the thing the prompt describes
+    }
 
     roll = {
       event,
@@ -561,6 +694,7 @@ export function createSession({
   });
 
   game.on('endTurn', (event) => {
+    aiFights = []; // the run this turn was showing is over
     // The payout has landed — `change` is about to rebuild every stack it
     // touched, so the dice animated here have nothing left to do.
     reinforceAnim = null;
@@ -571,7 +705,19 @@ export function createSession({
     // the player's own turn is the one ending, and only ever outwards — see
     // `framePlanet`. It has the AI's think pause plus its first aim to land
     // in, so it is over before there are dice to read.
-    if (event.playerId === humanPlayerId) cameraFocus.framePlanet();
+    // Ending a turn hands the camera back. Whatever the player was studying,
+    // they were studying it to decide the move they have just finished making,
+    // and what comes next is a run of turns they are only watching — which is
+    // the whole of what following is for. So the pull-back is unconditional
+    // here.
+    //
+    // It is also the backstop for an offer the player simply ignored: a turn
+    // played out without pressing it and without picking a territory still
+    // ends with the camera back on the match.
+    if (event.playerId === humanPlayerId) {
+      resumeAutoFollow();
+      cameraFocus.framePlanet();
+    }
     // And the other side of the same handover. `endTurn` is emitted from
     // `finishReinforce`, so by here the previous player's payout has finished
     // landing and `state` has already moved on to whoever is next — which is
@@ -672,6 +818,10 @@ export function createSession({
     refreshBoard();
   });
 
+  // Pressed rather than played out of: the camera comes back *and* goes home,
+  // so the press answers itself instead of promising something for later.
+  hud.onAutoFollow(() => resumeAutoFollow({ pan: true }));
+
   hud.onEndTurn(() => {
     game.endTurn();
     refreshBoard();
@@ -738,6 +888,12 @@ export function createSession({
       const territoryId = pressed;
       pressed = null;
       game.clickTerritory(territoryId);
+      // Picking a territory to attack from answers the offer: the studying is
+      // over and the move is being made. Silently, and that is the whole
+      // difference from the button — they are looking straight at ground they
+      // just found for themselves, and moving the planet under it is the very
+      // thing this exists to prevent.
+      if (game.selection !== null) resumeAutoFollow();
       refreshBoard();
     },
 

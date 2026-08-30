@@ -9,8 +9,8 @@ import { assignPlayerColors } from '../render/palette.js';
 import { generatePlanetWorld } from '../world/generateWorld.js';
 import { createGame } from '../game/createGame.js';
 import { createHud } from '../render/hud.js';
-import { DEFAULT_FRAMING, framingOf } from '../render/cameraFraming.js';
-import { centroid, normalize, scale } from '../geometry/vec3.js';
+import { DEFAULT_FRAMING, fightCenter, framingOf } from '../render/cameraFraming.js';
+import { angleBetween, centroid, normalize, scale } from '../geometry/vec3.js';
 import { playerStatsFor } from '../game/playerStats.js';
 import {
   createTurnFlash,
@@ -40,7 +40,7 @@ const playerNames = new Map(PLAYERS.map((id, i) => [id, NAMES[i]]));
  * veil is most likely to look wrong. Judging the flash over a bare surface
  * would be judging it over the easy half of the picture.
  */
-function addStage(host, { withHud = false, stageClass = '', onFrame = () => {} }) {
+function addStage(host, { withHud = false, stageClass = '', onFrame = () => {}, onDrag }) {
   const stage = document.createElement('div');
   stage.className = `stage is-planet ${stageClass}`.trim();
   host.append(stage);
@@ -63,13 +63,14 @@ function addStage(host, { withHud = false, stageClass = '', onFrame = () => {} }
   // it is showing on a machine that has reduced motion switched on — the
   // `Ramped` button is what exercises that path here.
   const flash = createTurnFlash(stage, { reducedMotion: false });
-  const focus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls });
+  const focus = createCameraFocus({ camera: viewer.camera, controls: viewer.controls, onDrag });
 
+  let hud = null;
   if (withHud) {
     const hudHost = document.createElement('div');
     hudHost.className = 'hud-host';
     stage.append(hudHost);
-    const hud = createHud(hudHost, { playerColors, playerNames, humanPlayerId: PLAYERS[0] });
+    hud = createHud(hudHost, { playerColors, playerNames, humanPlayerId: PLAYERS[0] });
     hud.showPlayers(playerStatsFor(game.state, PLAYERS));
     hud.showTurn({
       currentPlayerId: 'p1',
@@ -109,7 +110,7 @@ function addStage(host, { withHud = false, stageClass = '', onFrame = () => {} }
     requestAnimationFrame(frame);
   })();
 
-  return { flash, focus, dice, game, viewer };
+  return { flash, focus, dice, game, viewer, hud };
 }
 
 function addScenario({ title, note }) {
@@ -322,3 +323,107 @@ for (const [label, onClick] of [
   panControls.append(button);
 }
 reportPan();
+
+
+// --- handing the camera back ----------------------------------------------
+
+const offer = addScenario({
+  title: 'Taking the camera, and being offered it back',
+  note: 'The other half of the pan: a player who drags the planet is nearly always studying it, '
+    + 'and a camera that swings off to somebody else’s fight mid-look is the game arguing with '
+    + 'them. So a drag takes the camera off the match entirely — no pan home, no swing to a '
+    + 'fight, no pull-back — and the offer to hand it back goes up and stays up until it is '
+    + 'answered. Drag this planet: the button appears in the middle of the column above the '
+    + 'controls, which is the one band nothing else sits in. Press it and the camera goes exactly '
+    + 'where it would have been standing had it never been taken — forced, because "you can '
+    + 'already see a corner of it" is not an answer to somebody who asked. That target is not the '
+    + 'same all match: on your own turn it is the aim with most of your red ground in frame, and '
+    + 'on somebody else’s it is the run of attacks being shown, since taking you home mid-AI-turn '
+    + 'would be showing you the one part of the planet nothing is happening on. The Fight button '
+    + 'below stands in for an AI turn in flight. In the game two other things put it down: '
+    + 'attacking, silently — the studying is over and the territory you picked is the one thing '
+    + 'that must not be panned away from — and ending your turn, which hands the camera back '
+    + 'along with the board. A drag during your own turn raises nothing, because during your own '
+    + 'turn there is nothing for it to suppress — but a drag during an AI’s turn keeps the offer '
+    + 'standing once the turn comes back to you, which is exactly the case where the pan home was '
+    + 'suppressed and your turn opens on somebody else’s half of the planet.',
+});
+
+const offerStage = addStage(offer, {
+  withHud: true,
+  onDrag: () => setOffer(true),
+  onFrame: () => reportOffer(),
+});
+const offerReadout = document.createElement('pre');
+offerReadout.className = 'menu-readout';
+offer.append(offerReadout);
+
+const offerMine = () => {
+  const points = [];
+  for (const [id, node] of offerStage.game.state.nodes) {
+    if (node.owner === PLAYERS[0]) points.push(offerStage.dice.standFor(id).normal);
+  }
+  return points;
+};
+
+let cameraFreed = false;
+function setOffer(freed) {
+  cameraFreed = freed;
+  offerStage.hud.showAutoFollow({ freed, isOver: false, replayOpen: false });
+}
+
+function reportOffer() {
+  offerReadout.textContent = cameraFreed
+    ? 'The camera is yours. Nothing in the match will move it until you press Auto-follow '
+      + '— or, in a real game, attack.'
+    : 'The camera is following the match: it pans home on a handover, swings to the AI’s '
+      + 'fights, and pulls back at the end of your turn.';
+}
+
+// The stage has no turns in it, so the button itself takes the ordinary case:
+// your own turn, and home. The two buttons below are the pair side by side.
+offerStage.hud.onAutoFollow(() => {
+  offerStage.focus.lookAtHoldings(offerMine(), { force: true });
+  setOffer(false);
+});
+
+const offerControls = document.createElement('div');
+offerControls.className = 'controls';
+offer.append(offerControls);
+// A pair of neighbouring territories on the far side, standing in for the run
+// of attacks an AI turn would have queued up — enough to show that a press
+// lands on the fight rather than on your own ground.
+const fight = (() => {
+  const home = normalize(centroid(offerMine().map(normalize)));
+  const far = [...offerStage.game.state.nodes.keys()]
+    .map((id) => ({ id, normal: offerStage.dice.standFor(id).normal }))
+    .sort((a, b) => angleBetween(b.normal, home) - angleBetween(a.normal, home));
+  return [{ from: far[0].id, to: far[1].id }];
+})();
+
+for (const [label, onClick] of [
+  // The states without needing a mouse gesture to reach them, so the button
+  // can be looked at beside the rest of the column rather than only during a
+  // drag — and so the two things a press can aim at can be told apart.
+  ['Take the camera', () => setOffer(true)],
+  ['Give it back', () => setOffer(false)],
+  ['Press it (your turn — go home)', () => {
+    offerStage.focus.lookAtHoldings(offerMine(), { force: true });
+    setOffer(false);
+  }],
+  ['Press it (AI attacking — go to the fight)', () => {
+    const points = fight.map(({ from, to }) =>
+      fightCenter(offerStage.dice.standFor(from).normal, offerStage.dice.standFor(to).normal)
+    );
+    offerStage.focus.lookAtCluster(points, { force: true });
+    setOffer(false);
+  }],
+]) {
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.textContent = label;
+  element.addEventListener('click', onClick);
+  offerControls.append(element);
+}
+setOffer(false);
+reportOffer();

@@ -4,6 +4,7 @@ import {
   turnIndicatorText,
   turnIndicatorView,
   outcomeView,
+  autoFollowButtonView,
   replayButtonView,
   SURRENDER_DETAIL,
 } from '../src/render/hud.js';
@@ -366,6 +367,43 @@ test('a match with nothing fought in it offers nothing, however it ended', () =>
 
 test('an empty status is answered rather than thrown at', () => {
   assert.equal(replayButtonView({}), 'hidden');
+});
+
+// --- handing the camera back ----------------------------------------------
+
+test('nothing is offered while the camera is still following the match', () => {
+  assert.equal(autoFollowButtonView({ freed: false }), 'hidden');
+});
+
+// The whole point: a drag is what puts it up, and only answering takes it
+// down. Anything shorter — a turn, a fight, a payout — would mean the
+// following came back without the player asking, which is the behaviour this
+// replaced.
+test('a drag puts the offer up and leaves it up', () => {
+  assert.equal(autoFollowButtonView({ freed: true }), 'shown');
+  assert.equal(autoFollowButtonView({ freed: true, humanEliminated: true }), 'shown');
+});
+
+// Whose turn it is deliberately does *not* appear here. A drag during an AI's
+// turn suppresses the pan home, so the player's own turn opens on the view
+// they chose rather than on their ground — which is the one moment the offer
+// is most needed, and taking it down at the handover would leave them with a
+// board they cannot see and nothing on screen to fix it. Whether a drag counts
+// at all is `session.js`'s question, asked once when the drag happens.
+test('the offer survives the handover into the player\'s own turn', () => {
+  assert.equal(autoFollowButtonView({ freed: true }), 'shown');
+});
+
+// Neither of these is a third answer; they are places where the offer would be
+// a lie. A finished match has no following left to resume, and the replay's own
+// card is over this exact spot, steering a camera this button is not about.
+test('a finished match and an open replay both silence the offer', () => {
+  assert.equal(autoFollowButtonView({ freed: true, isOver: true }), 'hidden');
+  assert.equal(autoFollowButtonView({ freed: true, replayOpen: true }), 'hidden');
+});
+
+test('an empty status offers nothing rather than throwing', () => {
+  assert.equal(autoFollowButtonView({}), 'hidden');
 });
 
 

@@ -934,6 +934,81 @@ same bargain `framePlanet` makes about distance, applied to direction. Seeing
 some of your own ground is enough to know where you are, and a camera that
 moved anyway would be taking a view away from somebody who has one.
 
+**A hand on the planet takes the camera off the match entirely**, and that is
+the one thing none of the rules above could express. Every one of them is
+about *where* to move; none of them is about somebody who does not want the
+camera moved at all. A player dragging round the planet is nearly always
+reading it — counting an opponent's stacks, working out where a border is —
+and before this they got about one AI attack's worth of looking before the
+camera swung off to a fight somewhere else. So `cameraFocus` reports drags
+(`onDrag`, the same drags that already cancel a swing — a wheel is not one,
+for the reason it never was), and `session.js`'s `cameraFreed` suppresses all
+three automatic moves: the pan home, the swing to the AI's fights, and the
+end-of-turn pull-back.
+
+The part that needs care is giving it back, because a camera that has silently
+stopped following is indistinguishable from one that is broken. Hence
+`autoFollowButtonView` — an offer that goes up on the drag and stays up until
+it is answered, centred in the band above the controls where the hint sits
+left and the payout tray fills from the left, so it is the only thing in the
+middle. It is the recenter button a map offers once you have scrolled away
+from where you are driving.
+
+**Whether a drag counts is decided by whose turn it was, and the offer then
+outlives that turn.** Those are two different rules and conflating them was the
+first thing got wrong here.
+
+A drag during an AI's turn suppresses the pan home, so the player's own turn
+*opens* on the view they chose rather than on their ground. That is right, and
+it is exactly why the offer has to still be standing when they get there —
+taking it down at the handover would leave them holding a board they cannot see
+with nothing on screen to fix it. So `autoFollowButtonView` does not ask whose
+turn it is at all.
+
+A drag during the player's *own* turn is never recorded, because there would be
+nothing to record: every automatic move belongs either to a turn that is not
+theirs or to the handover at one end of it, so `cameraFreed` suppresses
+precisely nothing during their turn. `freeCamera` asks `isHumanTurn` once, when
+the drag happens, and that one question is the whole of the distinction.
+
+Three things then answer an offer that is standing: the button, **picking a
+territory to attack from** (silently — they are looking straight at ground they
+just found), and ending the turn as the backstop for one simply ignored.
+
+There is a second moment besides the handover where a turn can fail to open on
+your own ground: **a save reopened.** `endTurn` will not fire again for a turn
+that already began, so a game reloaded on the player's own turn came back
+pointing wherever the camera was saved — very often the last attack an AI made
+before handing over — and nothing would move it until the turn was over.
+`createSession` therefore aims at the player's holdings on open as well, under
+the handover's own rule (only when none of that ground is on screen, so a
+camera deliberately left there is left alone) and `instant`, for
+`framePlanet`'s reason. It is gated on `isHumanTurn` because that is the only
+restore point with nothing coming: reopened mid-AI-turn, the next attack swings
+the camera itself within a second.
+
+**Pressing it moves the camera in the same breath**, `force`d past
+`holdingsFocus`'s and `clusterAim`'s "it is on screen already" rules — those
+are right for a handover nobody asked for and wrong for a request, since the
+player pressed the button precisely because what they could see was not the
+view they wanted. The other two answers move nothing at all, which is the
+difference: a player picking a territory has found their own way there, and a
+player ending their turn is handing the board over anyway.
+
+**Where a press goes is not the same all match**, and getting this wrong is
+the obvious mistake: home is only the answer on your own turn. On somebody
+else's, the camera's job is the fight, and the run of attacks being shown is
+the thing the player pressed the button to catch up with — taking them home
+mid-AI-turn shows them the one part of the planet where nothing is happening.
+`autoFollowAim` picks between the two, and `aiFights` is the only state it
+needs: the `upcoming` run off the last attack event, emptied at `endTurn`.
+
+The flash is deliberately *not* suppressed. It is information about the match
+rather than a movement of the camera, and somebody studying the board is
+precisely who most needs telling their turn has come round. And `cameraFreed`
+is not saved — it is a fact about the hand on the planet in this sitting, like
+the pressed territory, and a reload is somebody arriving at the board fresh.
+
 **How far back the camera sits** is the other half, and it is a phone problem.
 `narrowHalfFov` is the tighter of the two frustum half-angles, because "in
 frame" has to mean in frame in both directions — and on a phone held upright
