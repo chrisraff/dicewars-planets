@@ -24,13 +24,19 @@ import { linearRgb } from './palette.js';
  * back exactly — a territory and its swatch in the HUD are now the same
  * colour, which is the thing that was worth having.
  *
+ * `emptyColor` is what a cell with no territory is painted — the planet's
+ * ocean by default, and the moon's channels when this is asked to build one.
+ * Which is the whole of what the moon needed from this module: a world is a
+ * world, and the only thing that differs between them is the colour of the
+ * gaps.
+ *
  * Deliberately here rather than in the palette or in the blending. Selection
  * and battle tints were all judged as fractions between two sRGB colours, and
  * blending them in linear instead would move every one of them; keeping the
  * conversion at the very last step leaves every tuned number meaning what it
  * meant.
  */
-export function createPlanetSurface(world, playerColors) {
+export function createPlanetSurface(world, playerColors, { emptyColor } = {}) {
   const { positions, colors, indices, faceCellIds, cellVertexRanges } = buildPlanetGeometry(
     world.cells,
     () => [0, 0, 0]
@@ -62,7 +68,7 @@ export function createPlanetSurface(world, playerColors) {
     faceCellIds,
 
     refresh(state, tintFor = () => null) {
-      const colorFor = makeCellColorer(world, state, playerColors, tintFor);
+      const colorFor = makeCellColorer(world, state, playerColors, tintFor, { emptyColor });
       const stale = [];
       for (const cellId of cellVertexRanges.keys()) {
         const next = colorFor(cellId);

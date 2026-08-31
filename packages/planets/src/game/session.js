@@ -1,11 +1,13 @@
 import {
   isPlayerAlive,
   randomSeed,
+  totalReserve,
+  MAX_RESERVE,
   reviveState,
   seededRng,
   serializeState,
 } from '@dicewars/core';
-import { generatePlanetWorld } from '../world/generateWorld.js';
+import { generateSystem, bodyOfTerritory } from '../world/generateSystem.js';
 import { createGame } from './createGame.js';
 import { orderAiTurnForCamera } from './aiTurnOrder.js';
 import { createBattleLog, battleEntry } from './battleLog.js';
@@ -24,7 +26,7 @@ import { fightCenter } from '../render/cameraFraming.js';
 import { createTerritoryPicker } from '../render/pickTerritory.js';
 import { createHud } from '../render/hud.js';
 import { createTurnFlash } from '../render/turnFlash.js';
-import { assignPlayerColors } from '../render/palette.js';
+import { assignPlayerColors, CHANNEL_COLOR } from '../render/palette.js';
 import { highlightsFor, pulseAt } from '../render/highlights.js';
 
 // One tick long enough to run any countdown in the game out in a single step.
@@ -91,6 +93,8 @@ export function createSession({
     // back up below instead
     playedOn: restored?.playedOn ?? false,
     surrenderOffered: restored?.surrenderOffered ?? false,
+    // and the moon carries on from where it had got to
+    round: restored?.round ?? 0,
     // A resumed game brings its own settings with it, so the difficulty a
     // match was started on is the one it is finished on.
     strategy: strategyFor(settings),
@@ -98,14 +102,27 @@ export function createSession({
     // instead of swinging the camera once per attack — `dice` isn't built
     // yet at this point in construction, but this is only ever *called*
     // later, once it is (see createGame.js's takeAiTurn).
-    orderAiTurn: (moves) =>
-      orderAiTurnForCamera(moves, (id) => dice.standFor(id).normal, cameraFocus.currentView()),
+    orderAiTurn: (moves) => {
+      // Grouped by world before it is clustered by camera. Within a world
+      // this is exactly the reordering it always was; across two, leaving
+      // them mixed would flip the board back and forth between the planet and
+      // the moon several times in one turn, which is a worse way to watch a
+      // turn than any ordering could make up for.
+      const groups = new Map();
+      for (const move of moves) {
+        const body = bodyOf(move.to);
+        if (!groups.has(body)) groups.set(body, []);
+        groups.get(body).push(move);
+      }
+      return [...groups.values()].flatMap((group) =>
+        orderAiTurnForCamera(group, (id) => standFor(id).normal, cameraFocus.currentView()));
+    },
   });
   // Every attack and every payout, in the order they happened, anchored on
   // the board they build forward from — the whole match, and it travels in
   // the save, so a resumed game's replay still reaches back to where the
   // recording began rather than only to the reload.
-  const replay = restoreReplay(restored, game.state);
+  const replay = restoreReplay(restored, game.state, MAX_RESERVE * (world.moon ? 2 : 1));
   // The history panel is the replay read back, rather than a second record of
   // the same fights kept alongside it.
   const battles = createBattleLog({ entries: replay.historyAt() });
@@ -117,17 +134,69 @@ export function createSession({
     viewer.controls.update();
   }
 
-  const surface = createPlanetSurface(world, playerColors);
-  const dice = createDiceLayer(world, pipMaterials);
-  // Something fixed to read the planet's turn against. It stands on the
-  // ground, and steps up onto a dice tower at the pole rather than being cut
-  // by one — which is what it needs the die size and the stands for.
-  const poles = createPoleMarkers({
-    dieSize: dice.dieSize,
-    stands: world.nodeIds.map((id) => dice.standFor(id)),
-  });
-  poles.settle(game.state);
-  viewer.scene.add(surface.group, dice.group, poles.group);
+  /**
+   * One board per world, and **only one of them in the scene at a time**.
+   *
+   * That is the whole architecture of moon mode's renderer, and it is what
+   * makes the rest of it cost almost nothing. Every piece of geometry here
+   * assumes a unit sphere centred on the origin — `diceGroundRadius` works in
+   * radians, `framingDistance` is `asin(1 / d)`, the orbit controls target
+   * (0, 0, 0) — so rather than standing the moon off to one side and teaching
+   * all of that about a second centre and a second radius, each body takes its
+   * turn standing in the same hole. Both are then the unit sphere they were
+   * written for, and neither knows the other exists.
+   *
+   * The rule that makes it work as an *interface* rather than as a trick is
+   * that the moon is never picked in 3D. It is reached by the orbit dial, so
+   * there is nothing on screen whose being hidden could cost anybody a move.
+   */
+  const bodies = bodyOfTerritory(world);
+  const boards = new Map();
+  for (const [body, bodyWorld] of [['planet', world], ...(world.moon ? [['moon', world.moon]] : [])]) {
+    const bodySurface = createPlanetSurface(bodyWorld, playerColors, {
+      // the moon paints its channels where the planet paints ocean; the two
+      // are the same "this cell has no territory" case, in two worlds
+      emptyColor: body === 'moon' ? CHANNEL_COLOR : undefined,
+    });
+    const bodyDice = createDiceLayer(bodyWorld, pipMaterials);
+    // Something fixed to read the world's turn against. It stands on the
+    // ground, and steps up onto a dice tower at the pole rather than being cut
+    // by one — which is what it needs the die size and the stands for.
+    const bodyPoles = createPoleMarkers({
+      dieSize: bodyDice.dieSize,
+      stands: bodyWorld.nodeIds.map((id) => bodyDice.standFor(id)),
+    });
+    bodyPoles.settle(game.state);
+    boards.set(body, { body, world: bodyWorld, surface: bodySurface, dice: bodyDice, poles: bodyPoles });
+  }
+
+  let shownBody = 'planet';
+  const shown = () => boards.get(shownBody);
+  const bodyOf = (territoryId) => bodies.get(territoryId) ?? 'planet';
+  const boardOf = (territoryId) => boards.get(bodyOf(territoryId)) ?? boards.get('planet');
+  const standFor = (territoryId) => boardOf(territoryId).dice.standFor(territoryId);
+  const eachBoard = (fn) => { for (const board of boards.values()) fn(board); };
+  // Where the camera was left on each world. Switching restores it rather than
+  // reframing, for the same reason a save restores one: a view somebody chose
+  // is a view they should get back.
+  const cameraByBody = new Map();
+
+  viewer.scene.add(shown().surface.group, shown().dice.group, shown().poles.group);
+
+  /**
+   * A dice layer's worth of interface spanning both boards, for the payout
+   * animation — which is the one thing that has to touch several territories
+   * at once and cannot be told which world they are on. Every lookup is by
+   * territory, so each one lands on the right board; `dieSize` and `geometry`
+   * are the same object-for-object on both, so either will do.
+   */
+  const diceAcrossBodies = {
+    get dieSize() { return boards.get('planet').dice.dieSize; },
+    get geometry() { return boards.get('planet').dice.geometry; },
+    standFor: (id) => boardOf(id).dice.standFor(id),
+    planFor: (id, count) => boardOf(id).dice.planFor(id, count),
+    materialsAt: (id) => boardOf(id).dice.materialsAt(id),
+  };
 
   const hud = createHud(hudRoot, { playerColors, playerNames, humanPlayerId });
   // Under the HUD and over the canvas — see `turnFlash.js` for why that order,
@@ -181,10 +250,106 @@ export function createSession({
   // whatever `cameraFocus.lookAtCluster` returns — whether it actually
   // started a swing — since a caller may need to wait for it to land.
   function focusFights(pairs, { force = false } = {}) {
-    const points = pairs.map(({ from, to }) =>
-      fightCenter(dice.standFor(from).normal, dice.standFor(to).normal)
-    );
+    if (pairs.length === 0) return false;
+
+    // A fight is watched on the **defender's** world, because that is where
+    // the ground changes hands. It matters for exactly one kind of attack —
+    // one across the gate — and there the alternative is watching a stack
+    // leave and never seeing where it landed.
+    showBody(bodyOf(pairs[0].to));
+
+    const points = [];
+    for (const { from, to } of pairs) {
+      if (bodyOf(to) !== shownBody) continue;
+      // An attacker on the other world has a normal in the other world's
+      // frame, where it means nothing at all — so a fight across the gate is
+      // framed on its defender alone rather than on the pair.
+      points.push(
+        bodyOf(from) === shownBody
+          ? fightCenter(standFor(from).normal, standFor(to).normal)
+          : standFor(to).normal
+      );
+    }
+    if (points.length === 0) return false;
     return cameraFocus.lookAtCluster(points, { force });
+  }
+
+  /**
+   * Puts a world on screen: the one in the scene comes out, the other goes in,
+   * and the camera picks up wherever it was left on the world being arrived at.
+   *
+   * `framePlanet` runs afterwards because the two bodies are drawn at the same
+   * size but are not the same *board* — a camera distance that framed a
+   * fifty-territory planet is not necessarily one that frames ten territories
+   * of moon on this screen, and the rule is outwards-only either way, so a
+   * player who was zoomed out keeps it.
+   */
+  function showBody(next, { instant = true } = {}) {
+    if (next === shownBody || !boards.has(next)) return false;
+
+    cameraByBody.set(shownBody, viewer.camera.position.clone());
+    const from = boards.get(shownBody);
+    const to = boards.get(next);
+    viewer.scene.remove(from.surface.group, from.dice.group, from.poles.group);
+    viewer.scene.add(to.surface.group, to.dice.group, to.poles.group);
+    shownBody = next;
+
+    // Whatever swing was in flight was aimed at a world that is no longer on
+    // screen, so it can only land somewhere meaningless.
+    cameraFocus.cancel();
+    const kept = cameraByBody.get(next);
+    if (kept) viewer.camera.position.copy(kept);
+    viewer.controls.update();
+    cameraFocus.framePlanet({ instant });
+
+    refreshBoard();
+    return true;
+  }
+
+  /**
+   * The player has *asked* for a world, which is a different thing from the
+   * match putting one in front of them.
+   *
+   * Pressing the dial frees the camera, exactly as turning the planet by hand
+   * does, and for the same reason: it is a view chosen deliberately, and
+   * nothing automatic has any business undoing it. Without this the very next
+   * AI attack on the other world switched straight back — press "Moon", watch
+   * it for a second, and find yourself on the planet again — which reads as
+   * the button being broken rather than as the camera being overridden.
+   *
+   * Unconditional, unlike `freeCamera`, which ignores a drag taken on the
+   * player's own turn because there is nothing to suppress then. Here there
+   * is: a body switch is undone by the *next* turn's fights whoever's turn it
+   * is now, so the choice has to outlive the turn it was made in.
+   */
+  function chooseBody(next) {
+    if (!cameraFreed) {
+      cameraFreed = true;
+      refreshAutoFollow();
+    }
+    showBody(next);
+  }
+
+  /**
+   * The world "home" means right now.
+   *
+   * A camera handed back on a world the player holds nothing on has been
+   * handed back to nothing, so the pan home has to be able to change which
+   * board is on screen as well as where it is pointing. Staying put wins
+   * whenever there is any of their ground here at all: switching worlds to
+   * show somebody one more territory takes away more than it gives.
+   */
+  function homeBody() {
+    if (boards.size === 1) return 'planet';
+    const held = new Map();
+    for (const [id, node] of game.state.nodes) {
+      if (node.owner !== humanPlayerId) continue;
+      held.set(bodyOf(id), (held.get(bodyOf(id)) ?? 0) + 1);
+    }
+    if ((held.get(shownBody) ?? 0) > 0) return shownBody;
+    let best = 'planet';
+    for (const [body, count] of held) if (count > (held.get(best) ?? 0)) best = body;
+    return best;
   }
 
   /**
@@ -213,6 +378,7 @@ export function createSession({
     // about the match rather than a movement of the camera, and somebody
     // studying the board is exactly who most needs telling that their turn has
     // come round while they were looking at it.
+    if (!cameraFreed) showBody(homeBody());
     const moved = cameraFreed ? false : cameraFocus.lookAtHoldings(ownGround());
     // The flash runs *with* the pan rather than after it. They are two halves
     // of one handover — the planet coming back to you and being told so — and
@@ -235,7 +401,11 @@ export function createSession({
   function ownGround() {
     const mine = [];
     for (const [id, node] of game.state.nodes) {
-      if (node.owner === humanPlayerId) mine.push(dice.standFor(id).normal);
+      // only what is on screen: a direction on the world you are not looking
+      // at is a direction in somebody else's frame
+      if (node.owner === humanPlayerId && bodyOf(id) === shownBody) {
+        mine.push(standFor(id).normal);
+      }
     }
     return mine;
   }
@@ -327,6 +497,7 @@ export function createSession({
     if (game.currentPlayer() !== humanPlayerId && aiFights.length > 0) {
       if (focusFights(aiFights, { force: true })) return true;
     }
+    showBody(homeBody());
     return cameraFocus.lookAtHoldings(ownGround(), { force: true });
   }
 
@@ -334,12 +505,21 @@ export function createSession({
     hud.showAutoFollow({ freed: cameraFreed, isOver: game.isOver(), replayOpen });
   }
 
-  const pickTerritoryAt = createTerritoryPicker({
-    planetMesh: surface.mesh,
-    camera: viewer.camera,
-    faceCellIds: surface.faceCellIds,
-    cellTerritory: world.cellTerritory,
-  });
+  // One per world, and the press goes to whichever is on screen. Nothing else
+  // could be right: only one mesh is in the scene, so only one of them can
+  // ever be hit by a ray.
+  const pickers = new Map(
+    [...boards].map(([body, board]) => [
+      body,
+      createTerritoryPicker({
+        planetMesh: board.surface.mesh,
+        camera: viewer.camera,
+        faceCellIds: board.surface.faceCellIds,
+        cellTerritory: board.world.cellTerritory,
+      }),
+    ])
+  );
+  const pickTerritoryAt = (ndc) => pickers.get(shownBody)(ndc);
 
   let roll = null; // the attack being animated
   let reinforceAnim = null; // the end-of-turn payout being animated
@@ -399,8 +579,10 @@ export function createSession({
     replayFight = entry ? { entry, nodes: board, elapsed: 0 } : null;
     paintReplayBoard(board, entry, pulseAt(0));
     settleThrownDice(board);
-    dice.update({ nodes: board });
-    poles.settle({ nodes: board });
+    eachBoard((b) => {
+      b.dice.update({ nodes: board });
+      b.poles.settle({ nodes: board });
+    });
 
     if (rolling) startReplayRoll(entry, nodes);
 
@@ -426,10 +608,10 @@ export function createSession({
       entry,
       nodes,
       animation: createRollAnimation({
-        attackerStand: dice.standFor(entry.from),
-        defenderStand: dice.standFor(entry.to),
+        attackerStand: standFor(entry.from),
+        defenderStand: standFor(entry.to),
         event: { attackRolls: entry.attacker.rolls, defendRolls: entry.defender.rolls },
-        dieSize: dice.dieSize,
+        dieSize: boardOf(entry.to).dice.dieSize,
         timing: REPLAY_TIMING,
       }),
     };
@@ -439,8 +621,10 @@ export function createSession({
   /** The board the throw was for, once the dice have stopped on it. */
   function landReplayRoll({ entry, nodes }) {
     settleThrownDice(nodes);
-    dice.update({ nodes });
-    poles.settle({ nodes });
+    eachBoard((b) => {
+      b.dice.update({ nodes });
+      b.poles.settle({ nodes });
+    });
     if (replayFight) replayFight.nodes = nodes;
     hud.showBattle(entry); // the faces, now that they have actually landed
   }
@@ -460,16 +644,20 @@ export function createSession({
     if (!thrownDice) return;
     const { from, to } = thrownDice;
     thrownDice = null;
-    dice.reroll(from, { nodes });
-    dice.reroll(to, { nodes });
+    boardOf(from).dice.reroll(from, { nodes });
+    boardOf(to).dice.reroll(to, { nodes });
   }
 
   // The planet as some replay step left it, with that step's fight marked.
   // Only the surface — dice, stats and the readout have nothing per-frame in
   // them, so they are drawn once by `applyReplayStep` and left alone.
   function paintReplayBoard(nodes, entry, pulse) {
-    const marks = highlightsFor({ attack: entry && { from: entry.from, to: entry.to }, pulse });
-    surface.refresh({ nodes }, (territoryId) => marks.get(territoryId) ?? null);
+    const marks = highlightsFor({
+      attack: entry && { from: entry.from, to: entry.to },
+      pulse,
+      ports: world.spaceports ?? [],
+    });
+    eachBoard((b) => b.surface.refresh({ nodes }, (id) => marks.get(id) ?? null));
   }
 
   // Live play shows an attack's result while the camera is still swinging to
@@ -556,8 +744,10 @@ export function createSession({
     // the replay has been drawing straight into the surface, dice, stats and
     // the battle readout; put the real, finished match back before the
     // banner returns
-    dice.update(game.state);
-    poles.settle(game.state);
+    eachBoard((b) => {
+      b.dice.update(game.state);
+      b.poles.settle(game.state);
+    });
     refreshBoard();
     hud.showBattle(battles.latestBattle);
     hud.setHistory(battles.entries);
@@ -578,6 +768,7 @@ export function createSession({
       world,
       state: serializeState(game.state),
       replay: serializeReplay(replay),
+      round: game.round,
       playedOn: game.playedOn,
       surrenderOffered: game.surrenderOffered,
       camera: cameraSnapshot(viewer.camera),
@@ -629,8 +820,13 @@ export function createSession({
       attack: roll?.event ?? null,
       pressed,
       pulse,
+      // Where the moon's door is: on the ports all match long, and brighter on
+      // the pair the gate is joining right now. Both boards are painted, so
+      // the link is marked at whichever end is being looked at.
+      ports: world.spaceports ?? [],
+      gate: game.gate,
     });
-    surface.refresh(game.state, (territoryId) => marks.get(territoryId) ?? null);
+    eachBoard((b) => b.surface.refresh(game.state, (id) => marks.get(id) ?? null));
     hud.showPlayers(playerStatsFor(game.state, playerIds));
     hud.showTurn({
       currentPlayerId: game.currentPlayer(),
@@ -649,6 +845,16 @@ export function createSession({
       playedOn: game.playedOn,
     });
     refreshAutoFollow();
+    hud.showOrbit({
+      gate: game.gate,
+      shown: shownBody,
+      // whose port the moon is over, so the dial can say whether the window
+      // that is open is anybody's to use
+      portName: game.gate?.open
+        ? playerNames.get(game.state.nodes.get(game.gate.port)?.owner) ?? null
+        : null,
+      replayOpen,
+    });
     hud.showHint({
       seen: hintSeen,
       humanPlayerId, // the panel names the color you are, so it has to know
@@ -676,16 +882,21 @@ export function createSession({
       if (!cameraFreed) focusFights(upcoming);
     } else {
       hintDone(); // they have just done the thing the prompt describes
+      // The player's own fights are on screen by definition — except one. An
+      // attack across the gate lands on the world they are *not* looking at,
+      // and watching a stack leave without ever seeing where it went is the
+      // one case where following their own attack is worth doing.
+      if (bodyOf(event.to) !== shownBody) showBody(bodyOf(event.to));
     }
 
     roll = {
       event,
       elapsed: 0,
       animation: createRollAnimation({
-        attackerStand: dice.standFor(event.from),
-        defenderStand: dice.standFor(event.to),
+        attackerStand: standFor(event.from),
+        defenderStand: standFor(event.to),
         event,
-        dieSize: dice.dieSize,
+        dieSize: boardOf(event.to).dice.dieSize,
         timing,
       }),
     };
@@ -698,8 +909,8 @@ export function createSession({
     hud.setHistory(battles.entries);
     replay.record(event);
     // both stacks are still lying on the faces they rolled; stand them back up
-    dice.reroll(event.from, state);
-    dice.reroll(event.to, state);
+    boardOf(event.from).dice.reroll(event.from, state);
+    boardOf(event.to).dice.reroll(event.to, state);
   });
 
   game.on('reinforce', (event) => {
@@ -716,7 +927,7 @@ export function createSession({
     reinforceAnim = {
       elapsed: 0,
       dropped: 0, // how many of the HUD's chips have been told their die has landed
-      animation: createReinforceAnimation({ landed: event.landed, dice }),
+      animation: createReinforceAnimation({ landed: event.landed, dice: diceAcrossBodies }),
     };
   });
 
@@ -779,8 +990,10 @@ export function createSession({
   });
 
   game.on('change', (state) => {
-    dice.update(state);
-    poles.settle(state); // a tower may have grown or gone at a pole
+    eachBoard((b) => {
+      b.dice.update(state);
+      b.poles.settle(state); // a tower may have grown or gone at a pole
+    });
     refreshBoard();
     // Every change, rather than on a timer or on the way out of the page:
     // `change` is the only moment the board moves, a pagehide handler is not
@@ -851,6 +1064,10 @@ export function createSession({
   // Pressed rather than played out of: the camera comes back *and* goes home,
   // so the press answers itself instead of promising something for later.
   hud.onAutoFollow(() => resumeAutoFollow({ pan: true }));
+
+  // The dial is the only way between the two worlds, which is what lets the
+  // moon in the sky be pure decoration: nothing anyone has to hit with a ray.
+  hud.onOrbit(() => chooseBody(shownBody === 'planet' ? 'moon' : 'planet'));
 
   hud.onEndTurn(() => {
     game.endTurn();
@@ -992,10 +1209,12 @@ export function createSession({
       hud.dispose();
       cameraFocus.dispose();
       turnFlash.dispose();
-      viewer.scene.remove(surface.group, dice.group, poles.group);
-      surface.dispose();
-      dice.dispose();
-      poles.dispose();
+      viewer.scene.remove(shown().surface.group, shown().dice.group, shown().poles.group);
+      eachBoard((b) => {
+        b.surface.dispose();
+        b.dice.dispose();
+        b.poles.dispose();
+      });
       hudRoot.replaceChildren();
     },
   };
@@ -1009,10 +1228,10 @@ export function createSession({
  * behind it is still perfectly playable, and losing the record of how it got
  * here is a far smaller loss than refusing to open it at all.
  */
-function restoreReplay(restored, state) {
+function restoreReplay(restored, state, reserveCap) {
   if (restored?.replay) {
     try {
-      return reviveReplay(restored.replay);
+      return reviveReplay(restored.replay, { reserveCap });
     } catch {
       // a hand-edited or half-written save; carry on recording from here
     }
@@ -1020,7 +1239,11 @@ function restoreReplay(restored, state) {
 
   return createReplay({
     nodes: state.nodes,
-    reserves: new Map([...state.players].map(([id, player]) => [id, player.reserve])),
+    // The bank as one number per player, the same way the badge shows it —
+    // see `totalReserve`. A replay tracks the total rather than the split
+    // because nothing it draws has anywhere to put the split.
+    reserves: new Map([...state.players].map(([id, player]) => [id, totalReserve(player)])),
+    reserveCap,
   });
 }
 
@@ -1035,7 +1258,8 @@ function restoreReplay(restored, state) {
  */
 function buildWorld(settings, playerIds, saved) {
   const subdivisions = subdivisionsFor(settings);
-  const grow = (seed) => generatePlanetWorld({ subdivisions, playerIds, rng: seededRng(seed) });
+  const grow = (seed) =>
+    generateSystem({ subdivisions, playerIds, moon: settings.moon, rng: seededRng(seed) });
 
   if (saved) {
     const world = grow(saved.seed);

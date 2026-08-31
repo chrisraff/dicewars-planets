@@ -47,6 +47,14 @@ export function createReplay({
   reserves = new Map(),
   moves = [],
   limit = REPLAY_LIMIT,
+  // The most a player can have banked, which is `MAX_RESERVE` per world they
+  // are playing on. A replay tracks one running total per player rather than
+  // one per world — the badge it feeds is a single number — so the ceiling is
+  // the only place the split shows through, and it is a property of the board
+  // rather than of the recording. Deliberately not stored: the session knows
+  // how many worlds this match has and hands it back on revive, so a save
+  // does not grow by a field to hold a number that can be recomputed.
+  reserveCap = MAX_RESERVE,
 } = {}) {
   // the board and the banked dice as they stood before the first move held
   const anchorNodes = new Map(nodes);
@@ -125,7 +133,7 @@ export function createReplay({
     },
 
     playersAt(step) {
-      return reservesAfterAttacks(anchorReserves, log, step);
+      return reservesAfterAttacks(anchorReserves, log, step, reserveCap);
     },
 
     historyAt(step) {
@@ -152,7 +160,7 @@ export function createReplay({
  * order, so replaying a payout is adding one die per entry rather than
  * re-deciding where they go.
  */
-function applyMove(move, nodes, reserves) {
+function applyMove(move, nodes, reserves, reserveCap = MAX_RESERVE) {
   if (move.kind === 'reinforce') {
     // dice bank up to MAX_RESERVE before any of them land, so the count that
     // mattered at the time — `earned` — has to go through the same cap core
@@ -160,7 +168,7 @@ function applyMove(move, nodes, reserves) {
     // found room
     if (reserves) {
       const before = reserves.get(move.playerId) ?? 0;
-      reserves.set(move.playerId, Math.min(before + move.earned, MAX_RESERVE) - move.landed.length);
+      reserves.set(move.playerId, Math.min(before + move.earned, reserveCap) - move.landed.length);
     }
     if (nodes) {
       for (const territoryId of move.landed) {
@@ -189,12 +197,12 @@ function applyMove(move, nodes, reserves) {
  * alone, including a payout that `count` attacks' worth of history has not
  * reached yet.
  */
-function walk(moves, count, nodes, reserves) {
+function walk(moves, count, nodes, reserves, reserveCap = MAX_RESERVE) {
   let attacksApplied = 0;
 
   for (const move of moves) {
     if (attacksApplied >= count) break;
-    applyMove(move, nodes, reserves);
+    applyMove(move, nodes, reserves, reserveCap);
     if (move.kind !== 'reinforce') attacksApplied++;
   }
 }
@@ -257,9 +265,9 @@ export function boardAfterAttacks(initialNodes, moves, count) {
  * already reads `state.players` as — so a replay step can hand this straight
  * to it in place of the live match's players.
  */
-export function reservesAfterAttacks(initialReserves, moves, count) {
+export function reservesAfterAttacks(initialReserves, moves, count, reserveCap = MAX_RESERVE) {
   const reserves = new Map(initialReserves);
-  walk(moves, count, null, reserves);
+  walk(moves, count, null, reserves, reserveCap);
   return new Map([...reserves].map(([playerId, reserve]) => [playerId, { reserve }]));
 }
 
@@ -391,7 +399,7 @@ function encodeMove(move) {
  * Throws on a save that has been damaged rather than trying to salvage half a
  * match — see `session.js`, which would rather lose a replay than a game.
  */
-export function reviveReplay(snapshot, { limit } = {}) {
+export function reviveReplay(snapshot, { limit, reserveCap } = {}) {
   const nodes = new Map(snapshot.nodes.map(([id, owner, dice]) => [id, { owner, dice }]));
   const reserves = new Map(snapshot.reserves);
 
@@ -404,7 +412,7 @@ export function reviveReplay(snapshot, { limit } = {}) {
     return move;
   });
 
-  return createReplay({ nodes, reserves, moves, limit });
+  return createReplay({ nodes, reserves, moves, limit, reserveCap });
 }
 
 function decodeMove(encoded, board) {

@@ -57,7 +57,8 @@ game.
 
 The graph is topology only — which node ids touch which. No coordinates, no
 shape. `setNeighbors`/`updateAdjacency` exist so a world can rewire itself
-between rounds (the planned moon mode) without core learning any geometry.
+between rounds — which is what moon mode's bridge does — without core learning
+any geometry.
 
 `serializeState`/`reviveState` are the state as plain JSON and back, which is
 what a saved game is made of. They read the edges out of the *graph* rather
@@ -73,6 +74,48 @@ Terms that recur:
   player's territories were full. Banked (capped at `MAX_RESERVE`), paid out
   later. The UI calls these "banked dice".
 - **largest connected region** — what reinforcement is paid on.
+- **body** — which world a territory is on, for a board with more than one
+  (the moon). Absent on a single-world board, which is the whole of the
+  compatibility story below.
+
+### Two worlds on one board
+
+`body` on a node, `NEUTRAL_OWNER` for ground nobody holds, and per-body income
+are the three things moon mode needed from core. All three are written so that
+**a board with no moon on it runs the code it always ran** — not something
+equivalent to it, the same code: `bodyOf` reads `node.body ?? DEFAULT_BODY`,
+so every grouping sees exactly one group, `bodiesOf` returns one entry, and
+the loops below run once over the same territories in the same order and draw
+the same numbers from `rng`. A save written before any of this exists still
+replays exactly, and a single-world node carries no `body` key at all.
+
+**Income is `incomeFor`: the largest connected region on *each* body, added
+up.** The sum rather than the largest of them, because the two are separate
+economies rather than rival claims on one. And separately measured rather than
+measured across a bridge, which is the part that matters: standing on both ends
+of an open gate must not read as one huge region, or taking the docking
+territory would be worth a round of free reinforcement on a coin flip. A region
+walk cannot cross a body for the same reason it cannot cross a border —
+`largestConnectedRegionSize` takes a `body` and filters the owned set, and a
+walk only ever moves through territories already in it.
+
+**Reinforcement is paid once per body and scattered within it**, and that
+second half is load-bearing. Without it a moon holding quietly funds a war on
+the planet at no cost of transport, which is exactly the runaway the mode
+exists to avoid. The bank follows the same rule, or dice that could not land on
+a full moon would spill onto the planet a turn later and go round it anyway —
+hence `reserveOn`/`withReserveOn`, where the default body keeps the plain
+`reserve` field it has always had and any other lives beside it in `reserves`.
+`totalReserve` adds them up for the one place that wants a single number: the
+banked-dice badge, which is one number on one tile.
+
+**`NEUTRAL_OWNER` is an owner rather than a flag**, because that is all it
+needs to be. It is not in `turnOrder`, so it never takes a turn; `isLegalAttack`
+already permits attacking anyone who is not you; and it is not in `players`, so
+it earns no income and appears in no stats row. The one thing that did need
+saying is in the reducer: taking the last of it is **not** a knockout, so the
+`eliminated` event is guarded on `players.has(defenderOwner)`. Without that,
+clearing the last unclaimed territory announced a rival nobody was playing.
 
 `attack` events carry every individual die face (`attackRolls` / `defendRolls`)
 as well as the totals, because the renderer lands the dice on their actual
@@ -357,6 +400,45 @@ against 4ms for the one-ply AI, with the median at half a millisecond and the
 99th percentile at five. Two-handed is the worst case for all of them and peaks
 at about 11ms, against 9ms one ply.
 
+**Moon mode changed three things in the expert, and none of them is a weight.**
+Regions stop at a body, income is per world, and `sprawl` is charged in the
+currency of the world the capture is *on*. That last one is the one that would
+have been hardest to spot from outside: `sprawl` charges a capture that grows
+no income, and read across both worlds a first landing on the moon grows none —
+the planet's largest region is untouched by it — so the AI would have refused
+the moon outright, for the whole match, on the very term that exists to stop it
+sprawling. It would have looked like a considered opinion rather than a bug.
+Per body, taking a first moon territory takes that world's income from nothing
+to one and is not charged at all. `refill` is split the same way and for the
+same reason: a single figure spread over both worlds tells an AI with a large
+planet and a toehold on the moon that the toehold is about to be reinforced out
+of an income it will never see.
+
+`MOON_WEIGHTS` is **deliberately identical to `EXPERT_WEIGHTS` today, and
+deliberately its own object.** The seam is the point: the shipped weights were
+found over several thousand single-world games and are the ladder every
+difficulty rung is measured against, and they pull against each other hard
+enough that moving one to suit a second world could quietly cost thirty points
+on the first. Nothing has been measured for the moon yet, and saying so is
+worth more than a guess would be.
+
+What *is* measured is that the AI uses the moon at all rather than ignoring it:
+over 40 unattended six-player games it set foot on it in 38, took a cap in 30,
+and held 7.4 of the 10 territories by the end, with the eventual winner holding
+moon ground in 36. The control that makes those numbers mean something is match
+length — the expert's unattended matches run about 2050 turns with the moon off
+and 2112 with it on, so the mode adds 3% to the length and 31% more attacks,
+which is the moon being fought over rather than the AI stalling on it. (Those
+2050-turn matches are the expert's own long-standing habit in `AUTOPLAY`, where
+nothing surrenders; a real match ends far sooner.)
+
+The one thing known to be missing is a sense of **when**. The gate is shut half
+the rounds and no strategy here has any notion of the round, so the AI
+garrisons a port against a threat that is about to sail away and prices a moon
+capture the same whether the way home is open or a round off. That is the same
+gap all three have always had, promoted from interesting to load-bearing, and a
+discount by rounds-until-open is the obvious first thing to try.
+
 Anyone tempted to tidy the defensive one: its counter-attack test compares the
 strongest rival to the attacker's dice, though a winner garrisons the prize
 with `dice - 1`. That off-by-one is load-bearing. Closing it takes the AI from
@@ -449,6 +531,118 @@ seeds drawn from one generator, which is also what a real game deals itself.
 `preview/terrain.html` is where all of this is looked at rather than argued
 about: one seed carved both ways side by side, the lakes, and the distribution
 counted live.
+
+### The moon
+
+`generateMoon.js` builds the second world, and it is **constructed rather than
+carved and measured**, which is the opposite of how the planet's oceans work.
+It has a job a random carve cannot be relied on for: the moon spins, so a
+different territory faces the planet at every orbital stop, and the whole
+balance of the mode rests on whatever it presents being cheap to land on. A
+ramp measured from some arbitrary core would sooner or later turn an eight-dice
+fortress toward the planet and the entry price would be whatever the dice
+happened to say that round.
+
+So **the ramp is defined by the spin axis.** An equatorial *band* of six
+territories is the only ground the spin ever shows — because that is what an
+equator is — and it is dealt 2–3 dice, so a four-stack takes a landing whoever
+is losing. Behind a channel running along a line of latitude sit two polar
+*caps* of two territories each, holding 5 and 8, which never face the planet at
+all. Measured over 300 moons: the worst garrison the spin ever presented is 3,
+the band ring is never broken, and no territory is ever cut off.
+
+That buys a second property worth more than the first: **every cap is the same
+distance from every dock.** Wherever a player lands the prize is equally far, so
+no window is a better window and nobody can camp the one good entrance.
+
+Generated with the spin axis at +Y, so latitude is `asin(center.y)` and there is
+no orientation pass — the planet's interesting ring is *discovered* and has to
+be brought to the equator, and the moon's is *decided*, so it is simply built
+there.
+
+Three things about the carve are worth knowing before touching it.
+
+**A channel is one cell wide, so how narrow it looks is decided entirely by how
+big a cell is.** The moon was first built on a 162-cell mesh, which is the
+obvious choice for a smaller world and is wrong: a trench came out as broad as
+the ground either side of it and the whole moon read as an archipelago. It is
+built on the same 642-cell mesh as the planet, over ten territories rather than
+fifty-odd, and the water is 18% of the cells against 32%.
+
+**The gaps are placed in sector space, not at raw longitudes.** A way through a
+latitude channel opens at the *midpoint of a band sector*, which is the point
+furthest from the meridian channels either side of it; a gap in a meridian
+channel sits near the equator, which is the latitude furthest from both
+latitude channels. Placed at random instead, an entrance landed on a crossing
+often enough that **three carves in four came out with a cap cut off**.
+
+**And a moon that still comes out in pieces is repaired rather than rejected.**
+`openChannels` digs the shortest run of water joining the pieces, walking
+outward from the largest, so what it opens reads as a gap in a channel rather
+than as a hole punched in the middle of one. Rejecting was the first answer and
+it threw away three moons in four; digging costs a cell or two and always
+works. A landing party stranded on ground nothing else touches is the one
+unplayable thing this generator could produce.
+
+One trap that is not a trap: a cap's meridian channel has to be **told** to stop
+short of the pole. The intuition is that it pinches out there by itself, since
+every longitude meets at the pole — but that is exactly why it does not, because
+the distance from the pole to a meridian great circle is zero for every
+meridian. Left alone it severed both halves of every cap, which then hung off
+the band separately instead of being a place you can walk across.
+
+### The orbit
+
+`orbit.js` is a **published timetable rather than a simulation**, and that is
+the difference between the moon being a mechanic and being weather. The
+position is a function of the round number and nothing else, so a player can
+answer "when is my window" three rounds ahead without watching anything move,
+and the dial can show the future as confidently as the present. It is also the
+whole of what a save has to keep about it: one integer.
+
+Two things move at once and at different rates. **Which spaceport is under it**
+— two ports on opposite sides of the planet, with stops in between where the
+moon is over open space and there is no way up or down at all, so the gate is
+open half the rounds and never at the same end twice running. And **which moon
+territory is facing**, which steps along the band every stop, so nobody holds
+one permanent door and chokes the moon behind it. Six band territories against
+four stops means the pairing takes twelve stops to repeat.
+
+`bridgePatch` restates **only the moon end** of the gate, and that is worth
+understanding rather than working around: `setNeighbors` keeps the reverse edge
+in step by itself, so writing the dock's neighbours puts the bridge on the port
+too and writing them without it takes the bridge off. Restating the port as well
+would mean this function knowing the port's own planetary neighbours, which is
+none of its business. The neighbours it restores come from the *world* rather
+than from the live graph, which by definition already has a bridge in it.
+
+`spaceports.js` picks the two ports off the **equator**, because the generator
+has already turned the planet so its strongest ring of territories runs along
+there — a port anywhere else would more often than not be a port in a backwater.
+Only the longitude is random: what matters is that the pair are opposed, not
+where the axis lies. They are ordinary territories otherwise, ownable and
+attackable, which is the point of putting the moon's access on the planet: it
+gives everybody something to fight over for it, in a place they can all see.
+
+`generateSystem.js` is the seam between the two. **With the moon off it returns
+the planet and nothing else** — the same object `generatePlanetWorld` has always
+returned, so a single-world game is not merely equivalent to what it was, it is
+the identical code path. With the moon on, the planet's world object is
+*extended* rather than wrapped: `nodeIds`, `edges` and `assignments` grow to
+cover both bodies, everything the renderer already looks for stays exactly where
+it was, and the moon carries the same three things under `world.moon`. That is
+what lets one surface, one dice layer and one picker be built twice, once per
+body, with no argument about which is which. Moon territory ids are `m0`–`m9`
+rather than numbers, because planet ids are list positions and the two would
+otherwise collide the moment they shared a state.
+
+The rotation is applied in `createGame`'s `finishTurn`, in the same breath as
+the last payout of the round, so the board that arrives is already wired the way
+it will be played — a gate that opened a moment after the turn began would be a
+gate the player was never shown. Whether the round turned over is read off the
+two states (`currentTurnIndex` going down, or standing still) rather than
+counted separately, so a knockout removing a seat mid-round cannot put a tally
+out of step with the turn order it is tracking.
 
 `seating.js` is who gets dealt what, and it exists because **moving first was
 most of the game**. Every seat played by the same AI — so nothing separates
@@ -600,6 +794,19 @@ before any of this, which is what the handicaps are measured against.
   banked dice, the replay, whether a surrender has been *offered* and whether
   it has been waved away — is stored outright.
 
+  A moon game keeps one integer more: **`round`**, which is where the moon has
+  got to. Everything about the orbit is a function of it, so nothing else about
+  the orbit is stored. `worldFingerprint` grows to cover the moon's own cells
+  and the ports, because the seed rebuilds both worlds and the planet alone
+  would happily accept a save from a match that had a moon in it and then be
+  handed ten territories it has never heard of.
+
+  The replay tracks **one banked total per player rather than one per world**,
+  because the badge it feeds is a single number with nowhere to put a split.
+  The only place the split shows through is the ceiling, so `reserveCap` is
+  passed in — `MAX_RESERVE` per world — and deliberately not stored, since the
+  session knows how many worlds the match has and can hand it back on revive.
+
   Those last two are separate fields on purpose, and storing only the second
   was a bug. `playedOn` is set by answering, and the surrender banner has three
   buttons of which only one answers: "New game", "Play on", and **"Watch
@@ -648,7 +855,8 @@ before any of this, which is what the handicaps are measured against.
   Two flags say how finished an option is. `available: false` means it is
   plumbed but its feature is unbuilt: the menu greys it out with its `note`
   *and* `normalizeSettings` pins it to its default, so nothing downstream is
-  ever handed a setting it cannot honor (this is how `moon` sits).
+  ever handed a setting it cannot honor. Nothing sits there now — `moon` did
+  until it was built, which is the state the flag exists to arrive at.
   `hidden: true` means the menu does not draw it at all — for something that
   works but is not ready to be offered, where a greyed-out row would advertise
   a half-finished feature rather than promise a coming one (this is how `size`,
@@ -668,6 +876,85 @@ before any of this, which is what the handicaps are measured against.
   (`playerIdsFor`, `resolveStartSeat`, `subdivisionsFor`, `createSession`)
   takes an already-normalized object and trusts it. Re-validating deeper in
   would mean no caller could be sure which layer had the last word.
+
+### Two boards, one at a time
+
+**The moon is never picked in 3D.** That one rule dissolves the whole occlusion
+problem — if nothing on screen has to be hit with a ray, nothing being hidden
+can cost anybody a move — and it is what lets the cheapest architecture
+available be the right one.
+
+Every piece of geometry in the renderer assumes a unit sphere at the origin:
+`diceGroundRadius` works in radians, `framingDistance` is `asin(1 / d)`, the
+orbit controls target `(0, 0, 0)`. So rather than standing the moon off to one
+side and teaching all of that about a second centre and a second radius, **each
+body takes its turn standing in the same hole**. Both are then the unit sphere
+they were written for and neither knows the other exists. `session.js` builds a
+board per world — surface, dice, poles, picker — and only one is in the scene.
+
+Three things follow, and each was a bug before it was a rule.
+
+**Pressing the dial frees the camera**, exactly as turning the planet by hand
+does. Without it the very next AI attack on the other world switched straight
+back: press "Moon", watch it for a second, find yourself on the planet again,
+which reads as the button being broken rather than as the camera being
+overridden. Unconditional, unlike `freeCamera`, which ignores a drag taken on
+the player's own turn because there is nothing to suppress then — here there
+is, since a body switch is undone by the *next* turn's fights whoever's turn it
+is now.
+
+**A fight is watched on the defender's world**, because that is where the ground
+changes hands. It matters for exactly one kind of attack — one across the gate —
+and there the alternative is watching a stack leave and never seeing where it
+landed. An attacker on the other world has a normal in the other world's frame,
+where it means nothing at all, so a cross-gate fight is framed on its defender
+alone rather than on the pair. The player's own attacks are on screen by
+definition *except* that one, which is why it is the single case where the
+camera follows a move they made themselves.
+
+**"Home" is a world as well as a direction.** A camera handed back on a world
+the player holds nothing on has been handed back to nothing, so `homeBody`
+picks where the pan goes — and staying put wins whenever there is any of their
+ground here at all, since switching worlds to show somebody one more territory
+takes away more than it gives.
+
+An AI turn is also **grouped by world before it is clustered by camera**
+(`orderAiTurn`). Within a world that is the reordering it always was; across
+two, leaving them mixed flipped the board back and forth several times in one
+turn, which is a worse way to watch a turn than any ordering could make up for.
+
+### The orbit dial
+
+One control rather than two, and that is the decision worth keeping: the moon
+needs a switch and it needs a schedule, and putting them in the same widget
+means the answer to "is it worth going up" is on the thing you press to go. It
+sits in the controls row beside Menu, so it is furniture rather than an alert.
+
+The stops are drawn **as they are, not as a countdown** — a filled tick opens a
+door, a hollow one is a stop over open space, and a ring marks where the moon
+is now. A player reads their next window off it by looking rather than by being
+told, which is the whole reason the orbit is a published timetable. The button
+brightens while the gate is open, which is the one state worth catching out of
+the corner of an eye. It is disabled during a replay: the board a replay draws
+is part of what is being watched, not the seat it is watched from.
+
+`HIGHLIGHT.port` and `HIGHLIGHT.docked` mark the ports all match and the pair
+the gate joins right now, at both ends, so the link is visible from whichever
+board is being looked at. They are a **cold pale blue rather than a third white
+lift**: every other mark is a lift toward white or a fall toward black, and one
+more at a fourth strength would be one more thing to tell apart by brightness
+alone. Both are applied first so every gameplay mark writes over them — they
+answer "where is the door", which is a standing fact, and nothing about it has
+any business covering a mark about the move in hand.
+
+Unclaimed ground gets `NEUTRAL_COLOR` of its own rather than falling through to
+`UNOWNED_COLOR`, which means something else entirely: that one is for a cell
+whose territory is not in the state at all, which is a bug rather than a board
+position. Naming the two apart is what stops a real fault looking like the moon
+working correctly. `CHANNEL_COLOR` is what the moon has where the planet has
+ocean, and `createPlanetSurface` takes it as `emptyColor` — which is the whole
+of what that module needed for a second world: a world is a world, and the only
+thing that differs is the colour of the gaps.
 
 **`src/render/`** — pure decisions are split out from DOM and three.js
 plumbing wherever it is worth testing. `hud.js` exports `playerPanelView`,
@@ -1407,6 +1694,15 @@ from the game is worse than none.
   what it is now arguing before choosing seeds for it. `difficulty` in both was
   repointed from `hard` to `expert` when the ladder gained a rung, which keeps
   the *intent* — the strongest opponent — whatever the seeds end up being.
+- `moon.html` carves a live moon and stands the dial beside it, which is where
+  the two things this mode has to get right are judged by eye rather than
+  argued about here: whether a channel reads as a trench, and whether a tick
+  and a ring are enough to answer "when is my window". It counts three hundred
+  moons underneath for the properties that are not visual — that the spin never
+  presents a garrison a losing player cannot afford, that the band ring never
+  breaks, and that no ground is ever cut off. The dial is drawn by building
+  four whole HUDs rather than four dials, spare buttons and all, because the
+  dial is a piece of the real one rather than a drawing of it.
 - `terrain.html` opens on a pinned seed for the same reason, and the seed is
   chosen to be *typical* rather than damning: its old carving scores 0.317,
   which is the old carver's median. A comparison page that opened on the worst

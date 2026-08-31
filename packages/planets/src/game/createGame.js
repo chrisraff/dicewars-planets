@@ -9,7 +9,9 @@ import {
   surrenderedPlayerIds,
   livingPlayerIds,
   neighbors,
+  updateAdjacency,
 } from '@dicewars/core';
+import { bridgePatch, gateView } from './orbit.js';
 import { attackDuration, DEFAULT_TIMING } from '../render/rollTimeline.js';
 import { reinforceDuration } from '../render/reinforceTimeline.js';
 
@@ -48,6 +50,11 @@ export function createGame({
   savedState = null,
   playedOn: startPlayedOn = false,
   surrenderOffered: startSurrenderOffered = false,
+  // Which orbital stop the moon is at. Counted rather than simulated, so it
+  // is one number in the save and the schedule is a function of it. Only
+  // meaningful when the world has a moon; a single-world game never moves it
+  // off zero and never looks at it.
+  round: startRound = 0,
   humanPlayerId = world.playerIds[0],
   // The opponent, for a caller that has no opinion. A real match always has
   // one: the session picks from the difficulty setting (`strategyFor`), and
@@ -94,6 +101,11 @@ export function createGame({
   // job should not be asked again every turn while they do it.
   let surrenderOffered = startSurrenderOffered;
   let playedOn = startPlayedOn;
+  let round = startRound;
+
+  // Only a world with a moon has an orbit; everything below that touches one
+  // is guarded on this, so a single-world match runs the code it always did.
+  const orbit = world.orbit ?? null;
 
   const listeners = new Map();
   const emit = (name, payload) => {
@@ -228,6 +240,18 @@ export function createGame({
     else if (!isHumanTurn()) thinking = AI_THINK_PAUSE;
   }
 
+  /**
+   * Whether ending this turn took the order back round to the start.
+   *
+   * `advanceTurn` walks forward to the next living player and wraps, so the
+   * index going down — or standing still, which only a lone survivor can do —
+   * is exactly the round turning over. Read off the two states rather than
+   * counted separately, so a knockout removing a seat mid-round cannot put a
+   * tally out of step with the turn order it is supposed to be tracking.
+   */
+  const roundTurnedOver = (before, after) =>
+    after.phase !== 'gameover' && after.currentTurnIndex <= before.currentTurnIndex;
+
   // Held back exactly the way an attack is: the board should not show
   // reinforcement dice — and a save should not record them — before they have
   // visibly landed. `event` still goes out immediately, so the renderer can
@@ -236,8 +260,27 @@ export function createGame({
     const result = reduce(state, endTurnAction(), deps);
     const event = result.events.find((e) => e.type === 'endTurn');
 
-    pendingReinforce = result.state;
-    pendingReinforceEvents = result.events;
+    let next = result.state;
+    const events = [...result.events];
+
+    // The moon moves on at the end of the round, in the same breath as the
+    // last payout of it. Applied here rather than when the payout lands, so
+    // the board that arrives is already wired the way it will be played: a
+    // gate that opened a moment after the turn began would be a gate the
+    // player was never shown.
+    if (orbit && roundTurnedOver(state, next)) {
+      round += 1;
+      const rotated = reduce(
+        next,
+        updateAdjacency(bridgePatch(orbit, round, world.moonNeighbors)),
+        deps
+      );
+      next = rotated.state;
+      events.push({ type: 'orbit', round, ...gateView(orbit, round) });
+    }
+
+    pendingReinforce = next;
+    pendingReinforceEvents = events;
     reinforceCountdown = reinforceDuration(event.landed.length);
     setSelection(null);
     emit('reinforce', { ...event, passed: !attackedThisTurn });
@@ -332,6 +375,23 @@ export function createGame({
     /** Whether the player has already refused a surrender this match. */
     get playedOn() {
       return playedOn;
+    },
+
+    /**
+     * How many rounds have turned over, which is the whole of where the moon
+     * is: everything about the orbit is a function of this one number, so it
+     * is also the whole of what a save has to keep about it.
+     */
+    get round() {
+      return round;
+    },
+
+    /**
+     * Both ends of the gate right now and where it goes next, or null on a
+     * world with no moon. What the dial draws and what the board marks.
+     */
+    get gate() {
+      return orbit ? gateView(orbit, round) : null;
     },
 
     /**

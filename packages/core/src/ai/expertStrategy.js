@@ -1,6 +1,6 @@
 import { neighbors } from '../graph.js';
 import { isLegalAttack } from '../reducer.js';
-import { MAX_DICE_PER_NODE } from '../state.js';
+import { MAX_DICE_PER_NODE, bodyOf } from '../state.js';
 import { winProbability } from './battleOdds.js';
 
 /**
@@ -81,6 +81,35 @@ export const EXPERT_WEIGHTS = Object.freeze({
 });
 
 /**
+ * The same weights, for a match with a moon in it — **deliberately identical
+ * today, and deliberately its own object.**
+ *
+ * The seam is the point. `EXPERT_WEIGHTS` was found by playing several
+ * thousand games on a single world and is the ladder every difficulty rung is
+ * measured against; the numbers pull against each other hard enough that
+ * moving one to suit a second world could quietly cost thirty points on the
+ * first. Tuning for moon mode has to be able to happen without that being
+ * possible, so it gets somewhere of its own to happen *before* anybody is
+ * tempted to reach for the shared set.
+ *
+ * Nothing has been measured here yet, and this saying so is more useful than
+ * a guess would be. The structural work — regions that stop at a body, income
+ * per world, `sprawl` charged in the currency of the world it is spent on —
+ * is in `readBoard` and below rather than in any weight, because those were
+ * not tuning at all: without them the AI reads a second world as ground that
+ * earns nothing and refuses to set foot on it.
+ *
+ * The one thing known to be missing is a sense of *when*. The gate is shut
+ * half the rounds, and none of the strategies here has any notion of the
+ * round — so the AI garrisons a port against a threat that is about to sail
+ * away, and prices a moon capture the same whether the way home is open or
+ * three rounds off. That is the same gap all three have always had, promoted
+ * from interesting to load-bearing, and a discount by rounds-until-open is
+ * the obvious first thing to try.
+ */
+export const MOON_WEIGHTS = Object.freeze({ ...EXPERT_WEIGHTS });
+
+/**
  * The board this attack would leave if it won: the prize changes hands with
  * all but one of the attacker's dice standing on it.
  *
@@ -96,28 +125,59 @@ function afterWinning(state, from, to, playerId) {
   return { ...state, nodes };
 }
 
+// Reading a nested `owner -> body -> number` table, which is the shape income
+// has to be kept in the moment there is more than one world to earn it on.
+const at = (table, key, inner) => table.get(key)?.get(inner) ?? 0;
+const bump = (table, key, inner, value) => {
+  if (!table.has(key)) table.set(key, new Map());
+  const row = table.get(key);
+  if (value > (row.get(inner) ?? 0)) row.set(inner, value);
+};
+const totalOf = (table, key) => {
+  let sum = 0;
+  for (const value of table.get(key)?.values() ?? []) sum += value;
+  return sum;
+};
+
 /**
  * The board carved into connected regions — every player's, not just mine,
  * because what a capture does to an opponent's income is worth as much as
  * what it does to my own. One pass over the territories; each one is walked
  * exactly once.
+ *
+ * **A region never spans two bodies**, even where a bridge joins them, and
+ * that one line is what keeps this AI honest in moon mode. Reinforcement is
+ * paid on the largest region *within* a body and scattered over that body
+ * alone, so a region walked across a bridge would price a capture at an income
+ * nobody is ever paid — and, worse, would make taking the docking territory
+ * look like a round of free reinforcement, which is precisely the swing
+ * stratified income exists to rule out.
+ *
+ * On a single-world board every node is on the same body, the check never
+ * fires, and every number below is the number this always produced.
  */
 function readBoard(state, playerId) {
   const regionOf = new Map(); // nodeId -> region index
   const size = []; // region index -> territories in it
   const owner = []; // region index -> whose it is
+  const body = []; // region index -> which world it is on
   const members = []; // region index -> its territories
   const holdings = new Map(); // playerId -> territories held
+  const mineOn = new Map(); // body -> territories of mine on it
   const mine = [];
 
   for (const [id, node] of state.nodes) {
     holdings.set(node.owner, (holdings.get(node.owner) ?? 0) + 1);
-    if (node.owner === playerId) mine.push(id);
+    if (node.owner !== playerId) continue;
+    mine.push(id);
+    const where = bodyOf(node);
+    mineOn.set(where, (mineOn.get(where) ?? 0) + 1);
   }
 
   for (const [start, node] of state.nodes) {
     if (regionOf.has(start)) continue;
     const index = size.length;
+    const where = bodyOf(node);
     const found = [];
     const stack = [start];
     regionOf.set(start, index);
@@ -125,28 +185,37 @@ function readBoard(state, playerId) {
       const id = stack.pop();
       found.push(id);
       for (const next of neighbors(state.graph, id)) {
-        if (regionOf.has(next) || state.nodes.get(next).owner !== node.owner) continue;
+        if (regionOf.has(next)) continue;
+        const neighbor = state.nodes.get(next);
+        if (neighbor.owner !== node.owner || bodyOf(neighbor) !== where) continue;
         regionOf.set(next, index);
         stack.push(next);
       }
     }
     size.push(found.length);
     owner.push(node.owner);
+    body.push(where);
     members.push(found);
   }
 
+  // Best region per player *per body*; income is those added up, because the
+  // two worlds pay separately rather than competing to be the biggest.
+  const bestOn = new Map();
+  for (let i = 0; i < size.length; i++) bump(bestOn, owner[i], body[i], size[i]);
+
   const incomeOf = new Map();
-  for (let i = 0; i < size.length; i++) {
-    if (size[i] > (incomeOf.get(owner[i]) ?? 0)) incomeOf.set(owner[i], size[i]);
-  }
+  for (const id of bestOn.keys()) incomeOf.set(id, totalOf(bestOn, id));
 
   return {
     mine,
+    mineOn,
     holdings,
     regionOf,
     size,
     owner,
+    body,
     members,
+    bestOn,
     incomeOf,
     income: incomeOf.get(playerId) ?? 0,
   };
@@ -165,10 +234,16 @@ function readBoard(state, playerId) {
 function largestWithout(state, board, nodeId) {
   const index = board.regionOf.get(nodeId);
   const owner = board.owner[index];
+  const where = board.body[index];
+
+  // Only the body this territory is on can have changed, so the rest of the
+  // owner's income comes along untouched.
+  const elsewhere = board.incomeOf.get(owner) - at(board.bestOn, owner, where);
 
   let best = 0;
   for (let i = 0; i < board.size.length; i++) {
-    if (i !== index && board.owner[i] === owner && board.size[i] > best) best = board.size[i];
+    if (i === index || board.owner[i] !== owner || board.body[i] !== where) continue;
+    if (board.size[i] > best) best = board.size[i];
   }
 
   const seen = new Set([nodeId]); // walled off, so nothing walks through it
@@ -188,27 +263,39 @@ function largestWithout(state, board, nodeId) {
     }
     if (found > best) best = found;
   }
-  return best;
+  return elsewhere + best;
 }
 
 /**
- * What my largest region would be if I took this territory: every region it
+ * What I would be earning if I took this territory: every region of mine it
  * touches merges into one, and every region it doesn't touch is left alone.
+ *
+ * The merge stops at the body boundary, which is the same rule `readBoard`
+ * walks by and matters most here. Taking the moon territory a bridge lands on
+ * while holding the port would otherwise read as joining a moon holding to a
+ * whole planetary empire — one enormous payout, riding on one coin-flip
+ * attack, for a round.
  */
 function incomeAfterTaking(state, board, to, playerId) {
+  const where = bodyOf(state.nodes.get(to));
   const merging = new Set();
   for (const next of neighbors(state.graph, to)) {
     const index = board.regionOf.get(next);
-    if (index !== undefined && board.owner[index] === playerId) merging.add(index);
+    if (index === undefined) continue;
+    if (board.owner[index] !== playerId || board.body[index] !== where) continue;
+    merging.add(index);
   }
 
   let best = 1; // the territory itself
   for (const index of merging) best += board.size[index];
   for (let index = 0; index < board.size.length; index++) {
-    if (board.owner[index] !== playerId || merging.has(index)) continue;
+    if (board.owner[index] !== playerId || board.body[index] !== where) continue;
+    if (merging.has(index)) continue;
     if (board.size[index] > best) best = board.size[index];
   }
-  return best;
+
+  // what the other worlds go on paying, whatever happens here
+  return board.income - at(board.bestOn, playerId, where) + best;
 }
 
 /**
@@ -280,8 +367,19 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
   // capture for below: this one is the standing state of the board, and it is
   // read once before any move is priced, so nothing here can see what the move
   // in hand would do to it.
-  const refill = w.refill * (board.income / Math.max(1, board.mine.length));
-  const holding = (dice) => Math.min(MAX_DICE_PER_NODE, dice + refill);
+  //
+  // Worked out per body, because reinforcement is: dice earned on the moon
+  // land on the moon. A single figure spread over both worlds would tell an
+  // AI with a large planet and a toehold on the moon that the toehold was
+  // about to be reinforced from an income it will never see.
+  const refillOn = (where) =>
+    w.refill * (at(board.bestOn, playerId, where) / Math.max(1, board.mineOn.get(where) ?? 0));
+  const refillCache = new Map();
+  const holding = (id, dice) => {
+    const where = bodyOf(state.nodes.get(id));
+    if (!refillCache.has(where)) refillCache.set(where, refillOn(where));
+    return Math.min(MAX_DICE_PER_NODE, dice + refillCache.get(where));
+  };
 
   // What losing a territory of mine would cost: the ground, the dice standing
   // on it, and whatever it was holding my largest region together with.
@@ -297,11 +395,11 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
     // `emptied` is how exposed that leaves it when the attack *fails* and the
     // target is still a rival; the winning case has to be worked out per
     // target, because the target itself stops being one.
-    const emptied = exposure(state, from, holding(1), playerId);
+    const emptied = exposure(state, from, holding(from, 1), playerId);
     const spent = costOfLosing(from, 1);
     // And the danger it was in before any of this, which is not a cost of
     // attacking and so is handed back at the end.
-    const before = exposure(state, from, holding(strength), playerId)
+    const before = exposure(state, from, holding(from, strength), playerId)
       * costOfLosing(from, strength);
 
     for (const to of neighbors(state.graph, from)) {
@@ -321,8 +419,8 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
         if (next === from) continue;
         const node = state.nodes.get(next);
         if (node.owner !== playerId) continue;
-        const lifted = exposure(state, next, holding(node.dice), playerId)
-          - exposure(state, next, holding(node.dice), playerId, to);
+        const lifted = exposure(state, next, holding(next, node.dice), playerId)
+          - exposure(state, next, holding(next, node.dice), playerId, to);
         relieved += lifted * costOfLosing(next, node.dice);
       }
 
@@ -336,12 +434,25 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
         // what is left standing: an emptied attacker that no longer has the
         // territory it just took to worry about, and the prize itself, whose
         // loss would hand back the income that made it worth taking
-        - w.risk * exposure(state, from, holding(1), playerId, to) * spent
-        - w.risk * exposure(state, to, holding(strength - 1), playerId)
+        - w.risk * exposure(state, from, holding(from, 1), playerId, to) * spent
+        - w.risk * exposure(state, to, holding(to, strength - 1), playerId)
           * (w.land + w.dice * (strength - 1) + w.income * gained)
         // and the income this diverts if it grows nothing: the dice a turn
-        // that would have landed on earning ground and now land here instead
-        - (gained === 0 ? w.sprawl * (board.income / (board.mine.length + 1)) : 0);
+        // that would have landed on earning ground and now land here instead.
+        //
+        // Charged in the currency of the world the capture is *on*, and that
+        // matters far more than it looks. Read across both worlds, a first
+        // landing on the moon looks like ground that grows nothing — the
+        // planet's largest region is untouched by it — so the AI would refuse
+        // the moon outright, for the whole match, on the term that exists to
+        // stop it sprawling. Per body, taking a first moon territory takes
+        // that world's income from nothing to one and is not charged at all,
+        // which is the correct reading of the same rule.
+        - (gained === 0
+          ? w.sprawl
+            * (at(board.bestOn, playerId, bodyOf(defender))
+              / ((board.mineOn.get(bodyOf(defender)) ?? 0) + 1))
+          : 0);
 
       const lost =
         -w.dice * (strength - 1) // the stack, spent for nothing

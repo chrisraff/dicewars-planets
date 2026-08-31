@@ -9,7 +9,25 @@ import {
 } from '../src/game/settings.js';
 
 const players = settingDefinition('players');
-const moon = settingDefinition('moon');
+
+/**
+ * A stand-in for an option whose feature is not finished, rather than
+ * whichever real setting happens to be unfinished today.
+ *
+ * These two tests used to name `moon`, and the day the moon was built they
+ * failed — which is exactly backwards, because nothing about the mechanism
+ * they are testing had changed. `settingRowView` is pure and takes a
+ * definition, so it can simply be handed one.
+ */
+const unbuilt = {
+  key: 'unbuilt',
+  label: 'Unbuilt',
+  help: 'What it will do, once there is anything to do it.',
+  kind: 'toggle',
+  default: false,
+  available: false,
+  note: 'Not built yet',
+};
 
 test('a choice row marks exactly the value in force', () => {
   const row = settingRowView(players, 6);
@@ -32,17 +50,17 @@ test('an option that is available is not disabled and carries no note', () => {
 });
 
 test('an option whose feature is unbuilt is disabled, and says why', () => {
-  const row = settingRowView(moon, false);
+  const row = settingRowView(unbuilt, false);
   assert.equal(row.disabled, true);
-  assert.equal(row.note, moon.note, 'the menu should not leave it a mystery');
+  assert.equal(row.note, unbuilt.note, 'the menu should not leave it a mystery');
   assert.ok(row.help.length > 0, 'and should still explain what it will do');
 });
 
 test('an unavailable toggle shows its default however it is asked', () => {
   // a stale stored setting or a hand-edited URL must not make the menu claim
   // something is on when the pipeline will refuse to turn it on
-  assert.equal(settingRowView(moon, true).checked, moon.default);
-  assert.equal(settingRowView(moon, false).checked, moon.default);
+  assert.equal(settingRowView(unbuilt, true).checked, unbuilt.default);
+  assert.equal(settingRowView(unbuilt, false).checked, unbuilt.default);
 });
 
 test('every row carries what the menu needs to draw it', () => {

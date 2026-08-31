@@ -16,7 +16,9 @@ export const MAX_PLAYERS = 8;
  * but the thing it controls has not been built. The menu greys it out and
  * shows its `note`, which is the point: it tells a player what is coming.
  * `normalizeSettings` pins it to its default, so nothing downstream can be
- * handed a setting the game cannot honor. This is how `moon` sits.
+ * handed a setting the game cannot honor. Nothing sits here at the moment —
+ * `moon` did until it was built — which is exactly the state this flag is for
+ * arriving at.
  *
  * `hidden: true` — the menu does not draw it at all. For an option that works
  * but is not ready to be offered, where a greyed-out row would be advertising
@@ -89,11 +91,14 @@ export const SETTING_DEFINITIONS = [
   {
     key: 'moon',
     label: 'Moon',
-    help: 'A moon passes overhead, bridging the territories it covers as it goes.',
+    help:
+      'A second world, unclaimed and worth taking. Two marked spaceports on '
+      + 'opposite sides of the planet take turns passing under it, so the way '
+      + 'up is open every other round and never at the same end twice. What '
+      + 'you earn there stays there.',
     kind: 'toggle',
     default: false,
-    available: false,
-    note: 'Not built yet',
+    available: true,
   },
 ];
 

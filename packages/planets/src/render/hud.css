@@ -773,6 +773,7 @@
 }
 
 .hud-menu,
+.hud-orbit,
 .hud-replay-open,
 .hud-end-turn {
   pointer-events: auto;
@@ -789,9 +790,11 @@
   backdrop-filter: blur(2px);
 }
 .hud-menu:hover,
+.hud-orbit:hover:not(:disabled),
 .hud-replay-open:hover,
 .hud-end-turn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
 .hud-menu:active,
+.hud-orbit:active:not(:disabled),
 .hud-replay-open:active,
 .hud-end-turn:active:not(:disabled) { background: rgba(255, 255, 255, 0.3); }
 .hud-end-turn:disabled { opacity: 0.3; cursor: default; }
@@ -800,6 +803,7 @@
    with it. Both are quieter than End turn for the same reason — the loud
    button on this row should be the move, not the door. */
 .hud-menu,
+.hud-orbit,
 .hud-replay-open {
   font-weight: 500;
   opacity: 0.75;
@@ -807,7 +811,57 @@
   padding-right: 0.8rem;
 }
 .hud-menu:hover,
+.hud-orbit:hover:not(:disabled),
 .hud-replay-open:hover { opacity: 1; }
+
+/* ---- the orbit dial --------------------------------------------- */
+
+/* Where the moon is, and the way across to it, in one control — see
+   `orbitDialView`. It reads as furniture rather than as an alert: the moon is
+   always up there, and this is only ever saying how far round its circuit it
+   has got. */
+.hud-orbit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* Setting `display` at all is what makes this rule necessary: the `hidden`
+   attribute works by way of `display: none` in the browser's own stylesheet,
+   and any author rule setting `display` outranks it. Without this the dial
+   stayed on screen in a game with no moon in it. */
+.hud-orbit[hidden] { display: none; }
+.hud-orbit:disabled { opacity: 0.3; cursor: default; }
+/* Brighter while the gate is open, which is the one state worth catching out
+   of the corner of an eye — it is the round you can actually cross. */
+.hud-orbit.is-open { opacity: 1; border-color: rgba(140, 216, 255, 0.65); }
+
+/* The destination, not the state — the button says where pressing it goes.
+   Held on one line so the controls row never reflows as the word changes
+   between "Moon" and "Planet". */
+.hud-orbit-label { white-space: nowrap; }
+
+.hud-orbit-dial {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+/* A tick per stop, drawn as it *is* rather than as a countdown: filled is a
+   stop that opens a door, hollow is a stop over open space. Reading the next
+   window off it is then a matter of looking rather than of being told. */
+.hud-orbit-dial i {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  border: 1px solid rgba(140, 216, 255, 0.55);
+  background: transparent;
+}
+.hud-orbit-dial i.is-door { background: rgba(140, 216, 255, 0.75); }
+/* And a ring round wherever the moon has got to. Outside the tick rather than
+   inside it, so it never changes what the tick itself is saying. */
+.hud-orbit-dial i.is-now {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.9);
+}
 
 /* ---- winner banner ---------------------------------------------- */
 

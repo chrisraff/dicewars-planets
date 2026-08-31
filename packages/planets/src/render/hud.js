@@ -272,6 +272,57 @@ export function autoFollowButtonView(status) {
 }
 
 /**
+ * The orbit dial: where the moon is, and the way across to it.
+ *
+ * One control rather than two, and that is the decision worth keeping. The
+ * moon needs a switch and it needs a schedule, and putting them in the same
+ * widget means the answer to "is it worth going up" is on the thing you press
+ * to go. It sits in the controls row beside Menu, so it is furniture rather
+ * than an alert — the moon is always there, and the dial is only ever telling
+ * you where in its round it has got to.
+ *
+ * The stops are drawn as they *are*, not as a countdown: a filled tick is a
+ * stop that opens a door, a hollow one is a stop over open space, and the
+ * ring marks where the moon is now. A player can read their next window off
+ * it without being told, which is the whole reason the orbit is a published
+ * timetable rather than something that moves when it feels like it.
+ *
+ * Null on a match with no moon in it, which is what keeps the row exactly as
+ * it was for a single-world game.
+ */
+export function orbitDialView(status) {
+  const { gate = null, shown = 'planet', portName = null, replayOpen = false } = status;
+  if (!gate) return null;
+
+  const stops = Array.from({ length: gate.stops }, (_, index) => ({
+    index,
+    // even stops are the ones over a port — the same rule `orbitAt` reads,
+    // stated once here for the dial rather than threaded through as data
+    open: index % 2 === 0,
+    current: index === gate.stop,
+  }));
+
+  const where = gate.open
+    ? `Docked${portName ? ` at ${portName}'s port` : ''}`
+    : 'Over open space';
+  const next = gate.nextOpen ? 'a port opens next round' : 'open space next round';
+
+  return {
+    // Pressing it goes to the board you are not looking at, so the label is
+    // the destination rather than the state — a button says what happens.
+    to: shown === 'planet' ? 'moon' : 'planet',
+    label: shown === 'planet' ? 'Moon' : 'Planet',
+    stops,
+    open: gate.open,
+    title: `${where} — ${next}`,
+    // A replay is a record of a match, and the moon in it moved when it moved;
+    // offering to switch boards mid-replay would be offering to change what is
+    // being watched rather than where it is watched from.
+    disabled: replayOpen,
+  };
+}
+
+/**
  * The prompt a first-time player gets on their turn, or `null` when there is
  * nothing worth saying.
  *
@@ -430,6 +481,10 @@ export function createHud(
       <div class="hud-controls-row">
         <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
         <span class="hud-buttons">
+          <button class="hud-orbit" type="button" hidden>
+            <span class="hud-orbit-dial" aria-hidden="true"></span>
+            <span class="hud-orbit-label"></span>
+          </button>
           <button class="hud-replay-open" type="button" hidden>Replay</button>
           <button class="hud-menu" type="button">Menu</button>
           <button class="hud-end-turn" type="button">End turn</button>
@@ -486,6 +541,10 @@ export function createHud(
   let hintShown = null; // so a repaint doesn't rebuild the sentence, or re-announce it
   const reinforceTray = root.querySelector('.hud-reinforce');
   let reinforceChips = []; // one per die, left to right — popped from the right
+  const orbitButton = root.querySelector('.hud-orbit');
+  const orbitDial = root.querySelector('.hud-orbit-dial');
+  const orbitLabel = root.querySelector('.hud-orbit-label');
+  let orbitStops = 0; // so a repaint moves the marker instead of rebuilding the ticks
   const endTurnButton = root.querySelector('.hud-end-turn');
   const menuButton = root.querySelector('.hud-menu');
   const banner = root.querySelector('.hud-banner');
@@ -885,6 +944,40 @@ export function createHud(
     onAutoFollow(handler) {
       autoFollowButton.addEventListener('click', handler);
       replayFollowButton.addEventListener('click', handler);
+    },
+
+    /**
+     * The orbit dial — see `orbitDialView`. Guarded the same way the
+     * auto-follow button is, and for the same reason: `refreshBoard` runs
+     * every frame while dice are in the air, and the ticks only ever change
+     * once a round.
+     */
+    showOrbit(status) {
+      const view = orbitDialView(status);
+      if (!view) {
+        orbitButton.hidden = true;
+        return;
+      }
+      orbitButton.hidden = false;
+      orbitButton.disabled = view.disabled;
+      orbitButton.title = view.title;
+      orbitButton.setAttribute('aria-label', `Show the ${view.to}. ${view.title}`);
+      orbitLabel.textContent = view.label;
+      orbitButton.classList.toggle('is-open', view.open);
+
+      if (orbitStops !== view.stops.length) {
+        orbitStops = view.stops.length;
+        orbitDial.replaceChildren(...view.stops.map(() => document.createElement('i')));
+      }
+      view.stops.forEach((stop, index) => {
+        const tick = orbitDial.children[index];
+        tick.classList.toggle('is-door', stop.open);
+        tick.classList.toggle('is-now', stop.current);
+      });
+    },
+
+    onOrbit(handler) {
+      orbitButton.addEventListener('click', handler);
     },
 
     /**

@@ -17,6 +17,7 @@ const PAGES = [
   'touch',
   'surrender',
   'terrain',
+  'moon',
 ];
 
 /**

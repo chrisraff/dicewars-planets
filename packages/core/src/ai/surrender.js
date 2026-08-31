@@ -1,4 +1,4 @@
-import { largestConnectedRegionSize, livingPlayerIds } from '../state.js';
+import { incomeFor, livingPlayerIds } from '../state.js';
 
 /**
  * How far behind a player has to be before they give the game up.
@@ -51,6 +51,12 @@ export const SURRENDER_TUNING = { diceRatio: 6, regionRatio: 6 };
  * handed a win while another player is ahead of them, and that is by
  * construction rather than by measurement.
  *
+ * The region measure is `incomeFor` rather than the largest region on the
+ * board, so that a player whose ground is split between the planet and the
+ * moon is judged on what they will actually be paid. On a single-world board
+ * the two are the same function; on a two-world one, reading it as one graph
+ * would call a player finished for holding two halves of a real income.
+ *
  * Deliberately not a judgement any *strategy* makes, and deliberately not
  * anything the reducer knows: surrendering changes no rule and no state. It
  * is only an opinion about the position, which is why a caller is free to
@@ -62,7 +68,7 @@ export function surrenderedPlayerIds(state, tuning = SURRENDER_TUNING) {
   if (living.length === 0) return new Set();
 
   const standing = new Map(
-    living.map((id) => [id, { dice: 0, region: largestConnectedRegionSize(state, id) }])
+    living.map((id) => [id, { dice: 0, region: incomeFor(state, id) }])
   );
   for (const node of state.nodes.values()) {
     const player = standing.get(node.owner);

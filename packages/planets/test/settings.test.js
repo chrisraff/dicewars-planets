@@ -90,10 +90,18 @@ test('a fractional player count is rounded, not truncated to nonsense', () => {
 test('an option whose feature is not built cannot be switched on', () => {
   // the menu greys it out, but nothing stops a URL or stale storage asking for
   // it — the pipeline is what guarantees downstream never sees it enabled
+  const size = settingDefinition('size');
+  assert.equal(size.available, false, 'this test is about an unavailable option');
+  assert.equal(normalizeSettings({ size: 4 }).size, size.default);
+  assert.equal(normalizeSettings({ size: '4' }).size, size.default);
+});
+
+test('the moon can be switched on, from a URL as readily as from the menu', () => {
   const moon = settingDefinition('moon');
-  assert.equal(moon.available, false, 'this test is about an unavailable option');
-  assert.equal(normalizeSettings({ moon: true }).moon, moon.default);
-  assert.equal(normalizeSettings({ moon: '1' }).moon, moon.default);
+  assert.equal(moon.available, true);
+  assert.equal(normalizeSettings({ moon: true }).moon, true);
+  assert.equal(normalizeSettings({ moon: '1' }).moon, true);
+  assert.equal(normalizeSettings({}).moon, false, 'and is off unless asked for');
 });
 
 test('the query string is read for anything it names, and only that', () => {

@@ -7,6 +7,15 @@ export {
   isPlayerAlive,
   livingPlayerIds,
   largestConnectedRegionSize,
+  incomeFor,
+  bodyOf,
+  bodiesOf,
+  reserveOn,
+  withReserveOn,
+  reserveFor,
+  totalReserve,
+  DEFAULT_BODY,
+  NEUTRAL_OWNER,
   serializeState,
   reviveState,
   MAX_DICE_PER_NODE,
@@ -22,7 +31,12 @@ export {
   defensiveMovesFor,
   DEFENSIVE_TUNING,
 } from './ai/defensiveStrategy.js';
-export { createExpertStrategy, expertMovesFor, EXPERT_WEIGHTS } from './ai/expertStrategy.js';
+export {
+  createExpertStrategy,
+  expertMovesFor,
+  EXPERT_WEIGHTS,
+  MOON_WEIGHTS,
+} from './ai/expertStrategy.js';
 export { winProbability } from './ai/battleOdds.js';
 export { surrenderedPlayerIds, SURRENDER_TUNING } from './ai/surrender.js';
 export { wrapLegacyAi } from './ai/legacyAdapter.js';

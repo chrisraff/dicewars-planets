@@ -1,4 +1,4 @@
-import { getCurrentPlayerId, MAX_RESERVE } from '@dicewars/core';
+import { getCurrentPlayerId, totalReserve, MAX_RESERVE } from '@dicewars/core';
 
 export { MAX_RESERVE };
 
@@ -8,9 +8,9 @@ export { MAX_RESERVE };
  *
  * The banked dice are core's `reserve` — end-of-turn reinforcements that had
  * nowhere to land because every territory the player owns was already full.
- * They stay banked (capped at MAX_RESERVE) and pay out on a later turn once
- * there's room, so a big reserve means a player is about to spill dice across
- * the board the moment they take any ground.
+ * They stay banked (capped at MAX_RESERVE, per world) and pay out on a later
+ * turn once there's room, so a big reserve means a player is about to spill
+ * dice across the board the moment they take any ground.
  *
  * Players are never dropped from the list when they're knocked out — the row
  * would reshuffle under the reader's eyes — they're just marked `alive: false`.
@@ -29,7 +29,8 @@ export function playerStatsFor(state, playerIds = state.turnOrder) {
     return {
       id,
       territories: held,
-      reserve: state.players.get(id)?.reserve ?? 0,
+      // every world's bank, since the badge is one number — see `totalReserve`
+      reserve: totalReserve(state.players.get(id)),
       alive: held > 0,
       isCurrent: id === current,
       isWinner: over && id === state.winner,

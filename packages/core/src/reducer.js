@@ -59,7 +59,12 @@ export function reduce(state, action, deps = {}) {
       // the one who just lost the defending territory. And when that is the
       // second-to-last player standing, the match is decided in that same
       // instant.
-      if (result.attackerWins && !stillHoldsGround(nodes, result.defenderOwner)) {
+      //
+      // `players.has` because unclaimed ground has an owner too (`NEUTRAL_OWNER`)
+      // and taking the last of it is not a knockout: nobody was playing it, so
+      // there is no rival to announce and no seat to remove from the game.
+      const defenderPlays = state.players.has(result.defenderOwner);
+      if (defenderPlays && result.attackerWins && !stillHoldsGround(nodes, result.defenderOwner)) {
         events.push({
           type: 'eliminated',
           playerId: result.defenderOwner,
@@ -78,10 +83,10 @@ export function reduce(state, action, deps = {}) {
 
     case 'END_TURN': {
       const playerId = getCurrentPlayerId(state);
-      const { state: reinforced, earned, landed } = applyReinforcement(state, playerId, deps);
+      const { state: reinforced, earned, landed, byBody } = applyReinforcement(state, playerId, deps);
       const advanced = advanceTurn(reinforced);
 
-      const events = [{ type: 'endTurn', playerId, earned, landed }];
+      const events = [{ type: 'endTurn', playerId, earned, landed, byBody }];
       if (advanced.phase === 'gameover') {
         events.push({ type: 'gameOver', winner: advanced.winner });
       }

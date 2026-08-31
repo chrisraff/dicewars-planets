@@ -98,6 +98,14 @@ export const PREVIEW_PAGES = [
       + 'down to a sixth, and an ordinary match where the call is the right one.',
   },
   {
+    href: '/preview/moon.html',
+    title: 'Moon & orbit',
+    description:
+      'The second world, carved live: the equatorial band the spin presents, the polar caps '
+      + 'behind it, and the garrisons each is dealt. Plus the orbit dial at every stop of its '
+      + 'circuit, and the three properties the mode rests on counted over a few hundred moons.',
+  },
+  {
     href: '/preview/terrain.html',
     title: 'Terrain & lakes',
     description:

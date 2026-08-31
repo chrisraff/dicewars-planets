@@ -1,5 +1,12 @@
 import { SELECTION_COLOR, WHITE } from './palette.js';
 
+// The gate's own colour, and deliberately not white. Every other mark on the
+// board is a lift toward white or a fall toward black, so a third white lift
+// at a fourth strength would be one more thing to tell apart by brightness
+// alone. A cold pale blue says "this mark is about the moon" without
+// competing with anything that is about the move being made.
+const GATE_COLOR = [0.55, 0.85, 1];
+
 // How each called-out territory is tinted: a color to blend toward, and how
 // far. The territory you've picked up goes dark, which reads unambiguously
 // against every player color and makes the pale dice on top of it pop; the
@@ -30,6 +37,29 @@ export const HIGHLIGHT = {
   // times the target's, and the only mark that ever appears and disappears
   // with a hand. It outranks every other mark for the same reason.
   pressed: { color: WHITE, amount: 0.55 },
+
+  /**
+   * The two standing marks moon mode adds, and both are answers to "where"
+   * rather than to "what could you do".
+   *
+   * `port` is on a spaceport for the whole match, because a port is ground
+   * worth fighting over from the first turn whether or not the moon is
+   * overhead, and it can change hands like any other territory.
+   *
+   * `docked` is the pair the gate is joining *now*, one end on each board, so
+   * the link is visible from either side. Faint enough that neither ever
+   * competes with a mark about the move in hand — they are furniture, and
+   * every gameplay mark is written over the top of them.
+   *
+   * `docked` is judged on the **moon** rather than on the planet, which is
+   * where it wants to be weakest. A planet territory is one of fifty-odd and
+   * takes a strong tint as "red, marked"; a moon territory is one of ten,
+   * covers most of the near side, and starts from a flat grey — so the same
+   * amount stopped reading as a mark on unclaimed ground and started reading
+   * as a ninth player's colour.
+   */
+  port: { color: GATE_COLOR, amount: 0.16 },
+  docked: { color: GATE_COLOR, amount: 0.3 },
 };
 
 /**
@@ -53,8 +83,19 @@ export function highlightsFor({
   attack = null,
   pressed = null,
   pulse = 1,
+  ports = [],
+  gate = null,
 } = {}) {
   const marks = new Map();
+
+  // First, so everything below writes over them: these say where the moon's
+  // door is, which is a standing fact about the board rather than anything
+  // about the move being considered on it.
+  for (const id of ports) marks.set(id, HIGHLIGHT.port);
+  if (gate?.open) {
+    marks.set(gate.port, HIGHLIGHT.docked);
+    marks.set(gate.dock, HIGHLIGHT.docked);
+  }
 
   for (const id of targets) marks.set(id, HIGHLIGHT.target);
   if (selection !== null) marks.set(selection, HIGHLIGHT.selected);

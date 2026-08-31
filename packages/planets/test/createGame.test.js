@@ -350,10 +350,18 @@ test('a real generated planet plays through to a winner', () => {
   const world = generatePlanetWorld({ subdivisions: 3, playerIds, rng });
 
   // nobody at the human seat, so every player is on autopilot
+  //
+  // Both sources of chance are pinned, and the second one was missing. With
+  // only `rollDie` given, core falls back to `Math.random` for where
+  // reinforcement scatters — so this test played a different match every run
+  // and about one in twelve of them had not reached a winner inside the hour
+  // of game time below. A test that fails once a fortnight for no reason is
+  // worse than no test, and pinning `rng` is what the dependency is for.
   const game = createGame({
     world,
     humanPlayerId: AUTOPLAY,
     rollDie: () => 1 + Math.floor(rng() * 6),
+    rng: seededRng(97),
   });
 
   const attacks = [];

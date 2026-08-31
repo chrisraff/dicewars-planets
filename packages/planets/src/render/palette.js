@@ -14,6 +14,22 @@ export const DEFAULT_PLAYER_COLORS = [
 const UNOWNED_COLOR = [0.25, 0.25, 0.25];
 const OCEAN_COLOR = [0.05, 0.22, 0.5];
 
+/**
+ * The moon's two greys.
+ *
+ * `CHANNEL_COLOR` is what the moon has instead of ocean — the trenches
+ * dividing its territories — and it is darker than the water on the planet
+ * for the same reason it is grey: the two worlds have to be told apart at a
+ * glance from a thumbnail of either.
+ *
+ * `NEUTRAL_COLOR` is unclaimed ground, and it has to sit clearly between the
+ * channel it borders and the eight player colours it will be taken by. Light
+ * enough that a channel reads as a hole through it, flat enough that it never
+ * looks like a ninth player.
+ */
+const CHANNEL_COLOR = [0.09, 0.09, 0.11];
+const NEUTRAL_COLOR = [0.34, 0.35, 0.38];
+
 // What a territory is tinted toward when you pick it up to attack with. Dark
 // enough to read as "held" against every player color, and dark enough that
 // the pale dice standing on it stand out rather than wash into it.
@@ -92,4 +108,4 @@ export function assignPlayerColors(playerIds, palette = DEFAULT_PLAYER_COLORS) {
   return colors;
 }
 
-export { UNOWNED_COLOR, OCEAN_COLOR, SELECTION_COLOR, WHITE };
+export { UNOWNED_COLOR, OCEAN_COLOR, CHANNEL_COLOR, NEUTRAL_COLOR, SELECTION_COLOR, WHITE };

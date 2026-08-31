@@ -31,7 +31,7 @@ const STORAGE_KEY = 'dicewars-planets:game';
 /** The one shape everything below agrees on. */
 export function gameSave({
   seed, settings, humanPlayerId, world, state, replay, camera, playedOn = false,
-  surrenderOffered = false,
+  surrenderOffered = false, round = 0,
 }) {
   return {
     version: SAVE_VERSION,
@@ -54,6 +54,12 @@ export function gameSave({
     // that anything had happened.
     playedOn,
     surrenderOffered,
+    // Where the moon is. Everything about the orbit is a function of this one
+    // number — which port is under it, which territory is facing, when the
+    // gate next opens — so a single integer is the whole of what has to
+    // survive a reload. Optional for the same reason the two flags above are:
+    // a save written by a single-world game simply means round zero.
+    round,
   };
 }
 
@@ -92,7 +98,9 @@ export function isUsableCamera(camera) {
  * FNV-1a, over a few thousand short strings — it runs once when a game is
  * saved and once when one is picked up, and never in a frame.
  */
-export function worldFingerprint({ playerIds, nodeIds, edges, cellTerritory, oceanCellIds }) {
+export function worldFingerprint({
+  playerIds, nodeIds, edges, cellTerritory, oceanCellIds, moon, spaceports,
+}) {
   let hash = 0x811c9dc5;
   const feed = (value) => {
     const text = `${value}|`;
@@ -106,6 +114,12 @@ export function worldFingerprint({ playerIds, nodeIds, edges, cellTerritory, oce
   feed(oceanCellIds?.size ?? oceanCellIds?.length ?? 0);
   for (const [a, b] of edges) feed(`${a}-${b}`);
   for (const [cellId, territoryId] of cellTerritory) feed(`${cellId}:${territoryId}`);
+
+  // The moon is grown from the same seed and is just as much a fact about
+  // which board this is — and its cells are its own, so they have to be fed
+  // separately or two different moons over one planet would agree.
+  feed(spaceports?.join(',') ?? '');
+  for (const [cellId, territoryId] of moon?.cellTerritory ?? []) feed(`m${cellId}:${territoryId}`);
 
   return hash >>> 0;
 }
