@@ -380,3 +380,19 @@ h1 {
   flex: 1 1 22rem;
   min-width: 0;
 }
+
+/* A scenario whose seeds no longer grow the match its caption describes. Loud
+   on purpose: the failure this replaces was a page that rendered nothing at
+   all, and the one before that was a caption quietly describing the wrong
+   game. `>` for the reason at the top of this section. */
+.scenario > .scenario-stale {
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid #c2703a;
+  background: #241a12;
+  border-radius: 0 0.3rem 0.3rem 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #d8a271;
+  max-width: 46rem;
+}

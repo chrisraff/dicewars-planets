@@ -142,14 +142,26 @@ function openReplay(hudHost) {
   watch?.click();
 }
 
-function addScenario({ title, note, match, readout }) {
+function addScenario({ title, note, match, readout, expects }) {
+  const stale = staleness(match, expects);
+
   const section = document.createElement('section');
   section.className = 'scenario';
-  section.innerHTML = '<h2></h2><p></p><div class="stage is-hud is-planet"></div>'
+  section.innerHTML = '<h2></h2><p class="scenario-stale" hidden></p><p></p>'
+    + '<div class="stage is-hud is-planet"></div>'
     + '<p class="scenario-actions"><button class="preview-button" type="button"></button></p>'
     + '<pre class="menu-readout"></pre>';
   section.querySelector('h2').textContent = title;
-  section.querySelector('p').textContent = note;
+  section.querySelector('p:not(.scenario-stale)').textContent = note;
+
+  if (stale.length > 0) {
+    const warning = section.querySelector('.scenario-stale');
+    warning.hidden = false;
+    warning.textContent = `Stale: ${stale.join('; ')}. The caption below describes the `
+      + 'match these seeds used to grow, not the one on the planet — a seed is only a match '
+      + 'while the generator and the AI stay put. Re-choose the seeds, or re-word the claim.';
+  }
+
   scenarios.append(section);
 
   const stage = section.querySelector('.stage');
@@ -197,16 +209,73 @@ function addScenario({ title, note, match, readout }) {
   animate();
 }
 
+/**
+ * What a scenario claims about its match, checked against the match that was
+ * actually played — because **a seed is only a match while everything it feeds
+ * stays put**, and this page has already been through that once: the terrain
+ * rework grew different planets from the same numbers, and both exhibits
+ * stopped firing a surrender at all.
+ *
+ * The failure was silent and total. `readoutFor` dereferenced a `surrender`
+ * that was now `null`, and it did so as an *argument* to the first
+ * `addScenario` call — so the module threw at the top level and neither
+ * scenario drew. A page that exists to be looked at rendered nothing, and
+ * nothing in `npm run build` noticed, because compiling a preview only catches
+ * a break at compile time.
+ *
+ * So a scenario now says what it expects and the page checks. The point is not
+ * to keep working when the claim has gone stale — it cannot; the caption is
+ * prose about a specific game. The point is to **say so on the page**, loudly,
+ * instead of dying or, worse, drawing a different match under a caption
+ * describing the old one.
+ */
+function staleness(match, expects = {}) {
+  const problems = [];
+  const { surrender, watching, winner } = match;
+
+  if (expects.fires && !surrender) {
+    problems.push('no surrender fires in this match at all');
+  }
+  if (expects.fires === false && surrender) {
+    problems.push('a surrender fires in this match, which it is here to show does not');
+  }
+  if (surrender && expects.watchedWins !== undefined) {
+    const won = winner === watching;
+    if (won !== expects.watchedWins) {
+      problems.push(won
+        ? `${nameOf(watching)} goes on to win it, so the call was sound`
+        : `${nameOf(watching)} does not go on to win it`);
+    }
+  }
+  return problems;
+}
+
 function readoutFor(match, verdict) {
   const { surrender } = match;
-  const me = surrender.standings.find((row) => row.id === match.watching);
-  const best = surrender.standings.find((row) => row.id !== match.watching);
-  const lines = [
+  const head = [
     `watching          ${nameOf(match.watching)} (${match.settings.players} players, ${match.settings.difficulty})`,
     `seeds             world ${match.seed}, play ${match.gameSeed}`,
     `ratio             a ${match.tuning ? 'quarter — the ratio this game is the argument against'
       : 'sixth — the shipped one'}`,
     '',
+  ];
+
+  // The seeds no longer grow the match this exhibit was chosen for. Say what
+  // they do grow, which is the only honest thing left to print.
+  if (!surrender) {
+    return [
+      ...head,
+      `surrender fires   never — ${match.attacks} attacks over ${match.turns} turns`,
+      `won by            ${nameOf(match.winner)}`,
+      '',
+      verdict,
+    ].join('\n');
+  }
+
+  const me = surrender.standings.find((row) => row.id === match.watching);
+  const best = surrender.standings.find((row) => row.id !== match.watching);
+  return [
+    ...head,
     `surrender fires   after attack ${surrender.attacks} of ${match.attacks}`
       + `  (turn ${surrender.turn} of ${match.turns}, ${surrender.standings.length} players still alive)`,
     `${nameOf(match.watching)} holds        ${me.terr} territories, ${me.dice} dice, largest region ${me.region}`,
@@ -215,29 +284,38 @@ function readoutFor(match, verdict) {
     `actually won by   ${nameOf(match.winner)}, ${match.attacks - surrender.attacks} attacks later`,
     '',
     verdict,
-  ];
-  return lines.join('\n');
+  ].join('\n');
 }
 
 // --- the two matches ------------------------------------------------------
+//
+// Re-chosen after the terrain rework, which grew different planets from the
+// numbers this page used to name and left both exhibits firing nothing at all.
+// Found by sweeping 3,566 six-player expert matches and judging every seat at
+// both tunings: 3,559 firings at the shipped sixth, none of them wrong; 3,568
+// at a quarter, two of them wrong. Both of those two have the same shape the
+// original pair had — early, on a full field, on a player who is wide rather
+// than deep — which is what makes the argument reproducible rather than lucky.
 
 // Deliberately judged at a quarter rather than the shipped sixth: this is the
-// match that argued the ratio down, and at the tuning the game actually uses
+// match that argues the ratio down, and at the tuning the game actually uses
 // it never fires at all.
 const upset = playMatch({
-  players: 6, difficulty: 'expert', worldSeed: 5304, gameSeed: 1015472, watching: 'p2',
+  players: 6, difficulty: 'expert', worldSeed: 1854622640, gameSeed: 531571878, watching: 'p2',
   tuning: { diceRatio: 4, regionRatio: 4 },
 });
 
 addScenario({
   title: 'Why the ratio is a sixth',
-  note: 'Judged at a quarter, this match calls itself over a tenth of the way in. Blue holds half '
-    + 'the planet and every rival is under a quarter of Blue on both counts — and Red goes on to '
-    + 'win it anyway, 580 attacks later. Look at what is wrong with the position: nobody has been '
-    + 'knocked out yet, and Blue is wide rather than deep, 25 territories carrying 54 dice between '
-    + 'them. That is a shape a board can be taken back off you. Scrub forward and watch it happen. '
-    + 'At the sixth the game ships with, this never fires at all.',
+  note: 'Judged at a quarter, this match calls itself a seventh of the way in. Blue holds more '
+    + 'than half the planet and every rival is under a quarter of Blue on both counts — and '
+    + 'Yellow goes on to win it anyway, 518 attacks later. Look at what is wrong with the '
+    + 'position: nobody has been knocked out yet, and Blue is wide rather than deep, 32 '
+    + 'territories carrying 90 dice between them. That is a shape a board can be taken back off '
+    + 'you. Scrub forward and watch it happen. At the sixth the game ships with, this never '
+    + 'fires at all.',
   match: upset,
+  expects: { fires: true, watchedWins: false },
   readout: readoutFor(
     upset,
     'at the shipped sixth this match is never called — the surrender simply never appears'
@@ -245,15 +323,17 @@ addScenario({
 });
 
 const sound = playMatch({
-  players: 6, difficulty: 'expert', worldSeed: 4017, gameSeed: 901163, watching: 'p2',
+  players: 6, difficulty: 'expert', worldSeed: 108541616, gameSeed: 793534623, watching: 'p3',
 });
 
 addScenario({
   title: 'The surrender as it usually goes',
-  note: 'The same rule on an ordinary match, for contrast: three players left, three quarters of '
-    + 'the way in, and the hundred attacks the banner skips are the mopping up nobody wants to '
-    + 'sit through. Scrub past the surrender point and there is no comeback in it — which is the '
-    + 'case the feature exists for, and by a wide margin the usual one.',
+  note: 'The same rule on an ordinary match, for contrast: three players left, seven tenths of '
+    + 'the way in, and the ninety-seven attacks the banner skips are the mopping up nobody wants '
+    + 'to sit through. Scrub past the surrender point and there is no comeback in it — which is '
+    + 'the case the feature exists for, and by a wide margin the usual one.',
   match: sound,
-  readout: readoutFor(sound, 'this is what the other 1,196 firings in the search looked like'),
+  expects: { fires: true, watchedWins: true },
+  readout: readoutFor(sound, 'this is what all 3,559 firings at the sixth looked like in that '
+    + 'sweep — not one of them wrong'),
 });

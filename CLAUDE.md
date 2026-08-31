@@ -1478,20 +1478,34 @@ from the game is worse than none.
   is what makes "the game where the surrender was wrong" a thing that can be
   looked at twice.
 
-  **Both of its matches are currently stale, and the way they went stale is the
+  **Both of its matches went stale once, and the way they went stale is the
   point.** A seed is only a match while everything it feeds stays put; the
-  terrain rework grows a different planet from the same number, so neither
-  pinned game is the game its caption describes and neither fires a surrender
-  at all. That is checkable at any commit by playing the two seeds headlessly.
-  Re-choosing exhibit 2 is a seed search — sound surrenders are common, 2,719
-  firings in a 13,609-seat sweep. Exhibit 1 has no replacement: re-measured
-  against the current generator and AI, a quarter makes **zero** wrong calls in
-  2,726 firings across 2–8 players and both expert rungs, where the original
-  measurement found one in 694. So the match that argued the ratio down is a
-  shape this generator no longer deals, and re-doing that page means deciding
-  what it is now arguing before choosing seeds for it. `difficulty` in both was
-  repointed from `hard` to `expert` when the ladder gained a rung, which keeps
-  the *intent* — the strongest opponent — whatever the seeds end up being.
+  terrain rework grew a different planet from the same number, so neither
+  pinned game was the game its caption described and neither fired a surrender
+  at all. That is checkable at any commit by playing the seeds headlessly.
+
+  It failed *silently and totally*, which is the part worth remembering.
+  `readoutFor` dereferenced a `surrender` that was now `null`, and it did so as
+  an **argument** to the first `addScenario` call — so the module threw at the
+  top level and neither scenario drew. A page that exists to be looked at
+  rendered nothing, and `npm run build` did not notice, because compiling a
+  preview only catches a break at compile time. Both halves of that are now
+  fixed: `readoutFor` prints what the seeds *do* grow when nothing fires, and a
+  scenario declares what it `expects` so the page can put a **stale** banner
+  over a caption that no longer matches its match. The point is not to keep
+  working when a claim goes stale — a caption is prose about a specific game —
+  but to say so on the page instead of dying, or drawing a different match
+  under the old words.
+
+  The seeds were then re-chosen, by sweeping 3,566 six-player expert matches
+  and judging every seat at both tunings: **3,559 firings at the shipped sixth,
+  none wrong; 3,568 at a quarter, two wrong** (about one in 1,800). That
+  supersedes an earlier re-measurement here which reported zero wrong calls in
+  2,726 firings and concluded exhibit 1 had no replacement — it does, and both
+  of the two found share the shape the original pair had: they fire early, on a
+  field nobody has been knocked out of, on a player who is wide rather than
+  deep. `difficulty` in both was repointed from `hard` to `expert` when the
+  ladder gained a rung, which keeps the *intent* — the strongest opponent.
 - `terrain.html` opens on a pinned seed for the same reason, and the seed is
   chosen to be *typical* rather than damning: its old carving scores 0.317,
   which is the old carver's median. A comparison page that opened on the worst
