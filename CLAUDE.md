@@ -1540,6 +1540,17 @@ implementation. A few patterns worth continuing:
   `rollsOf`, `chainState`/`chainWorld`. Planets reaches them through the
   `@dicewars/core/test-support` export, so there is one seeded generator in the
   repo rather than one per test file.
+- **A test that plays a whole match out has three sources of chance to pin, and
+  only two of them are in `deps`.** `rollDie` is the dice and `rng` is where
+  reinforcement scatters; the third is the AI's own tie-break jitter, since
+  `createGame` defaults its opponent to `createSimpleStrategy()` and that closes
+  over an `rng` of its own which is `Math.random` unless it is given one.
+  Pinning the first two and stopping measurably changes nothing — 6.7% of runs
+  deadlocked either way, over 258 different matches in 300 runs — where pinning
+  all three gives one match every time. Verify by asserting there is a single
+  distinct *outcome* over many runs, not by counting green ones: at that rate,
+  twenty clean runs happen a quarter of the time by luck, which is how a
+  previous attempt at this was recorded as fixed when it was not.
 
 ## Conventions lint
 

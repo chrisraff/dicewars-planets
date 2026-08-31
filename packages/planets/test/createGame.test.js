@@ -4,7 +4,8 @@ import { createGame, AI_TIMING, AUTOPLAY } from '../src/game/createGame.js';
 import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { reinforceDuration, MAX_REINFORCE_DURATION } from '../src/render/reinforceTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
-import { createInitialState, reviveState, serializeState } from '@dicewars/core';
+import { createInitialState, createSimpleStrategy, reviveState, serializeState }
+  from '@dicewars/core';
 import { seededRng, chainWorld, alwaysRolls, boardOf } from '@dicewars/core/test-support';
 
 // A four-territory chain: p1 (human) holds a and c, the AI holds b and d.
@@ -349,11 +350,25 @@ test('a real generated planet plays through to a winner', () => {
   const rng = seededRng(2024);
   const world = generatePlanetWorld({ subdivisions: 3, playerIds, rng });
 
-  // nobody at the human seat, so every player is on autopilot
+  // Nobody at the human seat, so every player is on autopilot — and **all
+  // three** sources of chance are pinned, because this is the one test here
+  // that plays a whole match out and asserts it finished. Left to chance it
+  // played a different game every run and deadlocked in about one run in
+  // fifteen, which is a suite that fails once a fortnight for no reason.
+  //
+  // The third one is the one to know about. `rollDie` is the dice and `rng` is
+  // where reinforcement scatters — both arrive through `deps` and both are
+  // obvious. But `createGame` defaults its opponent to `createSimpleStrategy()`,
+  // which closes over an `rng` of its own for breaking ties, and that one is
+  // `Math.random` unless it is given something. Pinning only the first two
+  // measurably changes nothing: 6.7% deadlock either way, and 258 different
+  // matches over 300 runs. Pinning all three gives one match, every time.
   const game = createGame({
     world,
     humanPlayerId: AUTOPLAY,
     rollDie: () => 1 + Math.floor(rng() * 6),
+    rng: seededRng(97),
+    strategy: createSimpleStrategy({ rng: seededRng(97) }),
   });
 
   const attacks = [];
