@@ -12,6 +12,7 @@ import { createBattleLog, battleEntry } from './battleLog.js';
 import { createReplay, reviveReplay, serializeReplay } from './replay.js';
 import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, strategyFor, subdivisionsFor } from './settings.js';
+import { AIM_FIGHTS, AIM_REPLAY, createAutoFollow, panHomeBlocked } from './autoFollow.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
@@ -118,6 +119,12 @@ export function createSession({
   // A resumed game shows the last fight fought rather than sitting empty.
   if (battles.latestBattle) hud.showBattle(battles.latestBattle);
 
+  // Whether the player has taken the camera off the match by turning the
+  // planet themselves, and the run of attacks a press mid-AI-turn would aim
+  // at. The rules that read those two live in `autoFollow.js`; what stays here
+  // is the half that can actually move a camera.
+  const autoFollow = createAutoFollow();
+
   const cameraFocus = createCameraFocus({
     camera: viewer.camera,
     controls: viewer.controls,
@@ -163,12 +170,14 @@ export function createSession({
    * planet, or a banner is holding it.
    */
   function focusOwnGround() {
-    if (humanEliminated || game.isOver() || replayOpen || bannerHolding) return false;
+    if (panHomeBlocked({ humanEliminated, isOver: game.isOver(), replayOpen, bannerHolding })) {
+      return false;
+    }
 
     // A drag suppresses the pan but not the flash: the flash is information
     // about the match rather than a movement of the camera, and somebody
     // studying the board is who most needs telling their turn has come round.
-    const moved = cameraFreed ? false : cameraFocus.lookAtHoldings(ownGround());
+    const moved = autoFollow.freed ? false : cameraFocus.lookAtHoldings(ownGround());
     // With the pan rather than after it — two halves of one handover, and the
     // suppression rules above are the whole of the guard. Safe to overlap
     // because a vignette is clear over the middle, so the planet turning
@@ -187,26 +196,13 @@ export function createSession({
   }
 
   /**
-   * The player has turned the planet, so the camera is theirs until they give
-   * it back: every automatic move is off, and the offer to hand it back is up
-   * for exactly as long as this is true. It stays up *into* the player's own
-   * turn, since that is the case where the pan home was suppressed and the
-   * turn opens on somebody else's half of the planet.
-   *
-   * A drag during the player's *own* turn is not recorded, because there would
-   * be nothing to record — every automatic move belongs either to a turn that
-   * is not theirs or to the handover at one end of it. Hence the replay check
-   * in front of it: a replay swings on every step whoever's turn the paused
-   * board is sitting on, so a drag during one always has something to suppress.
-   *
-   * Not saved — a fact about the hand on the planet in this sitting, like the
-   * pressed territory, and a reload is arriving at the board fresh.
+   * A hand on the planet. Which drags count, and why one taken during the
+   * player's own turn does not, is `dragTakesCamera` in `autoFollow.js`.
    */
   function freeCamera() {
-    if (cameraFreed) return;
-    if (!replayOpen && game.isHumanTurn()) return;
-    cameraFreed = true;
-    refreshAutoFollow();
+    if (autoFollow.takeCamera({ replayOpen, isHumanTurn: game.isHumanTurn() })) {
+      refreshAutoFollow();
+    }
   }
 
   /**
@@ -218,37 +214,40 @@ export function createSession({
    * under that is the thing this exists to stop.
    */
   function resumeAutoFollow({ pan = false } = {}) {
-    if (!cameraFreed) return;
-    cameraFreed = false;
+    if (!autoFollow.giveBack()) return;
     if (pan) autoFollowAim();
     refreshAutoFollow();
   }
 
   /**
-   * Where the camera would be if it had never been taken — which is not the
-   * same place all match. On somebody else's turn that is the fight being
-   * shown, which is what the press was to catch up with; on the player's own
-   * turn, and in the gaps, it is home.
+   * Where the camera would be if it had never been taken. `aimKind` decides
+   * which of the three places that is; this is the half that can actually move
+   * a camera, which is why it is the half that stays here.
    *
    * Both `force`d: "you can already see a corner of it" is no answer to
-   * somebody who pressed a button asking to be taken there.
+   * somebody who pressed a button asking to be taken there. `AIM_FIGHTS` is a
+   * preference rather than a verdict — a run that cannot be framed falls
+   * through to home rather than leaving the press unanswered.
    */
   function autoFollowAim() {
+    const aim = autoFollow.aimKind({
+      replayOpen,
+      replayStep,
+      isAiTurn: game.currentPlayer() !== humanPlayerId,
+    });
     // A replay follows the step the track is standing on, not the live board.
     // Same aim `showReplayStep` would have taken, so a press catches up with
     // the replay rather than landing somewhere it never went.
-    if (replayOpen) {
-      return replayStep > 0
-        && focusFights(replay.attacks.slice(replayStep - 1), { force: true });
+    if (aim === AIM_REPLAY) {
+      return focusFights(replay.attacks.slice(replayStep - 1), { force: true });
     }
-    if (game.currentPlayer() !== humanPlayerId && aiFights.length > 0) {
-      if (focusFights(aiFights, { force: true })) return true;
-    }
+    if (aim === null) return false;
+    if (aim === AIM_FIGHTS && focusFights(autoFollow.fights, { force: true })) return true;
     return cameraFocus.lookAtHoldings(ownGround(), { force: true });
   }
 
   function refreshAutoFollow() {
-    hud.showAutoFollow({ freed: cameraFreed, isOver: game.isOver(), replayOpen });
+    hud.showAutoFollow({ freed: autoFollow.freed, isOver: game.isOver(), replayOpen });
   }
 
   const pickTerritoryAt = createTerritoryPicker({
@@ -271,10 +270,6 @@ export function createSession({
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
   let pressed = null; // the territory a finger is down on, marked while it is
-  let cameraFreed = false; // the player has taken the camera — see `freeCamera`
-  // The run the shown turn is working through, so a press mid-AI-turn has a
-  // fight to aim at rather than the player's own ground. Emptied at endTurn.
-  let aiFights = [];
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
   // The two things that take the match out of the player's hands. Nothing in
   // it moves while either is true — see tick() at the bottom.
@@ -389,11 +384,11 @@ export function createSession({
     pendingReplayStep = null; // and whatever was still waiting on the camera
 
     // Looks ahead through every attack still to come, so a run of nearby
-    // fights gets one swing. `moveCamera` is off mid-scrub and `cameraFreed`
-    // for a viewer watching one corner: both suppress only the *swing*, and
+    // fights gets one swing. `moveCamera` is off mid-scrub, and the camera is
+    // freed for a viewer watching one corner: both suppress only the *swing*, and
     // skipping it skips the wait for it, which is what keeps a scrub up with
     // the hand doing it.
-    if (moveCamera && !cameraFreed && entry && focusFights(replay.attacks.slice(step - 1))) {
+    if (moveCamera && !autoFollow.freed && entry && focusFights(replay.attacks.slice(step - 1))) {
       pendingReplayStep = { step, entry, nodes, animate };
       return; // applied once the swing lands, in tick() below
     }
@@ -421,7 +416,7 @@ export function createSession({
     replayOpen = true;
     // One planet, two things that drive it: whichever has just been handed it
     // starts out driving.
-    cameraFreed = false;
+    autoFollow.reset();
     refreshAutoFollow(); // and in here it sits in the card, not the controls
     hud.hideOutcome();
     hud.showReplay(replay.attacks.length, { standings: replay.standings(playerIds) });
@@ -429,7 +424,7 @@ export function createSession({
 
   function closeReplay() {
     replayOpen = false;
-    cameraFreed = false; // see openReplay
+    autoFollow.reset(); // see openReplay
     hud.hideReplay();
     pendingReplayStep = null;
     replayFight = null;
@@ -575,8 +570,8 @@ export function createSession({
     // swing. Unless the player has taken the camera, in which case the planet
     // stays where they put it and the missed fights are the price.
     if (game.currentPlayer() !== humanPlayerId) {
-      aiFights = upcoming; // and where a press would take them, if the camera is theirs
-      if (!cameraFreed) focusFights(upcoming);
+      autoFollow.showing(upcoming); // where a press would go, if the camera is theirs
+      if (!autoFollow.freed) focusFights(upcoming);
     } else {
       hintDone(); // they have just done the thing the prompt describes
     }
@@ -626,7 +621,7 @@ export function createSession({
   });
 
   game.on('endTurn', (event) => {
-    aiFights = []; // the run this turn was showing is over
+    autoFollow.showing([]); // the run this turn was showing is over
     // The payout has landed — `change` is about to rebuild every stack it
     // touched, so the dice animated here have nothing left to do.
     reinforceAnim = null;

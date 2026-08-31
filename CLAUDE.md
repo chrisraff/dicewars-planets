@@ -968,9 +968,18 @@ reading it — counting an opponent's stacks, working out where a border is —
 and before this they got about one AI attack's worth of looking before the
 camera swung off to a fight somewhere else. So `cameraFocus` reports drags
 (`onDrag`, the same drags that already cancel a swing — a wheel is not one,
-for the reason it never was), and `session.js`'s `cameraFreed` suppresses all
-three automatic moves: the pan home, the swing to the AI's fights, and the
+for the reason it never was), and the camera being *freed* suppresses all three
+automatic moves: the pan home, the swing to the AI's fights, and the
 end-of-turn pull-back.
+
+**`game/autoFollow.js` is where those rules live**, and it is pure — no
+three.js, no camera object, nothing that knows what a replay or a banner is.
+Whether a drag counts (`dragTakesCamera`), where a press should go
+(`aimKind`), and when a handover's pan home is held back (`panHomeBlocked`)
+are each a case that is easy to write the plausible version of and get
+backwards, so they are stated once and tested. `session.js` keeps only the
+half that can actually move a camera. The one rule that stays in `hud.js` is
+`autoFollowButtonView`, which is about where the offer is *drawn*.
 
 The part that needs care is giving it back, because a camera that has silently
 stopped following is indistinguishable from one that is broken. Hence
@@ -1007,9 +1016,11 @@ turn it is at all.
 
 A drag during the player's *own* turn is never recorded, because there would be
 nothing to record: every automatic move belongs either to a turn that is not
-theirs or to the handover at one end of it, so `cameraFreed` suppresses
-precisely nothing during their turn. `freeCamera` asks `isHumanTurn` once, when
-the drag happens, and that one question is the whole of the distinction.
+theirs or to the handover at one end of it, so a freed camera suppresses
+precisely nothing during their turn. `dragTakesCamera` asks `isHumanTurn`
+once, when the drag happens, and that one question is the whole of the
+distinction — which is why it takes the turn as an argument rather than the
+offer asking about it later.
 
 Three things then answer an offer that is standing: the button, **picking a
 territory to attack from** (silently — they are looking straight at ground they
@@ -1051,14 +1062,18 @@ the obvious mistake: home is only the answer on your own turn. On somebody
 else's, the camera's job is the fight, and the run of attacks being shown is
 the thing the player pressed the button to catch up with — taking them home
 mid-AI-turn shows them the one part of the planet where nothing is happening.
-`autoFollowAim` picks between the two, and `aiFights` is the only state it
-needs: the `upcoming` run off the last attack event, emptied at `endTurn`.
+`aimKind` picks between the two, and the run being shown is the only state it
+needs: the `upcoming` run off the last attack event, emptied at `endTurn`. It
+answers `fights` as a *preference* rather than a verdict, so a run the camera
+cannot frame still falls through to home rather than leaving a press
+unanswered.
 
 The flash is deliberately *not* suppressed. It is information about the match
 rather than a movement of the camera, and somebody studying the board is
-precisely who most needs telling their turn has come round. And `cameraFreed`
-is not saved — it is a fact about the hand on the planet in this sitting, like
-the pressed territory, and a reload is somebody arriving at the board fresh.
+precisely who most needs telling their turn has come round — which is why the
+flash is not one of `panHomeBlocked`'s four states. And none of this is saved:
+it is a fact about the hand on the planet in this sitting, like the pressed
+territory, and a reload is somebody arriving at the board fresh.
 
 **How far back the camera sits** is the other half, and it is a phone problem.
 `narrowHalfFov` is the tighter of the two frustum half-angles, because "in
