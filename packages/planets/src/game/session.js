@@ -576,12 +576,45 @@ export function createSession({
       settings,
       humanPlayerId,
       world,
-      state: serializeState(game.state),
+      // The board a move has *landed on*, which is not the board on screen
+      // while one is still being animated — see `createGame`'s `settledState`
+      // and `saveOutcome` below. A save is a record of what has happened, and
+      // a rolled die has happened the moment it is rolled.
+      state: serializeState(game.settledState),
       replay: serializeReplay(replay),
       playedOn: game.playedOn,
       surrenderOffered: game.surrenderOffered,
       camera: cameraSnapshot(viewer.camera),
     });
+  }
+
+  /**
+   * A move written down the instant it is *decided*, before any of it is
+   * shown.
+   *
+   * This is the whole of the anti-cheat, and the thing it closes is not
+   * subtle: an attack resolves in full the moment it is declared — the faces
+   * are already rolled and `attack` carries every one of them — so a save
+   * deferred until the dice stop is a save the player can simply refuse. Read
+   * the total off the faces, reload before they land, and the restored board
+   * is the one *before* the fight, ready to be fought again for a different
+   * answer. A payout is the same trick with `rng` instead of `rollDie`: its
+   * dice scatter, and a scatter nobody likes can be reloaded away.
+   *
+   * So both are written here rather than at the `change` that follows them,
+   * and the replay is recorded here too — a save whose board is a move ahead
+   * of its own replay would come back missing the fight that produced it.
+   *
+   * That `change` lands on exactly the board this wrote, so it does not write
+   * it a second time; `outcomeSaved` is what tells it so. The only thing lost
+   * by skipping it is a camera that moved during the animation, which is a
+   * move behind rather than wrong — and the camera is opportunistic in a save
+   * anyway, since nothing but a board change has ever written one.
+   */
+  let outcomeSaved = false;
+  function saveOutcome() {
+    outcomeSaved = true;
+    onSave?.(snapshot());
   }
 
   function hintDone() {
@@ -658,7 +691,17 @@ export function createSession({
     });
   }
 
-  game.on('attack', ({ event, timing, upcoming }) => {
+  game.on('attack', ({ event, eliminated, timing, upcoming }) => {
+    // Written down before a single die is drawn. The fight is already decided
+    // — `event` holds the faces it will land on — so this is the moment it
+    // becomes part of the match, whatever the player does next. See
+    // `saveOutcome`. The elimination travels with the declaration for the
+    // same reason: it is part of what this attack did, and a save that had
+    // the board without it would restore a knockout the history never saw.
+    replay.record(event);
+    if (eliminated) replay.recordElimination(eliminated);
+    saveOutcome();
+
     // the dice are known already, but they belong on the planet first — show
     // the readout with blank faces so it fills in as the roll lands
     hud.showBattle(battleEntry(event), { revealed: false });
@@ -694,16 +737,20 @@ export function createSession({
   game.on('resolved', (state) => {
     const { event } = roll;
     roll = null;
+    // The battle *log* is what the player reads, so it fills in now, with the
+    // faces. The replay was written at the declaration — see `saveOutcome`.
     hud.showBattle(battles.record(event));
     hud.setHistory(battles.entries);
-    replay.record(event);
     // both stacks are still lying on the faces they rolled; stand them back up
     dice.reroll(event.from, state);
     dice.reroll(event.to, state);
   });
 
   game.on('reinforce', (event) => {
+    // Decided, so written down — where the dice land is `rng`'s answer and it
+    // is given once. See `saveOutcome`.
     replay.recordReinforcement(event);
+    saveOutcome();
     if (event.passed) {
       battles.record({ type: 'passed', playerId: event.playerId });
       hud.setHistory(battles.entries);
@@ -757,7 +804,8 @@ export function createSession({
   game.on('eliminated', (event) => {
     battles.record(event);
     hud.setHistory(battles.entries);
-    replay.recordElimination(event);
+    // Not recorded into the replay here: it was tagged onto its own attack at
+    // the declaration, since a save written then has to carry it.
 
     // Losing your last territory used to pass without a word: the AIs simply
     // played on and nothing said why the board had stopped answering.
@@ -785,13 +833,16 @@ export function createSession({
     // Every change, rather than on a timer or on the way out of the page:
     // `change` is the only moment the board moves, a pagehide handler is not
     // reliable on mobile, and the alternative is losing whatever happened
-    // since the last tick. An attack still being animated is deliberately not
-    // saved — the state it will land on has not been applied yet, so a reload
-    // mid-roll simply un-throws those dice rather than saving half a battle.
-    // A finished game is saved too rather than cleared: there is no turn left
-    // to take, but the replay is in there, and reopening onto the ending is
-    // how a player gets back to it.
-    onSave?.(snapshot());
+    // since the last tick. A finished game is saved too rather than cleared:
+    // there is no turn left to take, but the replay is in there, and
+    // reopening onto the ending is how a player gets back to it.
+    //
+    // Unless the move that got here has already been written down, which is
+    // every move that was animated: `saveOutcome` stored this exact board a
+    // whole animation ago, on purpose, and re-storing it is one main-thread
+    // `setItem` for no new information.
+    if (outcomeSaved) outcomeSaved = false;
+    else onSave?.(snapshot());
   });
 
   // Every opponent left has given up. The match is not over — the board says

@@ -590,6 +590,86 @@ test('a turn cannot end on top of an attack that has not landed', () => {
   assert.equal(game.isBusy(), false, 'and the one pending thing settled in that single tick');
 });
 
+// --- the outcome, before it is shown --------------------------------------
+//
+// A move resolves the instant it is declared; the animation is only the board
+// catching up. The session saves off `settledState` for exactly that reason —
+// a save written when the dice stop is one the player can refuse by reading
+// the faces and reloading, which is a re-roll of a fight already fought.
+
+test('an attack is already decided while its dice are still in the air', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+
+  assert.ok(game.isBusy(), 'the dice are still on their way down');
+  assert.equal(game.state.nodes.get('b').owner, 'p2', 'the board on screen has not moved');
+  assert.equal(
+    game.settledState.nodes.get('b').owner,
+    'p1',
+    'but the fight is over — this is the board a reload has to come back to',
+  );
+});
+
+test('a payout is already decided while its dice are still dropping', () => {
+  const game = createGame({ world: balanced(), rng: seededRng(7) });
+  const before = game.state.players.get('p1').reserve;
+  game.endTurn();
+
+  assert.ok(game.isBusy(), 'the payout is decided but has not landed');
+  const settled = game.settledState;
+  assert.notEqual(settled, game.state, 'where the dice scattered is already answered');
+  // whatever `rng` said, it said it once: reloading must not buy a second ask
+  const grew = [...settled.nodes].some(([id, node]) => node.dice > game.state.nodes.get(id).dice);
+  assert.ok(grew || settled.players.get('p1').reserve > before, 'the dice are already placed');
+});
+
+test('with nothing in the air the settled board is the board', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  assert.equal(game.settledState, game.state, 'the same object, not a copy of it');
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  game.tick(1e6);
+  assert.equal(game.settledState, game.state, 'and the same again once it has landed');
+});
+
+// The knockout event is held back until the dice land, which is right for
+// anything that *shows* it — but a save written at the declaration would
+// otherwise store the board without the elimination that made it, and come
+// back to a match whose history never saw the player go out.
+test('a declared attack carries the knockout it is about to cause', () => {
+  const game = createGame({
+    world: chainWorld([
+      ['mine', { owner: 'p1', dice: 8 }],
+      ['theirs', { owner: 'p2', dice: 1 }],
+      ['third', { owner: 'p3', dice: 3 }],
+      ['third2', { owner: 'p3', dice: 3 }],
+    ], { playerIds: ['p1', 'p2', 'p3'] }),
+    humanPlayerId: 'p1',
+    rollDie: alwaysRolls(6),
+  });
+
+  const declared = [];
+  game.on('attack', (payload) => declared.push(payload));
+  game.clickTerritory('mine');
+  game.clickTerritory('theirs');
+
+  assert.equal(declared.length, 1);
+  assert.equal(declared[0].eliminated?.playerId, 'p2', 'p2 is out, and the declaration says so');
+  assert.equal(declared[0].eliminated.by, 'p1');
+});
+
+test('an ordinary attack declares no knockout', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const declared = [];
+  game.on('attack', (payload) => declared.push(payload));
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+
+  assert.equal(declared[0].eliminated, null, 'p2 still holds d');
+});
+
 // --- the moment a knockout is announced -----------------------------------
 //
 // The session puts a banner up on this event and holds the match behind it

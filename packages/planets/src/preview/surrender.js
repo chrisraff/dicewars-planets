@@ -61,12 +61,13 @@ function playMatch({ players, difficulty, worldSeed, gameSeed, watching, tuning 
     reserves: new Map([...game.state.players].map(([id, player]) => [id, player.reserve])),
   });
 
-  let declared = null;
-  game.on('attack', ({ event }) => {
-    declared = event;
+  // Recorded where `session.js` records it — at the declaration, which is
+  // where the outcome is decided and therefore where a save has to be able to
+  // catch it.
+  game.on('attack', ({ event, eliminated }) => {
+    replay.record(event);
+    if (eliminated) replay.recordElimination(eliminated);
   });
-  game.on('resolved', () => replay.record(declared));
-  game.on('eliminated', (event) => replay.recordElimination(event));
   game.on('reinforce', (event) => replay.recordReinforcement(event));
 
   let attacks = 0;

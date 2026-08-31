@@ -29,8 +29,9 @@ const scratchStorage = {
 /**
  * A match played out by nobody, recorded exactly the way `session.js` records
  * one: the replay anchored on the board the game opens with, an attack
- * written down once it has resolved rather than when it is declared, and the
- * payout at the end of every turn.
+ * written down the moment it is declared — which is the moment it is decided,
+ * and therefore the moment it has to be saveable — and the payout at the end
+ * of every turn.
  *
  * `stopAtMoves` stops the clock once the replay holds that many moves rather
  * than waiting for a winner — the only way to reach the cap in a sensible
@@ -52,12 +53,10 @@ function playMatch({ players, subdivisions, seed, stopAtMoves = Infinity }) {
     reserves: new Map([...game.state.players].map(([id, player]) => [id, player.reserve])),
   });
 
-  let declared = null;
-  game.on('attack', ({ event }) => {
-    declared = event;
+  game.on('attack', ({ event, eliminated }) => {
+    replay.record(event);
+    if (eliminated) replay.recordElimination(eliminated);
   });
-  game.on('resolved', () => replay.record(declared));
-  game.on('eliminated', (event) => replay.recordElimination(event));
   game.on('reinforce', (event) => replay.recordReinforcement(event));
 
   game.start();

@@ -173,7 +173,13 @@ export function createGame({
     countdown = attackDuration(beats);
     attackedThisTurn = true;
     setSelection(null);
-    emit('attack', { event, timing: beats, upcoming });
+    // `eliminated` travels with the declaration as well as being emitted
+    // later, and only for the one listener that must not wait: a knockout is
+    // part of what this attack *did*, so anything writing the outcome down
+    // now (see `settledState`) has to be able to write that down with it.
+    // Everything that merely shows it still reads it off the event below.
+    const eliminated = pendingEvents.find((e) => e.type === 'eliminated') ?? null;
+    emit('attack', { event, eliminated, timing: beats, upcoming });
   }
 
   // A one-shot rollDie that replays exactly the faces a planned move already
@@ -328,6 +334,26 @@ export function createGame({
     isHumanTurn,
     isBusy,
     isOver,
+
+    /**
+     * The board once whatever is in mid-air has landed — the very same object
+     * as `state` when nothing is.
+     *
+     * An attack is decided the instant it is declared: the faces carried by
+     * the `attack` event are the faces that will come up, and `state` waits
+     * only so the dice have somewhere to land. Nothing drawn on screen may
+     * read this — waiting is what the animation is for — but a **save** must.
+     * A save written when the dice stop is a save the player can refuse: read
+     * the total off the faces, reload before they land, and fight the same
+     * battle again for a different answer. The same goes for a payout, whose
+     * dice scatter through `rng`.
+     *
+     * Only ever one move is outstanding — a turn cannot end on top of a
+     * pending attack — so there is never more than one thing to settle.
+     */
+    get settledState() {
+      return pending ?? pendingReinforce ?? state;
+    },
 
     /** Whether the player has already refused a surrender this match. */
     get playedOn() {

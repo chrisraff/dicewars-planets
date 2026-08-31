@@ -631,10 +631,36 @@ before any of this, which is what the handicaps are measured against.
   than names. A mismatch discards the save and deals a fresh game.
 
   Saving happens on every `change` event rather than on a timer or on
-  `pagehide` (which is not reliable on mobile). An attack that is still being
-  animated is deliberately *not* saved: the state it will land on has not been
-  applied yet, so a reload mid-roll un-throws those dice rather than storing
-  half a battle.
+  `pagehide` (which is not reliable on mobile) — **and on every move the
+  moment it is decided, which is earlier than that.** An attack resolves in
+  full when it is declared: `reduce` has already run, and the `attack` event
+  carries every face the dice will land on. Saving when the animation ended
+  therefore made the save something the player could *refuse* — read the total
+  off the faces, reload before they stop, and the restored board is the one
+  from before the fight, ready to be fought again for a different answer. A
+  payout is the same trick against `rng` rather than `rollDie`: the scatter is
+  decided at `reinforce` and a scatter nobody liked could be reloaded away.
+
+  So `createGame` exposes `settledState` — the board once whatever is in
+  mid-air has landed, and the identical object as `state` when nothing is —
+  and `session.js` snapshots off that, writing from the `attack` and
+  `reinforce` handlers. Only one move is ever outstanding, so there is only
+  ever one thing to settle.
+
+  Two things had to move with it. The **replay is recorded at the declaration
+  too**, not at `resolved`, because a save whose board is a move ahead of its
+  own replay comes back missing the fight that produced it. And the
+  `eliminated` event, which is deliberately held back until the dice land —
+  a knockout is news that belongs after the roll that did it — now *also*
+  travels on the `attack` payload, for the one listener that cannot wait: the
+  replay entry it is tagged onto is being written a whole animation early.
+  Everything that merely shows a knockout still reads the event.
+
+  The `change` that follows lands on exactly the board `saveOutcome` already
+  wrote, so it does not write it again (`outcomeSaved`); the only thing given
+  up is a camera that moved during the animation, which is stored a move
+  behind rather than wrongly — and the camera has always been opportunistic in
+  a save, since nothing but a board change ever wrote one.
 
   A finished game is saved too, rather than cleared. There is no turn left to
   take, but the replay is in there, so a reload opens back onto the ending it
