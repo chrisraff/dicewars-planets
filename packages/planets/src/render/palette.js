@@ -56,11 +56,10 @@ export function srgbToLinear(channel) {
 // A whole colour through it. This is what a renderer wants; nothing else does.
 export const linearRgb = (color) => color.map(srgbToLinear);
 
-// And back the other way — the encoding the renderer applies on output. Only
-// two things ask: a test stating what a buffer will *look* like rather than
-// what is in it, and the preview page that shows what the double encoding
-// used to cost. Both are claims about the screen, so both want this and not
-// the buffer values.
+// And back the other way — the encoding the renderer applies on output. Two
+// things ask: a test stating what a buffer will *look* like rather than what
+// is in it, and the comparison grid on `preview/dice.html`. Both are claims
+// about the screen, so both want this and not the buffer values.
 export const srgbRgb = (color) => color.map((c) =>
   (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055));
 

@@ -25,20 +25,18 @@ function landingSlot(stand, sequence, dieSize) {
 
 /**
  * Plays the end-of-turn payout: one die per entry in `landed`, dropping onto
- * the top of its territory's stack. Purely visual, like createRollAnimation —
- * the caller applies the real state once every die has landed, and the
- * instant restack that follows (`dice.update`) is what actually leaves the
- * pile tidy; this only covers the moment just before it.
+ * the top of its territory's stack. Purely visual, like `createRollAnimation`
+ * — the caller applies the real state once every die has landed, and the
+ * restack that follows is what leaves the pile tidy.
  *
- * A die lands the way it will be left standing, rather than being stood up
- * afterwards. The layout the rebuild is going to use is asked for up front
+ * A die lands the way it will be left standing rather than being stood up
+ * afterwards: the layout the rebuild will use is asked for up front
  * (`dice.planFor`) and the falling die takes its own slot out of it.
  *
- * It is the *final* layout, not how the pile looks mid-payout. For the usual
- * case — one die onto a territory — those are the same thing. When several
- * land on one territory, the ones that end up buried take the face they will
- * be left with rather than briefly showing the running count, which is a face
- * nobody sees anyway: the next die of the same payout lands on top of it.
+ * It is the *final* layout, not the pile mid-payout. For one die onto a
+ * territory those are the same; when several land together, the buried ones
+ * take the face they will be left with rather than briefly showing a running
+ * count nobody sees, since the next die lands on top of it.
  */
 export function createReinforceAnimation({
   landed,

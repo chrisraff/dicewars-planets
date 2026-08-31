@@ -20,9 +20,9 @@ const AI_THINK_PAUSE = 0.25; // beat between one AI move and the next
 
 /**
  * Nobody in the human seat, so every player is the AI and the match plays
- * itself. This is how a whole game is exercised in a test, and how a demo
- * runs unattended — a value that matches no player id says that outright,
- * where a bare `humanPlayerId: null` read like something left unfinished.
+ * itself — how a whole game is exercised in a test and how a demo runs
+ * unattended. A value matching no player id says that outright, where a bare
+ * `humanPlayerId: null` read like something left unfinished.
  */
 export const AUTOPLAY = Symbol('autoplay');
 
@@ -35,13 +35,11 @@ export const AUTOPLAY = Symbol('autoplay');
  * Time comes in through `tick(dt)` rather than a clock, so a test can run a
  * hundred turns instantly and the renderer can drive it off its own frames.
  *
- * `savedState` resumes a match instead of dealing a new one. Nothing else
- * changes: the same world still has to be supplied, because it is the planet
- * that board was fought over. `playedOn` and `surrenderOffered` come back with
- * it — a player who has already waved the surrender away is not asked again
- * after a reload, and one who was asked but never answered is not asked twice.
- * The session restores that banner instead, which is the only way the question
- * survives a reload as the question it was.
+ * `savedState` resumes a match instead of dealing a new one; the same world
+ * still has to be supplied, since it is the planet that board was fought over.
+ * `playedOn` and `surrenderOffered` come back with it, so the surrender is
+ * still asked once per match across a reload — the session puts that banner
+ * back by hand rather than the question being asked again.
  */
 export function createGame({
   world,
@@ -118,15 +116,12 @@ export function createGame({
   /**
    * What tapping `territoryId` would do right now, without doing any of it:
    * `'attack'`, `'select'`, `'drop'` — put the held territory back down — or
-   * `null` for a tap that would change nothing at all.
+   * `null` for a tap that would change nothing.
    *
-   * This exists because the interface now has to answer that question
-   * *before* the tap happens rather than after it. A press is shown on the
-   * board while a finger is still down, so the player can see what releasing
-   * would do while there is still time to drag away instead — and a mark that
-   * promised something the tap then did not do would be worse than no mark.
-   * `clickTerritory` is written in terms of this for exactly that reason:
-   * there is one set of rules, so the two cannot drift apart.
+   * The interface has to answer this *before* the tap: a press is marked on
+   * the board while the finger is still down, so a mark promising something
+   * the tap then did not do would be worse than no mark. `clickTerritory` is
+   * written in terms of this so the two cannot drift apart.
    */
   function pressActionOn(territoryId) {
     if (isOver() || isBusy() || !isHumanTurn()) return null;
@@ -269,19 +264,17 @@ export function createGame({
   }
 
   /**
-   * Every opponent left has given the game up, so the player is told they
-   * have won it — while the game itself carries on underneath, untouched.
+   * Every opponent left has given the game up, so the player is told they have
+   * won it — while the game carries on underneath, untouched. `phase` is still
+   * `attack`, the AIs play on exactly as they were, and "play on" does no more
+   * than stop the banner being offered again.
    *
-   * Nothing here changes a rule or a piece of state: `phase` is still
-   * `attack`, the AIs go on playing exactly as they were, and "play on" is
-   * only a matter of not putting the banner up again. That is deliberate. A
-   * surrender is an opinion about the position rather than an outcome of it,
-   * and one the player is entitled to disagree with — which they cannot do if
-   * the match has already been ended underneath them.
+   * That is deliberate: a surrender is an opinion about the position rather
+   * than an outcome of it, and one the player has to be able to disagree with,
+   * which they cannot do if the match has been ended underneath them.
    *
-   * Judged once a turn, at the end of the player's own, because that is the
-   * one moment the board is settled and the player is looking at it: mid-way
-   * through an AI's run of attacks is neither.
+   * Judged at the end of the player's own turn, the one moment the board is
+   * settled and they are looking at it.
    */
   function offerSurrender() {
     if (playedOn || surrenderOffered || humanPlayerId === AUTOPLAY) return;
@@ -336,19 +329,18 @@ export function createGame({
     isOver,
 
     /**
-     * The board once whatever is in mid-air has landed — the very same object
+     * The board once whatever is in mid-air has landed — the identical object
      * as `state` when nothing is.
      *
-     * An attack is decided the instant it is declared: the faces carried by
-     * the `attack` event are the faces that will come up, and `state` waits
-     * only so the dice have somewhere to land. Nothing drawn on screen may
-     * read this — waiting is what the animation is for — but a **save** must.
-     * A save written when the dice stop is a save the player can refuse: read
-     * the total off the faces, reload before they land, and fight the same
-     * battle again for a different answer. The same goes for a payout, whose
-     * dice scatter through `rng`.
+     * An attack is decided the instant it is declared: the `attack` event
+     * already carries the faces that will come up, and `state` waits only so
+     * the dice have somewhere to land. Nothing drawn on screen may read this —
+     * waiting is what the animation is for — but a **save** must, or the
+     * player can refuse it: read the total off the faces, reload before they
+     * land, and fight the same battle again. A payout is the same against
+     * `rng`.
      *
-     * Only ever one move is outstanding — a turn cannot end on top of a
+     * Only one move is ever outstanding — a turn cannot end on top of a
      * pending attack — so there is never more than one thing to settle.
      */
     get settledState() {

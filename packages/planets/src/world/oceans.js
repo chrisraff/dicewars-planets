@@ -21,19 +21,17 @@ export const OCEAN_TUNING = {
   // a web of straits, and the spread between those is most of the variety.
   minBasins: 2,
   maxBasins: 4,
-  // Best-candidate sampling: this many candidate cells are drawn for each
-  // basin after the first, and the one furthest from every basin already
-  // placed wins. Uniform seeds are the whole problem — at 40% water each
-  // basin is angularly enormous, so two seeds an ordinary distance apart
-  // merge into one lobe long before either finishes growing.
+  // Best-candidate sampling: this many candidates are drawn per basin after
+  // the first, and the one furthest from every basin already placed wins.
+  // Uniform seeds are the whole problem — at 40% water each basin is
+  // angularly enormous, so two seeds an ordinary distance apart merge into one
+  // lobe long before either finishes growing.
   //
-  // This is where the work happens, and not where it looks like it should.
-  // Adding basins does help on its own — four uniform ones score 0.217 median
-  // against one's 0.345 — but placing them helps more for less: two spread
-  // basins score 0.174. Count buys blobs, placement buys the ones that end up
-  // opposite each other. Deliberately best-of-8 rather than an exact
-  // antipode, so basins are reliably opposed without every planet arriving on
-  // the same axis.
+  // **The work is in the placement, not the count.** More basins does help on
+  // its own, but two *placed apart* beat four uniform ones: count buys blobs,
+  // placement buys the ones that end up opposite each other. Best-of-8 rather
+  // than an exact antipode, so basins are reliably opposed without every
+  // planet arriving on the same axis.
   seedCandidates: 8,
   // The most cap-like a planet may be. Measured rather than chosen: a cap
   // holding 60% of the sphere reads 0.40 and is the worst there is, a ring
@@ -74,23 +72,20 @@ function isConnected(ids, neighborsOf) {
 }
 
 /**
- * How much of one side of the planet the land is: the mean resultant length
- * of the land cells' directions, 0 to 1.
+ * How much of one side of the planet the land is: the mean resultant length of
+ * the land cells' directions, 0 to 1.
  *
  * Cells are near enough equal area that counting them is weighting them, so
- * this is the length of the average land direction. Land spread evenly round
- * the sphere cancels to nothing; land gathered on one side does not. A
- * perfect cap covering fraction `f` of the sphere reads exactly `1 - f`, so
- * at the 40% ocean the game ships with, 0.40 is as cap-like as a planet can
- * physically get and 0 is a ring.
+ * this is the length of the average land direction. A perfect cap covering
+ * fraction `f` of the sphere reads exactly `1 - f`, so at the 40% ocean the
+ * game ships with, **0.40 is as cap-like as a planet can physically get and 0
+ * is a ring**.
  *
- * The reason this rather than something shaped more like the question being
- * asked — count the ocean bodies, or look for a band — is that it is one
- * number over the whole planet with no thresholds inside it, and it agrees
- * with the eye across the whole range rather than at the ends. Ring planets
- * and horseshoe planets score alike despite having two ocean bodies and one
- * respectively, which is exactly right: they are the same planet either side
- * of one strait closing.
+ * This rather than counting ocean bodies or looking for a band, because it is
+ * one number over the whole planet with no thresholds inside it and it agrees
+ * with the eye across the range rather than at the ends. Ring and horseshoe
+ * planets score alike despite having two ocean bodies and one, which is right:
+ * they are the same planet either side of one strait closing.
  */
 export function landClustering(landCellIds, cells) {
   if (landCellIds.size === 0) return 0;
@@ -198,17 +193,15 @@ function growBasins(cells, byId, targetOceanCount, seeds, rng) {
 /**
  * Punches up to `count` single-cell lakes into grown land. Mutates `land`.
  *
- * A lake site is a land cell with land on every side, which is what tells a
- * lake apart from a bite out of the coast. It also means lakes can never end
- * up touching: punching one turns its neighbours into coast, and coast is not
- * a site — so two never merge into a pond without anything having to remember
- * where the last one went.
+ * A lake site is a land cell with land on every side, which is both what tells
+ * a lake from a bite out of the coast *and* what stops two ever merging into a
+ * pond: punching one turns its neighbours into coast, and coast is not a site,
+ * so nothing has to remember where the last one went.
  *
- * Removing such a cell cannot disconnect the land either. Its neighbours ring
- * it — the cells around a cell of a Goldberg polyhedron form a cycle — so any
- * path that went through it can go round it instead. It is still routed
- * through the same `tryRemove` the basins use, because that makes the
- * guarantee unconditional rather than an argument in a comment.
+ * Removing such a cell cannot disconnect the land either — the cells around a
+ * cell of a Goldberg polyhedron form a cycle, so any path through it can go
+ * round it. It is still routed through the same `tryRemove` the basins use,
+ * which makes the guarantee unconditional rather than an argument in a comment.
  */
 function punchLakes(cells, byId, land, count, rng, tryRemove) {
   const isSite = (id) => land.has(id) && byId.get(id).neighbors.every((n) => land.has(n));

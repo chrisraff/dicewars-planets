@@ -1,19 +1,17 @@
 import { SELECTION_COLOR, WHITE } from './palette.js';
 
-// How each called-out territory is tinted: a color to blend toward, and how
-// far. The territory you've picked up goes dark, which reads unambiguously
-// against every player color and makes the pale dice on top of it pop; the
+// How each called-out territory is tinted: a colour to blend toward, and how
+// far. A territory you have picked up goes dark, which reads unambiguously
+// against every player colour and makes the pale dice on top of it pop; the
 // enemies it could hit get a light lift, so the two never read as the same
 // kind of mark.
 //
-// A fight in progress is marked with that same pair of meanings rather than a
-// second vocabulary: the attacker is held dark exactly as a picked-up
-// territory is — it *is* a picked-up territory, whoever picked it up — and the
-// defender takes the lift, pulsed. That keeps the player's own attack looking
-// continuous (the territory they darkened by selecting it stays dark while its
-// dice are thrown), and it gives an AI attack the same read, which is the one
-// place the mark was missing: nobody watching a computer's turn saw which
-// territory the dice belonged to until they landed.
+// A fight in progress reuses that pair rather than a second vocabulary: the
+// attacker is held dark exactly as a picked-up territory is — it *is* one,
+// whoever picked it up — and the defender takes the lift, pulsed. That keeps
+// the player's own attack continuous, and gives an AI attack the same read, so
+// somebody watching a computer's turn can see which territory the dice in the
+// air belong to.
 const HELD = { color: SELECTION_COLOR, amount: 0.72 };
 
 export const HIGHLIGHT = {
@@ -21,14 +19,12 @@ export const HIGHLIGHT = {
   attacker: HELD,
   target: { color: WHITE, amount: 0.18 },
   defender: { color: WHITE, amount: 0.5 },
-  // The territory a finger is on *right now*, still down. It answers a
-  // different question from every other mark here — not "what could you do"
-  // but "this is the one you are touching, let go and it happens" — so it has
-  // to be told apart from the pale lift the legal targets wear, which is the
-  // mark it will most often be sitting on top of. Hence a lift far past
-  // anything else on the board rather than a slightly brighter one: three
-  // times the target's, and the only mark that ever appears and disappears
-  // with a hand. It outranks every other mark for the same reason.
+  // The territory a finger is on *right now*, still down. Not "what could you
+  // do here" but "this is the one you are touching, let go and it happens", so
+  // it has to be told apart from the pale lift a legal target wears — the mark
+  // it will most often be sitting on top of. Hence three times that lift
+  // rather than a slightly brighter version, and hence outranking every other
+  // mark. `preview/touch.html` is where "distinct enough" is judged by eye.
   pressed: { color: WHITE, amount: 0.55 },
 };
 

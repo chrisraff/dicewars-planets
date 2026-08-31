@@ -1,60 +1,38 @@
 import { largestConnectedRegionSize, livingPlayerIds } from '../state.js';
 
 /**
- * How far behind a player has to be before they give the game up.
+ * How far behind a player has to be before they give the game up: a sixth of
+ * the leader's dice, and a sixth of the leader's largest region. Found by
+ * playing rather than derived — see CLAUDE.md for the sweep.
  *
- * Both are ratios against whoever leads that measure: a sixth of the leader's
- * dice, and a sixth of the leader's largest region. Found by playing rather
- * than derived — 700 seeded games across 2 to 8 players on both difficulties,
- * each replayed once per seat to ask whether that seat would have been handed
- * a match it was not going to win.
- *
- * The thing to understand about the ratio is that **tightening it does not
- * stop the game being called, it only calls it later**. Across those games a
- * sixth fires on 694 seats and a quarter on 695 — all but identical — but the
- * sixth waits until 84% of the match has been played rather than 73%, with
- * one opponent left rather than two and 86% of the planet already taken. What
- * it costs is the time saved: about 42 seconds of watching against 71.
- *
- * A quarter was wrong once in those 695 firings and a sixth was wrong in none
- * of them. Quote that rate per *firing*, never per seat — the seats this
- * never speaks up for are not evidence of anything. Both of the misfires
- * found at a quarter share a shape: they fire while the field is still full,
- * on a player who is wide rather than deep, and neither one fires at a sixth.
- * `preview/surrender.html` stands on one of them and is the record of why
- * this number is what it is.
+ * The thing to know before touching it is that **tightening the ratio does not
+ * stop the game being called, only delays it**. A sixth and a quarter fire on
+ * all but the same number of seats; what changes is when, and how often the
+ * call is wrong. Quote that error rate per *firing*, never per seat — the
+ * seats this never speaks up for are not evidence of anything.
  */
 export const SURRENDER_TUNING = { diceRatio: 6, regionRatio: 6 };
 
 /**
  * Everyone still on the board who has no realistic way back into the game.
  *
- * Two measures, and a player has to be behind on **both**: total dice, which
- * is the army they have accumulated, and largest connected region, which is
- * the income they will accumulate — reinforcement is paid on it, so a player
- * behind on region falls further behind every single turn. That is the
- * mechanism this is trying to detect, and neither number finds it alone:
+ * Two measures, and a player has to be behind on **both**: total dice, the
+ * army they have, and largest connected region, the income they are going to
+ * get, since reinforcement is paid on it. Neither works alone — region on its
+ * own calls one game in three for the wrong player, because a third of the
+ * planet in four clumps looks feeble and is not, and dice on its own is fooled
+ * by stacks piled eight deep on a handful of territories, a huge army earning
+ * almost nothing.
  *
- * - Region on its own is badly wrong (a third of the planet in four
- *   disconnected clumps looks feeble and is not), wrong often enough to hand
- *   out false wins in one game in three.
- * - Dice on its own can be gamed by a board nobody in these tests played but
- *   a person might: stacks piled eight deep on a handful of territories look
- *   like a huge army while earning almost nothing. Requiring region too means
- *   the tall-stack player is not mistaken for the leader.
+ * What makes it safe to end a game on is that **the leader can never be in
+ * this set**: whoever leads a measure is compared against themselves, and
+ * `dice * ratio <= dice` is false at any ratio above one for anybody still
+ * holding a die. So a field that has surrendered is one where the player left
+ * standing leads both the army and the income — construction, not measurement.
  *
- * The property that makes this safe to end a game on is that **the leader
- * can never be in this set**. Whoever leads a measure is compared against
- * themselves, and `dice * ratio <= dice` is false at any ratio above one for
- * anybody still holding a die — so a field that has surrendered is one where
- * the player left standing leads both the army and the income. Nobody can be
- * handed a win while another player is ahead of them, and that is by
- * construction rather than by measurement.
- *
- * Deliberately not a judgement any *strategy* makes, and deliberately not
- * anything the reducer knows: surrendering changes no rule and no state. It
- * is only an opinion about the position, which is why a caller is free to
- * ignore it and play the match out.
+ * Not a judgement any *strategy* makes and not anything the reducer knows:
+ * surrendering changes no rule and no state. It is an opinion about the
+ * position, which is why a caller is free to ignore it.
  */
 export function surrenderedPlayerIds(state, tuning = SURRENDER_TUNING) {
   const { diceRatio, regionRatio } = { ...SURRENDER_TUNING, ...tuning };

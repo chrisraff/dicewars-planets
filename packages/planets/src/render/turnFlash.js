@@ -1,29 +1,21 @@
 /**
- * The flash that says the planet is yours again.
- *
- * A turn handing back from the AI currently changes nothing you can see
- * without reading: the attacks stop and a small line of text at the bottom
- * left changes wording. This is the loud half of the answer — a brief veil
- * over the whole view, which is the one cue that cannot be missed by looking
- * somewhere else, because there is nowhere else to look.
+ * The flash that says the planet is yours again — a brief veil over the whole
+ * view, which is the one cue that cannot be missed by looking somewhere else,
+ * because there is nowhere else to look.
  *
  * Two decisions are worth knowing before touching it.
  *
- * It is **DOM over the canvas rather than `scene.background`**. Flashing the
- * scene background only lights the ring of empty space around the planet, and
- * how much of the frame that is varies enormously — a portrait phone frames
- * the planet at about 4.9 radii against a desktop's 3.2 — so the same flash is
- * a wide halo on one and a thin rim on the other. It also stops working the
- * day the background becomes a starfield or a texture, which is exactly the
- * sort of thing a background is for. An overlay composites over whatever ends
- * up back there.
+ * It is **DOM over the canvas rather than `scene.background`**. A background
+ * flash lights only the ring of empty space around the planet, and how much of
+ * the frame that is varies enormously — a portrait phone frames at about 4.9
+ * radii against a desktop's 3.2 — so the same flash is a wide halo on one and
+ * a thin rim on the other. It also stops working the day the background grows
+ * stars.
  *
- * And the shape is a **vignette by default**: opaque at the edges, clear over
- * the middle. The point of the flash is to announce, not to hide, and the
- * thing it would otherwise hide is the board you have just been handed. A
- * flat veil is kept as an option because it is the stronger signal of the two,
- * and which of those wins is a judgement made by eye on
- * `preview/handover.html` rather than by argument here.
+ * And the shape is a **vignette**: clear over the middle, because the point is
+ * to announce the board rather than hide the thing you have just been handed.
+ * A flat veil is kept as an option, and which wins is judged by eye on
+ * `preview/handover.html` rather than argued here.
  */
 export const TURN_FLASH = {
   // Two flashes rather than one: a single veil reads as a glitch, a pair
@@ -67,13 +59,12 @@ export const REDUCED_TURN_FLASH = {
 };
 
 /**
- * Whether this browser has been asked for less movement — an accessibility
- * setting of the operating system's, surfaced as a media query.
+ * Whether this browser has been asked for less movement.
  *
- * Read at the moment of playing rather than latched at startup, so turning it
- * on mid-match takes effect on the next turn without a reload and without
- * anything having to listen. Guarded for the no-DOM case because this module's
- * timing half is imported by tests that never open a window.
+ * Read **at play time** rather than latched at startup, so switching the
+ * system setting takes effect on the next turn with nothing listening for it.
+ * Guarded for the no-DOM case, since this module's timing half is imported by
+ * tests that never open a window.
  */
 export function prefersReducedMotion() {
   return typeof window !== 'undefined'
@@ -100,10 +91,10 @@ function envelope(t, { rise, hold, fall, peak }) {
 /**
  * How opaque the veil is `elapsed` seconds into the burst, 0 to `peak`.
  *
- * The flashes are combined with `max` rather than by adding them up, so a
- * spacing tighter than one flash's own length overlaps into a plateau instead
- * of climbing past `peak` — which is the one way a tuning could accidentally
- * produce a much brighter flash than the number called `peak` promises.
+ * Combined with `max` rather than by adding, so a spacing tighter than one
+ * flash's own length runs into a plateau instead of climbing past `peak` —
+ * otherwise the number named "how grey it gets" would be a lie at some
+ * settings.
  */
 export function flashOpacity(elapsed, options = {}) {
   const settings = { ...TURN_FLASH, ...options };

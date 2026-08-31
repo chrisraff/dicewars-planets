@@ -54,16 +54,15 @@ export function createViewer(canvas) {
    * last resort, since turning the planet is what a press means when nothing
    * more specific claims it.
    *
-   * It does nothing until it is handed one, and then only the one thing the
-   * controls cannot do for themselves: they were never told this press began,
-   * because the arbiter stopped it, so they are given one where the press has
-   * got to. Everything after that is theirs — they put their own listeners on
-   * the document at that point and follow the drag to its end.
+   * It does nothing until handed one, and then only what the controls cannot
+   * do for themselves: they were never told this press began, because the
+   * arbiter stopped it, so they are given a synthetic one where the press has
+   * got to. Everything after that is theirs, on their own document listeners.
    *
-   * The press is captured here rather than left to them for the sake of the
-   * one case that can fail: a pointer that has already gone by the time the
-   * hand-off happens. Failing on this line can be caught; failing inside
-   * theirs would leave them tracking a drag they never finished starting.
+   * The press is captured here rather than left to them for the one case that
+   * can fail — a pointer already gone by the time the hand-off happens.
+   * Failing on this line can be caught; failing inside theirs would leave them
+   * tracking a drag they never finished starting.
    */
   const orbitHandler = {
     onAdopt(press) {

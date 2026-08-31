@@ -2,32 +2,25 @@ import { DEFAULT_PLAYER_COLORS } from './palette.js';
 import { prefersReducedMotion } from './turnFlash.js';
 
 /**
- * The fireworks over a won banner.
+ * The fireworks over a won banner. Decoration rather than information: it says
+ * nothing the title does not already say.
  *
- * Winning is the point of the whole game and the banner announcing it says so
- * in the same voice as "You are out" — same card, same buttons, a different
- * sentence. This is the part that is only ever good news, and it is the reason
- * it is decoration rather than information: it says nothing the title does not
- * already say, and nothing is lost by a browser that refuses to run it.
- *
- * Which is exactly why **reduced motion turns it off outright** rather than
- * getting a gentler version. `turnFlash.js` keeps a ramped flash for the
- * opposite reason — that flash carries the fact that a turn has been handed
- * over, and somebody who asked for less movement did not ask to be told less.
- * Here there is nothing under the movement to preserve.
+ * Which is why **reduced motion turns it off outright** rather than softening
+ * it — the opposite of what `turnFlash.js` does, and for the reason that flash
+ * gives: a flash carries the fact that a turn has been handed over, and
+ * somebody who asked for less movement did not ask to be told less. Here there
+ * is nothing under the movement to preserve.
  *
  * It is **DOM and CSS the whole way down, and deliberately not ticked.** Every
- * other animation in the game is driven from the session's frame loop because
- * it has to agree with the planet — a roll lands when the dice land. A banner
- * has no planet and no loop of its own, and a spark's whole life is "travel
- * there, fade out", which is what a keyframe is. So the show is built once as
- * a couple of hundred absolutely positioned dots with their delays already set
- * on them, handed to the compositor, and thrown away by one timer at the end.
- * No JavaScript runs while it plays.
+ * other animation runs off the session's frame loop because it has to agree
+ * with the planet — a roll lands when the dice land. A banner has no planet
+ * and no loop, and a spark's whole life is "travel there, fade out", which is
+ * what a keyframe is for. So the show is built once as a couple of hundred
+ * absolutely positioned dots with their delays already on them, handed to the
+ * compositor, and cleared by one timer. No JavaScript runs while it plays.
  *
- * The half worth testing is where the sparks go, and that is `fireworksShow`,
- * which is pure and takes its randomness as an argument like everything else
- * in this codebase that has any.
+ * The half worth testing is where the sparks go — `fireworksShow`, which is
+ * pure and takes its randomness as an argument.
  */
 
 const TAU = Math.PI * 2;
@@ -72,16 +65,13 @@ export const FIREWORKS = {
 
 /**
  * The whole show as data: every burst, where and when it goes off, and every
- * spark in it.
+ * spark in it. One function for the lot rather than one per burst, because the
+ * properties worth testing are about the show as a whole — nothing over the
+ * card, no two running bursts the same colour, every spark out before the end.
  *
- * One function for the lot rather than one per burst, because the interesting
- * properties are all about the show as a whole — that nothing lands over the
- * card, that no two bursts running are the same color, that the last spark is
- * out before the run is over.
- *
- * Positions are percentages of the layer, so they survive the banner being
- * any size; distances are fractions of its shorter side, which the DOM half
- * turns into pixels once, at the one moment it knows how big that is.
+ * Positions are percentages of the layer, so they survive the banner being any
+ * size; distances are fractions of its shorter side, which the DOM half turns
+ * into pixels once, at the one moment it knows how big that is.
  */
 export function fireworksShow(options = {}, rng = Math.random) {
   const o = { ...FIREWORKS, ...options };

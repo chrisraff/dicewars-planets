@@ -12,17 +12,15 @@ export const MAX_PLAYERS = 8;
  * Two flags say how finished an option is, and they answer different
  * questions.
  *
- * `available: false` — the option is real and carried through the pipeline,
- * but the thing it controls has not been built. The menu greys it out and
- * shows its `note`, which is the point: it tells a player what is coming.
- * `normalizeSettings` pins it to its default, so nothing downstream can be
- * handed a setting the game cannot honor. This is how `moon` sits.
+ * `available: false` — real and carried through the pipeline, but the thing
+ * it controls has not been built. The menu greys it out and shows its `note`,
+ * which is the point, and `normalizeSettings` pins it to its default so
+ * nothing downstream is handed a setting the game cannot honor (`moon`).
  *
- * `hidden: true` — the menu does not draw it at all. For an option that works
- * but is not ready to be offered, where a greyed-out row would be advertising
- * something half-finished rather than promising something to come. It is still
- * declared here, still normalized, and still read by the game, so it stays one
- * flag away from being offered. This is how `size` sits.
+ * `hidden: true` — the menu does not draw it at all, for an option that works
+ * but is not ready to be offered, where a greyed-out row would advertise a
+ * half-finished feature rather than promise a coming one (`size`). Still
+ * declared, normalized and read, so it stays one flag away from being offered.
  */
 export const SETTING_DEFINITIONS = [
   {
@@ -137,11 +135,11 @@ function normalizeOne(setting, raw, context) {
   const allowed = setting.choices.map((choice) => choice.value);
   if (allowed.includes(raw)) return raw;
 
-  // A choice can be named rather than numbered — difficulty is `normal` or
-  // `hard` — and there is nothing sensible to round a name to, so anything
-  // that is not one of them is simply the default. Numbers are clamped
-  // instead: a planet size from a build that offered more of them should land
-  // on the nearest one this build has rather than on nothing.
+  // A choice can be named rather than numbered — difficulty is `normal`,
+  // `hard` or `expert` — and there is no nearest name, so anything that is
+  // not one of them is simply the default. Numbers are clamped instead: a
+  // planet size from a build that offered more of them should land on the
+  // nearest one this build has rather than on nothing.
   if (allowed.some((value) => typeof value !== 'number')) return setting.default;
 
   const value = Number(raw);
@@ -169,17 +167,13 @@ export function normalizeSettings(raw = {}) {
 }
 
 /**
- * Which seat in the turn order the player takes, 0-based.
+ * Which seat in the turn order the player takes, 0-based. `early` and `late`
+ * are halves rounded up, so an odd number of players puts the middle seat in
+ * both — better than a seat neither range can land on.
  *
- * `early` and `late` are halves rounded up, so with an odd number of players
- * the middle seat belongs to both — better than a seat that neither range can
- * ever land on.
- *
- * Takes settings that have already been through `normalizeSettings`, as
- * everything below this line does: settings are parsed once, at the edge —
- * `resolveSettings` for the page, and the menu for anything the player picks —
- * and are a settled answer from then on. Re-validating here would mean no
- * caller could ever be sure which of the two had the last word.
+ * Takes settings already through `normalizeSettings`, as everything below this
+ * line does. Settings are parsed once, at the edge; re-validating here would
+ * mean no caller could be sure which layer had the last word.
  */
 export function resolveStartSeat({ players, start }, rng = Math.random) {
   const pick = (from, count) => from + Math.min(count - 1, Math.floor(rng() * count));
@@ -278,29 +272,21 @@ export function subdivisionsFor({ size }) {
 }
 
 /**
- * The opponent these (normalized) settings ask for.
+ * The opponent these (normalized) settings ask for. The strategies live in
+ * core, which knows nothing about menus; this is only the mapping from the
+ * word a player picked to one of them, kept here so the choice and what the
+ * choice *means* sit together.
  *
- * The strategies themselves live in core, which knows nothing about menus;
- * this is only the mapping from the word a player picked to one of them, and
- * it lives here so that the choice and what the choice *means* sit together.
+ * A fresh strategy per call: `createSimpleStrategy` closes over its own
+ * tie-breaking generator, and two matches should not share one.
  *
- * A fresh strategy per call rather than a shared one: `createSimpleStrategy`
- * closes over its own tie-breaking generator, and two matches should not be
- * drawing from the same one.
- *
- * Hard is Expert with `income` at nothing, which is the *first* thing that
- * separates the expert from the other two: it still knows the real odds of a
- * fight, still prices what a counter-attack would cost it, still spends a stack
- * that is doomed anyway — it just does not know that reinforcement is paid on
- * the largest connected region, so it wins ground that never pays for itself.
- * One weight rather than a third strategy, because a rung of a ladder wants to
- * be the tier above it with something taken away, so the two stay ordered when
- * either is touched. See CLAUDE.md for why it is this weight and not `risk`.
- *
- * Note that `hard` changed meaning when Expert was added above it, and there is
- * no save migration: a match saved as Hard before that resumes against the
- * weaker of the two. Deliberate — the alternative was a version bump on every
- * save to correct an opponent nobody had complained about.
+ * Hard is Expert with `income` at nothing — the *first* thing that separates
+ * the expert from everything else. It still knows the real odds, still prices
+ * the counter-attack, still spends a doomed stack; it just does not know that
+ * reinforcement is paid on the largest connected region, so it wins ground
+ * that never pays for itself. One weight rather than a third strategy, so the
+ * rungs stay ordered when either is touched. CLAUDE.md has why this weight and
+ * not `risk`, and why `hard` changing meaning here carries no save migration.
  */
 export function strategyFor({ difficulty }) {
   if (difficulty === 'expert') return createExpertStrategy();

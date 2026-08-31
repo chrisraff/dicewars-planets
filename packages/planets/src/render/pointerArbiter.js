@@ -1,30 +1,23 @@
 /**
  * Who owns a press.
  *
- * Two things want every press on the planet, and only one of them can have
- * it: tapping a territory to attack, and dragging to orbit. They used to run
- * side by side — the orbit controls turned the planet from the first pixel,
- * and a tap was worked out afterwards from how far the pointer had travelled
- * by the time it came up. That reads the gesture backwards. Nothing can be
- * said about a press until it is over, so nothing can be *shown* about it
- * either, and the planet slides under a finger that only meant to point at
- * something.
+ * Two things want every press on the planet and only one can have it: tapping
+ * a territory to attack, and dragging to orbit. A press is therefore owned, in
+ * order — the first handler registered gets it and keeps it until it returns
+ * `YIELD`, in practice from `onMove` once the pointer has plainly become a
+ * drag. Ownership only moves forward down the list, so a press that has become
+ * a drag can never go back to being a tap.
  *
- * So a press is owned, in order. The first handler registered gets it, and
- * keeps it until it hands it on by returning `YIELD` — from any callback, but
- * in practice from `onMove`, once the pointer has travelled far enough that
- * this is plainly a drag. Ownership only ever moves forward down the list, so
- * a press that has become a drag can never go back to being a tap.
+ * What that buys is a press that is known to be live *while it is still down*,
+ * and so can be shown on screen: release accepts, drag cancels, and both are
+ * visible while there is still time to choose. Deciding afterwards from how
+ * far the pointer travelled reads the gesture backwards — nothing can be said
+ * about a press until it is over, so nothing can be shown about it either.
  *
- * What that buys is the thing a tap could not have before: while the first
- * handler still owns the press, it knows the press is *live*, and can say so
- * on screen. Release accepts, drag cancels — and both are visible while there
- * is still time to choose.
- *
- * Modelled on the `TouchArbiter` in the 3d-maze project, with one difference
- * worth knowing: this listens for **pointer** events rather than touch ones,
- * so a mouse, a pen and a finger are the same gesture with different slop
- * (see `movedPastSlop`) rather than two code paths that drift apart.
+ * Modelled on the `TouchArbiter` in the 3d-maze project, with one difference:
+ * this listens for **pointer** events rather than touch ones, so a mouse, a
+ * pen and a finger are one gesture with different slop (`movedPastSlop`)
+ * rather than two code paths that drift apart.
  *
  * A handler is a plain object, every method optional:
  *
@@ -46,12 +39,12 @@ export const YIELD = Symbol('yield');
 /**
  * How far a press may wander and still be a tap, in CSS pixels.
  *
- * A finger wanders much further than a mouse does while still meaning "this
- * one" — it lands on a soft, moving contact patch several millimetres across,
- * and the reported point drifts inside it as the pad spreads. A pen is
- * between the two. These are the numbers the old release-time check used, and
- * they are unchanged: what has changed is when they are consulted, which is
- * now the moment they are exceeded rather than at the end of the gesture.
+ * A finger wanders much further than a mouse while still meaning "this one":
+ * it lands on a soft contact patch several millimetres across and the reported
+ * point drifts inside it as the pad spreads. A pen is between the two.
+ *
+ * Consulted the moment they are exceeded, mid-gesture, rather than at the end
+ * of it — which is the whole of what makes a press markable while it is down.
  */
 export const DRAG_SLOP = { mouse: 5, pen: 6, touch: 14 };
 
@@ -77,16 +70,15 @@ export function movedPastSlop(press, x = press.x, y = press.y) {
  *
  * **A press the first handler wants is stopped dead at this element**
  * (`stopImmediatePropagation`), so anything else listening here — the orbit
- * controls, in the real game — never sees it. That is the whole of the
- * arbitration: those controls act on the press they are given, so the only
- * way to hold them off is not to give them one. It also means this must be
- * listening *before* they are, since listeners on one element run in the
- * order they were added.
+ * controls — never sees it. That is the whole of the arbitration: the controls
+ * act on the press they are given, so the only way to hold them off is not to
+ * give them one, which also means this must be listening *before* they are,
+ * since listeners on one element run in the order they were added.
  *
- * The other side of that bargain is `onAdopt`. A handler that takes a press
+ * The other side of the bargain is `onAdopt`: a handler taking a press
  * mid-gesture was never told it started, so it is handed the press where it
- * has got to and it is that handler's business to catch up — for the orbit
- * controls, by being given a press of their own (see `createViewer`).
+ * has got to — for the orbit controls, as a press of their own (see
+ * `createViewer`).
  */
 export function createPointerArbiter(element, { document = element.ownerDocument } = {}) {
   const handlers = [];

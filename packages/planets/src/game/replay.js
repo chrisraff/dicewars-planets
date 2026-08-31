@@ -2,45 +2,38 @@ import { MAX_RESERVE } from '@dicewars/core';
 import { battleEntry } from './battleLog.js';
 
 /**
- * How many moves a replay keeps. A whole match is far shorter than this — a
- * six-player game on a default planet runs 300-500 moves and an eight-player
- * one under 750 — so on anything currently playable the cap never bites and a
- * replay covers the match end to end. It is here for the planet sizes that
- * are not offered yet: eight players on a subdivision-4 globe (225
- * territories) run tens of thousands of moves, which is a save nobody wants
- * and a track bar nobody can scrub.
+ * How many moves a replay keeps. Nothing currently playable comes close — an
+ * eight-player match runs about 750 — so the cap is for the planet sizes not
+ * offered yet, where a match runs to tens of thousands of moves.
  *
- * Past the cap the *oldest* moves go, not the newest — the end of a match is
- * the part worth watching — and the anchor advances to cover them (see
- * `createReplay`), so a trimmed replay still rebuilds an exact board.
+ * Past the cap the *oldest* moves go, not the newest, and the anchor advances
+ * over them (see `createReplay`), so a trimmed replay still rebuilds an exact
+ * board for every step still standing.
  */
 export const REPLAY_LIMIT = 1000;
 
 /**
  * Everything that changed the board this match — attacks and end-of-turn
- * reinforcement alike — in the true order it happened, together with the
- * board it all started from.
+ * reinforcement alike — in the order it happened, plus the board it all
+ * started from.
  *
  * That starting board is the **anchor**, and it is what makes a replay
- * self-contained: every step is rebuilt by walking the moves forward from it
+ * self-contained: a step is rebuilt by walking the moves forward from it
  * rather than by remembering a board per step. A fresh game anchors on the
- * planet as dealt; a resumed one anchors wherever the replay it was restored
- * from anchored, since the whole thing now travels in the save.
+ * planet as dealt; a resumed one anchors where the replay it was restored from
+ * anchored, since the whole thing travels in the save.
  *
- * This is deliberately not the battle log — it is the other way round now.
- * A replay holds every move outright and the battle log the history panel
- * reads is *derived* from it (`historyThroughStep`), because the two were
- * otherwise stored twice over and the log alone was 87% of a saved game.
+ * It is the *only* record. The battle log the history panel reads is derived
+ * from it (`historyThroughStep`), because storing both meant writing every
+ * fight down twice and the duplicate was 87% of a save.
  *
- * An elimination is not recorded as an entry of its own the way the battle
- * log shows it — it is never anything but the direct consequence of the
- * attack just before it, so it is folded onto that attack's own entry
- * instead (`elimination: { playerId, by }`). That is what lets
- * `historyThroughStep` rebuild an exact history-so-far from the moves alone.
+ * An elimination gets no entry of its own: it is never anything but the direct
+ * consequence of the attack before it, so it is folded onto that attack
+ * (`elimination: { playerId, by }`), which is what lets `historyThroughStep`
+ * rebuild an exact history-so-far from the moves alone.
  *
- * `nodes` and `reserves` are copied rather than held: `nodes` is handed in
- * straight off live game state, and a replay writing into that would be
- * rewriting the match it is recording.
+ * `nodes` and `reserves` are copied rather than held — `nodes` comes straight
+ * off live game state, and writing into it would be rewriting the match.
  */
 export function createReplay({
   nodes = new Map(),
@@ -98,15 +91,14 @@ export function createReplay({
     },
 
     /**
-     * Records where an end-of-turn payout landed, one die per entry, plus how
-     * much the player earned — `landed` alone says how many dice found room,
-     * not how many were banked before the cap trimmed them, and that is what
+     * Records where an end-of-turn payout landed, one die per entry, plus what
+     * the player earned — `landed` alone says how many dice found room, not
+     * how many were banked before the cap trimmed them, which is what
      * `reservesAfterAttacks` needs to replay the banked count truthfully.
      *
-     * `passed` is stored rather than worked out from "no attack since the
-     * previous payout", because a replay whose head has been trimmed can open
-     * partway through somebody's turn, and the attacks that would disprove a
-     * pass are exactly the ones no longer there.
+     * `passed` is stored rather than inferred from "no attack since the last
+     * payout", because trimming removes exactly the attacks that would
+     * disprove one.
      */
     recordReinforcement(event) {
       log.push({
@@ -200,20 +192,14 @@ function walk(moves, count, nodes, reserves) {
 }
 
 /**
- * The battle log exactly as it would read if the match had stopped after the
- * first `count` attacks — same shape `battleLog.js` builds, so the same
- * `historyRowView` renders it. This is what makes scrubbing the track back
- * to some earlier point not a lie: the history panel opened from there shows
- * only what had actually happened by then, not the whole match spoiling
- * what is still ahead of the track.
+ * The battle log as it would read if the match had stopped after the first
+ * `count` attacks — the shape `battleLog.js` builds, so `historyRowView`
+ * renders it. This is what stops a scrub back being a lie: the history opened
+ * from there shows what had happened by then, not the whole match.
  *
- * It is also how a resumed game gets its history back at all, which is why
- * `count` defaults to everything: the log is not saved alongside the replay
- * any more, it is read back out of it.
- *
- * `moves` is the full interleaved log, since a turn that passed without a
- * fight is a row of its own — and a match with no attacks in it at all still
- * has a history worth showing.
+ * It is also how a resumed game gets its history back, which is why `count`
+ * defaults to everything. `moves` is the full interleaved log, since a turn
+ * that passed without a fight is a row of its own.
  */
 export function historyThroughStep(moves, count = Infinity) {
   const entries = [];
@@ -264,29 +250,25 @@ export function reservesAfterAttacks(initialReserves, moves, count) {
 }
 
 /**
- * How much every player held at every step, for the whole replay at once —
- * territories owned and dice standing on them, one number per player per
- * step, in the same order `boardAt` walks.
+ * How much every player held at every step — territories owned and dice
+ * standing on them, one number per player per step, in the order `boardAt`
+ * walks.
  *
- * This is the third view of the one record, alongside the board and the
- * history: a whole match's shape is nothing the moves do not already say, so
- * it is derived on demand rather than tallied as the match is played and
- * stored. It is cheap enough to be — a step is a pass over the board, and
- * `REPLAY_LIMIT` bounds the steps.
+ * The third view of the one record, alongside the board and the history, and
+ * derived on demand rather than tallied as the match is played: a match's
+ * shape is nothing the moves do not already say, and a step is one pass over
+ * the board with `REPLAY_LIMIT` bounding the steps.
  *
  * Sampled immediately after each attack and nowhere else, which is exactly
- * where `boardAfterAttacks` stops for the same step: a reinforcement that
- * lands after this step's attack belongs to the next one, and a chart drawn
- * any other way would disagree with the board the track is showing.
+ * where `boardAfterAttacks` stops for the same step — so the chart and the
+ * planet under it cannot disagree about where the track is standing.
  *
- * `dice` is the dice on the planet rather than those plus the banked reserve.
- * What the chart is worth reading against is the board, and banked dice are a
- * promise rather than an army — they are already called out on their own, as
- * the "+n" on a player's tile.
+ * `dice` is the dice on the planet rather than those plus the banked reserve:
+ * what the chart is read against is the board, and banked dice are a promise
+ * rather than an army, already called out as the "+n" on a tile.
  *
  * Players are named rather than discovered, so a knocked-out one keeps its
- * line at zero instead of vanishing from the chart the moment it stops owning
- * anything — the same reason `playerStatsFor` never drops a row.
+ * line at zero instead of vanishing — as `playerStatsFor` never drops a row.
  */
 export function standingsOverReplay(
   initialNodes,
@@ -331,23 +313,20 @@ const rollsOf = (faces) => [...String(faces)].map(Number);
 /**
  * A replay as plain JSON, terse enough to live in a save.
  *
- * Everything recoverable is left out rather than written down. Who was
- * attacking and who was defending is whoever owned those two territories at
- * that point in the replay; the totals are the sum of the faces; and who won
- * is whether one total beat the other. All three fall out of walking the
- * moves forward from the anchor, which `reviveReplay` has to do anyway. What
- * is left is the two territories and the faces they rolled, which is the
- * irreducible part — no rule recovers a die that has been thrown.
+ * Everything a walk recovers is left out: who was attacking and defending is
+ * whoever owned those territories at that point, the totals are the sum of the
+ * faces, and who won is whether one beat the other — all of which fall out of
+ * walking forward from the anchor, which `reviveReplay` does anyway. What is
+ * left is the two territories and the faces they rolled, and no rule recovers
+ * a die that has been thrown.
  *
- * Written as tuples rather than objects for the usual reason a save is: a
- * whole eight-player match is around 15KB this way against 88KB of the shape
- * these moves have in memory. It stays JSON, though, and stays readable in a
- * devtools console — a bit-packed form gets it under 5KB, which is not worth
- * a bit reader on a 5MB storage budget.
+ * Tuples rather than objects: a whole eight-player match is about 20KB this
+ * way against 88KB of the shape these moves have in memory. It stays JSON and
+ * stays readable in a console — bit-packing gets it under 5KB, which is not
+ * worth a bit reader on a 5MB storage budget.
  *
- * A territory id is written as it stands. Real planets number them from zero,
- * so they cost a character or two; nothing here assumes that, since a graph
- * is topology and the ids are whatever built it.
+ * A territory id is written as it stands: a graph is topology, so the ids are
+ * whatever built it.
  */
 export function serializeReplay(replay) {
   const { nodes, reserves } = replay.anchor;
@@ -379,17 +358,15 @@ function encodeMove(move) {
 }
 
 /**
- * The inverse: a live replay, ready to carry on recording the match it was
- * saved from.
+ * The inverse: a live replay, ready to carry on recording.
  *
- * The moves are rebuilt in one forward pass over the anchor, because that is
- * the only way the fields left out of the save come back — an attack's owners
- * are read off the board as it stood immediately before that attack, which is
- * precisely what the pass is holding. `by` on an elimination is the attacker
- * for the same reason: nothing else can knock a player out.
+ * Rebuilt in one forward pass over the anchor, because that is the only way
+ * the omitted fields come back — an attack's owners are read off the board as
+ * it stood immediately before it, which is what the pass is holding. `by` on
+ * an elimination is the attacker for the same reason.
  *
- * Throws on a save that has been damaged rather than trying to salvage half a
- * match — see `session.js`, which would rather lose a replay than a game.
+ * Throws on a damaged save rather than salvaging half a match — see
+ * `session.js`, which would rather lose a replay than a game.
  */
 export function reviveReplay(snapshot, { limit } = {}) {
   const nodes = new Map(snapshot.nodes.map(([id, owner, dice]) => [id, { owner, dice }]));

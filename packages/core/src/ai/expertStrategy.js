@@ -7,61 +7,46 @@ import { winProbability } from './battleOdds.js';
  * What a thing is worth, all in one unit so they can be added up. A territory
  * is 1 by definition and everything else is priced against it.
  *
- * - `income` — one territory's worth of *reinforcement*, which is what the
- *   largest connected region pays out every turn. It is the difference
- *   between a player who is winning and one who merely holds a lot of ground,
- *   and it is why this AI will pass up a fat easy prize for a thin one that
- *   joins two regions together.
+ * - `income` — one territory's worth of *reinforcement*, paid every turn on
+ *   the largest connected region. It is why this AI passes up a fat easy prize
+ *   for a thin one that joins two regions together.
  * - `land` — a territory as a territory: somewhere to put dice, and one more
- *   thing that has to be taken before anyone is eliminated.
- * - `dice` — one die of material, mine or an opponent's. Under a territory,
- *   because dice are spent and ground is kept.
- * - `denial` — what an opponent's loss is worth to me. Below 1 on purpose: in
- *   a six-player game, hurting one rival helps the other four exactly as much
- *   as it helps me.
- * - `elimination` — taking a player's last territory. It is not the territory
- *   that is worth this much, it is the turn: every round from then on has one
- *   fewer player taking ground. Anywhere from a dozen territories to two dozen
- *   plays identically, so it sits at the low end of the range that works.
+ *   thing to take before anyone is eliminated.
+ * - `dice` — one die of material. Under a territory, because dice are spent
+ *   and ground is kept.
+ * - `denial` — what an opponent's loss is worth to me. Below 1 on purpose:
+ *   six-handed, hurting one rival helps the other four as much as it helps me.
+ * - `elimination` — taking a player's last territory. Not the territory but
+ *   the turn: every round from then on has one fewer player taking ground.
  * - `risk` — how seriously to take the counter-attack. At 0 the AI plays every
  *   fight as though the turn ended the game.
- * - `relief` — how much credit an attacker gets for the danger it was already
- *   in. Its own weight rather than a share of `risk`, because it pushes the
- *   opposite way: `risk` makes the AI careful, and this is the term that says
- *   a stack about to be taken anyway may as well be spent.
- * - `refill` — how much of the reinforcement due at the end of the turn to
- *   count on when judging what a territory can survive. At 0 the AI assumes
- *   every territory it empties stays empty. Above 1 — a *more* than even
- *   share — because reinforcement only lands where there is room, and drops a
- *   territory out of the running once it fills: the emptiest ground collects
- *   the most, which is exactly the ground this term is asked about.
+ * - `relief` — credit for the danger an attacker was already in. Its own
+ *   weight rather than a share of `risk`, because it pushes the other way: a
+ *   stack about to be taken anyway may as well be spent.
+ * - `refill` — how much of the end-of-turn reinforcement to count on when
+ *   judging what a territory can survive. Above 1 — a *more* than even share —
+ *   because reinforcement only lands where there is room, so the emptiest
+ *   ground collects the most, which is the ground this is asked about.
  * - `sprawl` — what it costs to take ground that does not grow the largest
  *   region. Reinforcement is paid on that region but *scattered over every
- *   territory owned*, so a capture that adds no income still soaks
+ *   territory owned*, so a capture adding no income still soaks
  *   `income / (held + 1)` dice a turn away from the ground that earns them.
- *   Only satellite captures can be in this position: an attack launched from
- *   the largest region is by definition adjacent to it, so it always grows it
- *   by at least one.
- * - `minGain` — what a move has to be worth before it is worth making. Above
- *   0 it passes rather than take a marginal fight.
+ *   Only a capture launched out of a detached region can be in this position:
+ *   an attack from the largest region is adjacent to it and always grows it.
+ * - `minGain` — what a move has to be worth before it is worth making.
  * - `follow` — how much of what a capture *leads to* counts towards making it.
- *   At 0 the AI plays each attack as though the turn stopped there. See the
+ *   At 0 each attack is played as though the turn stopped there. See the
  *   lookahead at the bottom of `expertMovesFor`.
  * - `breadth` — how many of the best moves get that second look.
- * - `decided` — how far behind the leading move another one can be and still
- *   be worth looking at. Nothing below it can be brought back by what it opens
- *   up, and when nothing is close there is no decision to spend anything on.
- * - `dominance` — the income lead past which the lookahead is switched off
- *   altogether. `breadth`, `decided` and this are budgets rather than
- *   opinions: they are what keeps the cost of the second ply off the frame,
- *   and between them they cost nothing measurable in strength.
+ * - `decided` — how far behind the leader a move can be and still be looked
+ *   at. Nothing below it can be brought back by what it opens up.
+ * - `dominance` — the income lead past which the lookahead is switched off.
+ *   These last three are budgets rather than opinions: they keep the cost of
+ *   the second ply off the frame at no measurable cost in strength.
  *
- * The numbers were found by playing, not derived: a coordinate search over
- * several thousand six-player games against the other two strategies here.
- * They pull against each other hard enough that changing one on its own can
- * mislead — dropping `denial` to nothing looked harmless until `relief` moved,
- * and then cost thirty points — so anything retuned here wants re-measuring
- * against the whole set rather than in isolation.
+ * The numbers were found by playing rather than derived, and they pull against
+ * each other hard — `denial` at 0 was harmless until `relief` moved and then
+ * cost thirty points. Retuning one wants re-measuring against the whole set.
  */
 export const EXPERT_WEIGHTS = Object.freeze({
   income: 2,
@@ -362,46 +347,32 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
 
   moves.sort((a, b) => b.score - a.score);
 
-  // A turn is a run of attacks rather than one, so the move worth making is
-  // the one that leads somewhere. Each of the best few is played out — the
-  // winning branch only, since a failed attack ends that stack's run anyway —
-  // and credited with what the board it lands on is worth, discounted by
-  // `follow` and by the chance of getting there at all.
+  // A turn is a run of attacks, so the move worth making is the one that leads
+  // somewhere. Each of the best few is played out — the winning branch only,
+  // since a failed attack ends that stack's run anyway — and credited with what
+  // the board it lands on is worth, discounted by `follow` and by the chance of
+  // getting there.
   //
-  // This is the whole of the AI's lookahead and it is deliberately narrow.
-  // What it buys is the two things one ply cannot see at all, both of which
-  // are about a *sequence* rather than a fight:
+  // Deliberately narrow. It exists for the two things one ply cannot see at
+  // all, both about a *sequence* rather than a fight:
   //
-  //   - a stack that is about to be walled in behind its own lines. Given two
-  //     attackers for the same target, one ply prices the fight and mildly
-  //     prefers the smaller one; it has no way to notice that the bigger one
-  //     will have nothing left to attack afterwards and its dice are about to
-  //     stop counting.
+  //   - a stack about to be walled in behind its own lines. Given two attackers
+  //     for one target, one ply prices the fight and mildly prefers the smaller;
+  //     it cannot notice that the bigger will have nothing left to attack.
   //   - a join two territories away. Income is paid on the largest connected
   //     region, so a bridge scores enormously for its second half and nothing
-  //     at all for its first, and one ply only ever sees the first.
+  //     for its first, and one ply only ever sees the first.
   //
-  // `depth` stops it there: a move being looked at *as* a follow-up is priced
-  // one ply, so the search is one move wide and one move deep, never a tree.
+  // `depth` stops it there: a move looked at *as* a follow-up is priced one
+  // ply, so the search is one move wide and one deep, never a tree.
   //
-  // The rest of the condition is budget. A second ply costs what the first one
-  // did, once per move it looks at, and the cost lands in a single block —
-  // `planAiTurnMoves` works a whole AI turn out before any of it is shown, so
-  // the slowest turn in a match is a frame either dropped or not. Three things
-  // keep that in hand, and none of them costs anything measurable in strength:
-  //
-  //   - only the best `breadth` moves are looked at,
-  //   - and only while they are within `decided` of the leader. A move further
-  //     behind than that is not coming back, and if *nothing* is close then
-  //     the leader is going to stay the leader whatever its follow-up is
-  //     worth, so the whole pass is skipped rather than run to confirm it.
-  //   - and not at all once the game is `dominance` times won on income. The
-  //     long turns are the mopping-up ones, which is exactly where the tail of
-  //     the cost was and exactly where there is nothing left to get right.
-  //
-  // Together they take the worst turn in a six-player match from about 20ms to
-  // about 10, against 4ms for the one-ply AI, and leave the median at half a
-  // millisecond.
+  // The rest of the condition is budget. `planAiTurnMoves` works a whole AI
+  // turn out before any of it is shown, so the slowest turn is a frame either
+  // dropped or not — hence `breadth`, `decided` (nothing further behind is
+  // coming back, and if nothing is close the leader stays the leader whatever
+  // its follow-up is worth) and `dominance` (the long turns are the mopping-up
+  // ones, which is where the tail of the cost is and where there is nothing
+  // left to get right).
   if (w.follow > 0 && depth === 0 && moves.length > 1 && !alreadyWon) {
     const cutoff = moves[0].score - w.decided;
     const contenders = [];
@@ -422,36 +393,27 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
 }
 
 /**
- * The hard opponent: it prices every attack available to it and takes the best
- * one while any of them is worth making.
- *
- * Four things separate it from the other two strategies here, in the order
- * they matter:
+ * The strongest opponent: it prices every attack available to it and takes the
+ * best while any is worth making. Four things separate it from the other two,
+ * in the order they matter:
  *
  * 1. **It plays for income, not for ground.** Reinforcement is paid on the
- *    largest *connected* region, so a territory that joins two regions of ten
- *    is worth twenty of the one that adds an eleventh. Neither of the others
- *    can tell those apart. This one prices both, on both sides of the board:
- *    it will go out of its way to take the territory holding a leader's region
- *    together, because splitting it halves what they earn every turn from then
- *    on.
- * 2. **It knows the real odds.** `battleOdds.js`, not a dice difference: five
- *    against four is a 72% fight and eight against seven is a 67% one, and
- *    calling both "one die up" throws away the judgement that decides close
- *    games.
- * 3. **It counts the counter-attack on both sides of the ledger.** The prize
- *    is netted against what it costs to hold, what the emptied attacker is
- *    worth losing, the threat the capture lifts off everything of mine around
- *    it — and the risk the attacker was under before it moved, which is the
- *    term that turns a doomed stack into a free swing.
- * 4. **It knows what a territory is holding together.** Losing one territory
- *    can cost far more than one die a turn if it was the join between two
- *    halves of a region, so that is priced too — in what it is willing to
- *    risk, and in what it goes looking for.
+ *    largest *connected* region, so a territory joining two regions of ten is
+ *    worth twenty of the one that adds an eleventh — on both sides of the
+ *    board, so it will go out of its way to split a leader's region.
+ * 2. **It knows the real odds** (`battleOdds.js`, not a dice difference): five
+ *    against four is 72% and eight against seven is 67%, and calling both "one
+ *    die up" throws away the judgement that decides close games.
+ * 3. **It counts the counter-attack on both sides of the ledger** — what the
+ *    prize costs to hold, what the emptied attacker is worth losing, the
+ *    threat the capture lifts off everything around it, and the risk the
+ *    attacker was already under, which turns a doomed stack into a free swing.
+ * 4. **It knows what a territory is holding together**, so losing the join
+ *    between two halves of a region is priced as the income it costs.
  *
  * Everything it believes is in `EXPERT_WEIGHTS`, so it can be made greedier or
  * more cautious without touching the reasoning. Deterministic, like
- * `createDefensiveStrategy`: the same board always produces the same move.
+ * `createDefensiveStrategy`.
  */
 export function createExpertStrategy(weights = EXPERT_WEIGHTS) {
   return function expertStrategy(state, playerId) {

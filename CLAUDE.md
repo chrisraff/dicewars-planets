@@ -685,8 +685,8 @@ before any of this, which is what the handicaps are measured against.
   A choice's values are usually numbers, and `normalizeSettings` rounds and
   clamps those onto the nearest one offered — so a planet size from a build
   that had more of them lands somewhere rather than nowhere. They can also be
-  names (`difficulty` is `normal`/`hard`), and there is no nearest `hard`, so
-  those normalize by membership and anything else is simply the default.
+  names (`difficulty` is `normal`/`hard`/`expert`), and there is no nearest
+  `hard`, so those normalize by membership and anything else is the default.
 
   Settings are parsed **once, at the edge** — `resolveSettings` for the page,
   the menu for anything the player picks, `readSavedGame` for a game being

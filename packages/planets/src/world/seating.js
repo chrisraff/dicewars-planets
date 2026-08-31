@@ -2,70 +2,45 @@ import { MAX_DICE_PER_NODE } from '@dicewars/core';
 
 /**
  * Who gets dealt what, and the correction that stops the turn order deciding
- * the match before a die is thrown.
- *
- * Moving first is worth an enormous amount. Measured with every seat played by
- * the same AI — so nothing separates them but where they sit — seat 1 of six
- * won 25.9% of 20,006 games and seat 6 won 10.3%. Head to head it is 91.9%
- * against 8.1%. The advantage follows the *turn order* rather than the deal:
- * reverse the order over an unchanged board and the curve reverses with it.
+ * the match before a die is thrown. Moving first is worth an enormous amount:
+ * the advantage follows the *turn order* rather than the deal, so reversing
+ * the order over an unchanged board reverses the curve with it.
  *
  * Three things happen here, and only the first is a bug fix.
  *
- * **The remainder.** A round-robin deal of 59 territories to six players gives
- * five of them 10 and one of them 9 — and `playerIds[i % playerIds.length]`
- * always shorts the *last* seats, every single game. Averaged over 20,000
- * planets that was 9.82 territories for seat 1 against 8.98 for seat 6, worth
- * about a fifth of the whole gap. Rotating where the deal starts costs nothing
- * and removes it.
+ * **The remainder.** `playerIds[i % playerIds.length]` shorts the *last* seats
+ * every single game — 59 territories over six players is five seats with 10
+ * and one with 9, always the same one. Rotating where the deal starts removes
+ * it and costs nothing.
  *
- * **One extra territory.** The last seat is dealt one more than the first,
- * straight-lined across the seats between. Land is the strongest currency
- * available — reinforcement is paid every turn on the largest connected
- * region, so it is an income stream where dice are a lump sum — and land alone
- * can flatten every table size. It is deliberately used in a small dose: a
- * land-only fix needed the last of six seats to open with 11.3 territories
- * against 8.4, an empire visibly half again the size.
+ * **One extra territory** for the last seat over the first, straight-lined
+ * between. A small dose on purpose: land is the strongest currency going,
+ * since reinforcement is an income stream where dice are a lump sum, and it is
+ * also the currency a *stronger* player exploits best.
  *
- * **A ramp of scattered dice.** The rest of the correction is dice, which is
- * the cheapest currency to hide and the most even-handed one. Per unit it
- * delivers 2.35 to the weaker AI and 2.32 to the stronger; land delivers 2.15
- * and 1.72, because a better player compounds an income advantage. Dice are
- * also the only lever that a whole-number ramp gets wrong — two seats given
- * the same bump stay unequal, since the earlier of the pair keeps its tempo
- * edge — which is why the ramp is paid fractionally.
+ * **A ramp of scattered dice** for the rest. Dice are the more even-handed
+ * currency across difficulties, which is what lets one number serve both, and
+ * the ramp is paid fractionally because a whole-die ramp leaves two seats
+ * given the same bump still unequal — the earlier of the pair keeps its tempo
+ * edge. Scattered rather than piled, for the reason reinforcement scatters.
  *
- * Scattered rather than piled, and scattered rather than used to raise the
- * one-die territories to two. Both alternatives were measured. A per-seat
- * floor costs the same dice and leaves more imbalance behind (2.4 points of
- * spread against 1.6): a single die is defenceless, but it is also cheap to
- * lose, so protecting it buys less than spending the die where it can fight.
- *
- * What is left afterwards, six-handed, is 0.7 points of spread against 15.6 —
- * about 95% of the advantage gone, for one more territory and about 2.3 more
- * dice. A duel goes from 91.9/8.1 to 49.0/51.0. `scripts/seats.js` is the tool
- * all of this was measured with, and `--level 1` measures what ships.
+ * `scripts/seats.js` is the tool all of this was measured with (`--level 1`
+ * measures what ships); CLAUDE.md carries the numbers and the alternatives
+ * that were tried and rejected.
  */
 
 /**
  * How many extra dice the last seat gets, per territory a seat holds on
- * average. One number per table size, and from five players up it is flat.
+ * average. One number per table size, flat from five players up.
  *
- * It climbs at small tables because dice saturate. The gap to close in a duel
- * is three times a six-player gap, and a die stops being worth 0.23 log-odds
- * once you are handing over ten of them — by then it is worth about 0.15. Two
- * players need roughly 14 extra dice where eight players need two.
+ * It climbs at small tables because dice saturate: a duel's gap is three times
+ * a six-player gap, and a die stops being worth 0.23 log-odds once ten are
+ * being handed over. That saturation is why land is in the mix at all.
  *
- * Every entry is measured against the Normal AI through the real generator,
- * 30,002 games apiece, and each is the best of the values tried rather than a
- * curve fitted through them — the tail runs slightly hot at large tables and
- * slightly cold at small ones, so a single scaling of the column made six and
- * eight players better while taking a duel from 1.9 points of spread to 7.0.
- *
- * The column leans a little toward Hard on purpose. The two difficulties want
- * different numbers, but the mix has cut the disagreement to 14% — six-handed,
- * Normal is flattest at 0.245 and Hard at 0.28 — where land doing all the work
- * put them 66% apart. That is the other reason most of the correction is dice.
+ * **Every entry is measured rather than fitted, and the column does not scale
+ * as one** — the tail runs hot at large tables and cold at small ones, so
+ * trimming it uniformly improved six and eight players and took a duel from
+ * 1.9 points of spread to 7.0.
  */
 export const SEAT_DICE_RAMP = {
   2: 0.47,
@@ -98,25 +73,17 @@ function seatFraction(seat, players) {
 /**
  * How many territories each seat is dealt.
  *
- * The share is exact — the last seat's is a whole `landStep` above the first's
- * — and then has to be rounded onto whole territories, which is where the
- * remainder goes. Those leftovers are handed to a run of seats starting at a
- * random offset, so no seat is systematically the one that comes up short.
+ * The share is exact — the last seat's a whole `landStep` above the first's —
+ * and then has to be rounded onto whole territories, which is the trap here.
+ * The step is only one territory wide, so flooring the shares and handing out
+ * the leftovers puts *every* seat on one of two integers: at 57 territories
+ * over six seats, five on 9.33 and the last on 10.33, the whole step arriving
+ * as a cliff on the tail rather than a ramp across the order.
  *
- * The rounding matters more than it looks, because the step is only one
- * territory wide and a seat can only be dealt whole ones. Flooring the exact
- * shares and handing out the leftovers puts *every* seat in one of two
- * integers, and which two depends on the planet: at 57 territories over six
- * seats that deals five seats 9.33 and the last one 10.33, so the whole step
- * lands on the tail as a cliff rather than spreading across the order as a
- * ramp. Measured, that over-paid the last seat by about 1.2 points of win rate
- * while seats 1 to 5 sat flat.
- *
- * So the shares are rounded by carrying one random offset along their running
- * total instead. Every seat still gets a whole number, they still add to
- * exactly the planet, and each seat's *expected* share is its exact share —
- * which is what makes the average across planets a straight line rather than
- * a step.
+ * So the rounding carries one random offset along the running total instead.
+ * Every seat still gets a whole number, they still add to exactly the planet,
+ * and each seat's *expected* share is its exact share — which is what makes
+ * the average across planets a straight line.
  */
 export function seatTerritoryCounts(territories, players, rng, landStep = SEAT_LAND_STEP) {
   const even = territories / players;

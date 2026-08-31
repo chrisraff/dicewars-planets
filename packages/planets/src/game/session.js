@@ -27,9 +27,8 @@ import { createTurnFlash } from '../render/turnFlash.js';
 import { assignPlayerColors } from '../render/palette.js';
 import { highlightsFor, pulseAt } from '../render/highlights.js';
 
-// One tick long enough to run any countdown in the game out in a single step.
-// Used to settle a move that is still mid-air when the replay takes the planet
-// over — see `settleLiveBoard`.
+// One tick long enough to run any countdown out in a single step — see
+// `settleLiveBoard`.
 const SETTLE_STEP = 1e6;
 
 // Named in palette order, so a player's name matches the color of their land.
@@ -37,27 +36,15 @@ export const PLAYER_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange
 
 /**
  * One match: a planet, the game being played on it, and everything drawn for
- * it. Created fresh from a set of settings and thrown away whole — which is
- * what makes "new game" a matter of disposing one of these and building the
- * next, rather than trying to reset a dozen things back to how they started.
+ * it. Created from settings and disposed whole, so "new game" is throwing one
+ * away and building the next rather than resetting a dozen things.
  *
- * The viewer and the dice materials outlive a match and are passed in;
- * everything else here belongs to this one game.
+ * The viewer and the dice materials outlive a match and are passed in.
+ * `settings` arrives already normalized; `saved` resumes a match rather than
+ * dealing a new one.
  *
- * `settings` has already been normalized by the time it gets here — the menu
- * and `resolveSettings` are the two places raw values are parsed.
- *
- * `attackHintSeen` says whether this player has already been told how to
- * attack, and `onAttackHintSeen` is called the once when they have been —
- * same division as `onSave`: the session decides when a hint has done its job,
- * the page decides where that fact is written down.
- *
- * `saved` resumes a match rather than dealing a new one, and `onSave` is
- * handed the state to write after every move — including the move that ends
- * the game, since a finished match still has its replay to come back to.
- * Storage itself stays outside: the session says what is worth keeping, the
- * page decides where it goes, and nothing here has to know that localStorage
- * exists.
+ * `onSave` and `onAttackHintSeen` report what is worth keeping — where it is
+ * written is the page's business, so nothing here knows localStorage exists.
  */
 export function createSession({
   viewer,
@@ -77,41 +64,35 @@ export function createSession({
 
   const { world, seed, restored } = buildWorld(settings, playerIds, saved);
 
-  // which seat in the turn order the player asked for — a range picks one of
-  // its seats now, so the rest of the match has a settled answer. A resumed
-  // game already has its answer and keeps it.
+  // A range setting picks one of its seats now, so the match has a settled
+  // answer. A resumed game keeps the one it already has.
   const humanPlayerId = restored ? restored.humanPlayerId : playerIds[resolveStartSeat(settings)];
 
   const game = createGame({
     world,
     humanPlayerId,
     savedState: restored ? reviveState(restored.state) : null,
-    // a player who already waved a surrender away is not asked again, and one
-    // who was asked but never answered is not asked twice — the banner goes
-    // back up below instead
+    // The surrender is asked once per match; a restore puts the banner back
+    // by hand below rather than asking again.
     playedOn: restored?.playedOn ?? false,
     surrenderOffered: restored?.surrenderOffered ?? false,
-    // A resumed game brings its own settings with it, so the difficulty a
-    // match was started on is the one it is finished on.
+    // A resumed game brings its settings, so a match is finished on the
+    // difficulty it was started on.
     strategy: strategyFor(settings),
-    // Reorders an AI's turn for display so nearby attacks show back to back
-    // instead of swinging the camera once per attack — `dice` isn't built
-    // yet at this point in construction, but this is only ever *called*
-    // later, once it is (see createGame.js's takeAiTurn).
+    // Nearby attacks shown back to back, so the camera swings once per run
+    // rather than once per attack. `dice` is not built yet, but this is only
+    // ever *called* later — see createGame.js's takeAiTurn.
     orderAiTurn: (moves) =>
       orderAiTurnForCamera(moves, (id) => dice.standFor(id).normal, cameraFocus.currentView()),
   });
-  // Every attack and every payout, in the order they happened, anchored on
-  // the board they build forward from — the whole match, and it travels in
-  // the save, so a resumed game's replay still reaches back to where the
-  // recording began rather than only to the reload.
+  // Every attack and payout in order, anchored on the board they build
+  // forward from. It travels in the save, so a resumed match's replay still
+  // reaches back to where the recording began rather than to the reload.
   const replay = restoreReplay(restored, game.state);
-  // The history panel is the replay read back, rather than a second record of
-  // the same fights kept alongside it.
+  // The history panel is the replay read back, not a second record of it.
   const battles = createBattleLog({ entries: replay.historyAt() });
 
-  // A resumed game puts the camera back where it was left; a fresh one
-  // leaves it wherever the viewer already starts.
+  // A resumed game puts the camera back; a fresh one keeps the viewer's.
   if (isUsableCamera(restored?.camera)) {
     viewer.camera.position.set(restored.camera.x, restored.camera.y, restored.camera.z);
     viewer.controls.update();
@@ -119,9 +100,9 @@ export function createSession({
 
   const surface = createPlanetSurface(world, playerColors);
   const dice = createDiceLayer(world, pipMaterials);
-  // Something fixed to read the planet's turn against. It stands on the
-  // ground, and steps up onto a dice tower at the pole rather than being cut
-  // by one — which is what it needs the die size and the stands for.
+  // Something fixed to read the planet's turn against. It steps up onto a
+  // dice tower at the pole rather than being cut by one — hence the die size
+  // and the stands.
   const poles = createPoleMarkers({
     dieSize: dice.dieSize,
     stands: world.nodeIds.map((id) => dice.standFor(id)),
@@ -134,52 +115,36 @@ export function createSession({
   // and why this is an overlay rather than the scene's background.
   const turnFlash = createTurnFlash(hudRoot.parentNode ?? hudRoot, { before: hudRoot });
   hud.setHistory(battles.entries);
-  // A resumed game brings its history with it, so the readout should show the
-  // last fight already fought rather than sitting empty until the next one.
+  // A resumed game shows the last fight fought rather than sitting empty.
   if (battles.latestBattle) hud.showBattle(battles.latestBattle);
 
   const cameraFocus = createCameraFocus({
     camera: viewer.camera,
     controls: viewer.controls,
-    // A hand on the planet is the player taking the camera off the match — see
-    // `cameraFreed` below.
+    // A hand on the planet takes the camera off the match — see `freeCamera`.
     onDrag: () => freeCamera(),
   });
 
-  // Whatever camera this match opened with — the viewer's default, or the one
-  // a save just put back — the planet has to actually fit the screen it is
-  // being played on. Outwards only, exactly as at the end of a turn, so a
-  // player who left themselves zoomed out keeps that; but a distance saved on
-  // a wider screen, or before this rule existed, is corrected rather than
-  // restored faithfully into an unplayable view.
+  // Whatever camera this match opened with — the viewer's default or one a
+  // save put back — the planet has to fit the screen it is played on. Outwards
+  // only, so a player who left themselves zoomed out keeps that, while a
+  // distance saved on a wider screen is corrected rather than restored.
   cameraFocus.framePlanet({ instant: true });
 
-  // ...and if the board being opened is one the player is about to move on, it
-  // opens on *their* ground.
+  // ...and a board the player is about to move on opens on *their* ground.
   //
-  // A handover pans home (`focusOwnGround`), but a save reopened is a handover
-  // that already happened, in a tab that no longer exists — `endTurn` will not
-  // fire again, so without this a game reloaded on the player's own turn comes
-  // back pointing wherever the camera was saved, which is very often the last
-  // attack an AI made before handing over. The turn then opens on somebody
-  // else's half of the planet, and nothing is going to move it until the turn
-  // is over.
-  //
-  // Same rule as the handover, so a camera the player deliberately left on
-  // their own ground is left exactly where they left it: it only fires when
-  // none of that ground is on screen. Instant, for `framePlanet`'s reason —
-  // there is no previous view to travel from, and a swing would be the planet
-  // lurching the moment it appeared.
+  // A save reopened is a handover that already happened: `endTurn` will not
+  // fire again, so without this a game reloaded on the player's own turn stays
+  // pointed wherever the camera was saved — very often the last attack an AI
+  // made before handing over. Same rule as the handover, so a camera left
+  // deliberately is left alone, and instant for `framePlanet`'s reason.
   if (game.isHumanTurn() && !game.isOver() && isPlayerAlive(game.state, humanPlayerId)) {
     cameraFocus.lookAtHoldings(ownGround(), { instant: true });
   }
 
-  // Swings the camera to cover as many of the *upcoming* fights as will
-  // comfortably fit in one frame, rather than swinging to just the next one
-  // — `pairs` is `{from, to}` in the order they're about to be shown,
-  // starting with whichever one is about to trigger the swing. Returns
-  // whatever `cameraFocus.lookAtCluster` returns — whether it actually
-  // started a swing — since a caller may need to wait for it to land.
+  // Covers as many *upcoming* fights as fit in one frame rather than just the
+  // next. `pairs` is `{from, to}` in the order they will be shown. Returns
+  // whether a swing actually started, since a caller may need to wait for it.
   function focusFights(pairs, { force = false } = {}) {
     const points = pairs.map(({ from, to }) =>
       fightCenter(dice.standFor(from).normal, dice.standFor(to).normal)
@@ -188,45 +153,26 @@ export function createSession({
   }
 
   /**
-   * A turn has just handed back to the player, so put their own ground in
-   * front of them.
+   * A turn has handed back to the player, so put their own ground in front of
+   * them — but only when *none* of it is on screen, since seeing some is
+   * enough to know where you are and moving the camera then takes a view away
+   * from somebody who has one.
    *
-   * The AI plays where it likes and the camera has been following it round the
-   * back for a minute, so the board the player is handed is quite often
-   * somebody else's half of the planet. `lookAtHoldings` turns it back — but
-   * only when *none* of their territories is on screen, since seeing some of
-   * their own ground is enough to know where they are, and moving the camera
-   * then would be taking a view away from somebody who has one.
-   *
-   * Held back for the four states where an announcement is wrong rather than
-   * merely unhelpful: a player who is out has no turn to be handed, a finished
-   * match has no next move, and both the replay and a banner are things the
-   * player is looking at instead of the board — turning the planet underneath
-   * either would move a board they cannot see and land them somewhere they
-   * never watched happen.
+   * Silent in the four states where moving the planet is wrong rather than
+   * merely unhelpful: the player is out, the match is over, the replay has the
+   * planet, or a banner is holding it.
    */
   function focusOwnGround() {
     if (humanEliminated || game.isOver() || replayOpen || bannerHolding) return false;
 
-    // The camera is the player's until they hand it back, so the pan is the
-    // half of this that a drag suppresses. The flash is not: it is a fact
+    // A drag suppresses the pan but not the flash: the flash is information
     // about the match rather than a movement of the camera, and somebody
-    // studying the board is exactly who most needs telling that their turn has
-    // come round while they were looking at it.
+    // studying the board is who most needs telling their turn has come round.
     const moved = cameraFreed ? false : cameraFocus.lookAtHoldings(ownGround());
-    // The flash runs *with* the pan rather than after it. They are two halves
-    // of one handover — the planet coming back to you and being told so — and
-    // the flash is what marks the moment it happens: held until the camera
-    // settled, it announced up to half a second after the thing it was
-    // announcing, which reads as a second event rather than as the same one.
-    // Overlapping them is safe because of the shape the flash already has: a
-    // vignette is clear over the middle, so the planet turning underneath it
-    // is never the part that gets covered.
-    //
-    // The suppression rules above are the whole of the guard now. They were
-    // re-checked when the flash finally fired, because a knockout or a replay
-    // could arrive in the second the camera was moving; firing here, there is
-    // no gap for anything to arrive in.
+    // With the pan rather than after it — two halves of one handover, and the
+    // suppression rules above are the whole of the guard. Safe to overlap
+    // because a vignette is clear over the middle, so the planet turning
+    // underneath is never the part that gets covered.
     turnFlash.play();
     return moved;
   }
@@ -242,37 +188,19 @@ export function createSession({
 
   /**
    * The player has turned the planet, so the camera is theirs until they give
-   * it back.
+   * it back: every automatic move is off, and the offer to hand it back is up
+   * for exactly as long as this is true. It stays up *into* the player's own
+   * turn, since that is the case where the pan home was suppressed and the
+   * turn opens on somebody else's half of the planet.
    *
-   * The camera follows the match on its own, and that is right nearly all of
-   * the time — but not while somebody is *reading* the board. A player who
-   * drags round to count an opponent's stacks was, before this, allowed about
-   * one AI attack's worth of looking before the camera swung off to a fight
-   * somewhere else, and there was no way to ask it not to. Now the drag says
-   * so, and every automatic move is off until they say otherwise.
+   * A drag during the player's *own* turn is not recorded, because there would
+   * be nothing to record — every automatic move belongs either to a turn that
+   * is not theirs or to the handover at one end of it. Hence the replay check
+   * in front of it: a replay swings on every step whoever's turn the paused
+   * board is sitting on, so a drag during one always has something to suppress.
    *
-   * The one thing that must not follow from that is the following being lost
-   * for the rest of the match with nothing on screen to say so — hence the
-   * button, which is up for exactly as long as this is true. It stays up
-   * *into* the player's own turn when the drag happened before it, because
-   * that is the case where the pan home was suppressed and the turn opens on
-   * somebody else's half of the planet.
-   *
-   * A drag taken during the player's own turn is not recorded at all, and the
-   * reason is that there would be nothing to record: every automatic move
-   * belongs either to a turn that is not theirs or to the handover at one end
-   * of it, so during their own turn `cameraFreed` suppresses precisely
-   * nothing. Raising an offer to hand back a camera nobody was going to take
-   * would be a button up through the one part of the match they are playing.
-   *
-   * That exemption is about the *live* match, hence the replay check in front
-   * of it: a replay swings to every step it plays whoever's turn the paused
-   * board happens to be sitting on, so a drag during one always has something
-   * to suppress.
-   *
-   * Not saved. It is a fact about the hand on the planet in this sitting,
-   * like the pressed territory and unlike anything about the position, and a
-   * reload is somebody arriving at the board fresh.
+   * Not saved — a fact about the hand on the planet in this sitting, like the
+   * pressed territory, and a reload is arriving at the board fresh.
    */
   function freeCamera() {
     if (cameraFreed) return;
@@ -282,17 +210,12 @@ export function createSession({
   }
 
   /**
-   * ...and giving it back. Either by pressing the button, which pans home in
-   * the same breath, or by attacking on your own turn, which does not.
-   *
-   * `pan` is that difference and it is the whole of the design. A press is a
-   * request to be shown something, and answering it by only *promising* to
-   * move the camera the next time the match happens to want to would be no
-   * answer at all — so it goes wherever the camera would have been had it
-   * never been taken (`autoFollowAim`). An attack is somebody who has finished
-   * studying and started playing, at a territory they have found for
-   * themselves and are looking straight at; moving the planet under that is
-   * the very thing this whole mechanism exists to stop.
+   * ...and giving it back, and `pan` is the difference between the two ways.
+   * The button is a request to be shown something, so it moves the camera in
+   * the same breath (`autoFollowAim`); only promising to move it next time the
+   * match wanted to would be no answer at all. An attack is somebody looking
+   * straight at a territory they found for themselves, and moving the planet
+   * under that is the thing this exists to stop.
    */
   function resumeAutoFollow({ pan = false } = {}) {
     if (!cameraFreed) return;
@@ -302,24 +225,18 @@ export function createSession({
   }
 
   /**
-   * Where the camera would be standing right now if it had never been taken —
-   * which is the only honest answer to a press, and is *not* the same place
-   * all match long.
+   * Where the camera would be if it had never been taken — which is not the
+   * same place all match. On somebody else's turn that is the fight being
+   * shown, which is what the press was to catch up with; on the player's own
+   * turn, and in the gaps, it is home.
    *
-   * On somebody else's turn the camera's job is the fight: the run of attacks
-   * being shown is the thing the player pressed the button to catch up with,
-   * and taking them home to their own ground instead would be showing them the
-   * one part of the planet nothing is happening on. On their own turn, and in
-   * the gaps where an AI has nothing in flight, home is the answer.
-   *
-   * Both are `force`d, because "you can already see a corner of it" is not an
-   * answer to somebody who pressed a button asking to be taken there.
+   * Both `force`d: "you can already see a corner of it" is no answer to
+   * somebody who pressed a button asking to be taken there.
    */
   function autoFollowAim() {
-    // A replay is following something of its own — the step the track is
-    // standing on — and the live board underneath it is not what is being
-    // watched. Same aim `showReplayStep` would have taken, so a press catches
-    // up with the replay rather than landing somewhere it never went.
+    // A replay follows the step the track is standing on, not the live board.
+    // Same aim `showReplayStep` would have taken, so a press catches up with
+    // the replay rather than landing somewhere it never went.
     if (replayOpen) {
       return replayStep > 0
         && focusFights(replay.attacks.slice(replayStep - 1), { force: true });
@@ -346,22 +263,17 @@ export function createSession({
   // not stored in a save: the board itself says whether you still hold ground
   let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
   let lastOutcome = null; // so closing the replay can bring the banner back
-  // The one-off prompt for somebody who has never played. It has done its job
-  // the moment either happens: they dismiss it, or they attack — having just
-  // done the thing it describes, being told again next game would be noise.
+  // Done the moment they dismiss it or attack — having just done the thing it
+  // describes, being told again next game would be noise.
   let hintSeen = attackHintSeen;
   let pendingReplayStep = null; // a board waiting for the camera to arrive before it shows
   let replayFight = null; // the fight the replay is stopped on, throbbing as a live one does
   let replayRoll = null; // the attack a replay step is throwing dice for
   let thrownDice = null; // {from, to} of a throw whose stacks are still on the ground
   let pressed = null; // the territory a finger is down on, marked while it is
-  // Whether the player has taken the camera off the match by turning the
-  // planet themselves — see `freeCamera`. Nothing automatic moves it while
-  // this is true, and the offer to hand it back is up for exactly that long.
-  let cameraFreed = false;
-  // The run of attacks the turn being shown is working through — kept only so
-  // a press mid-AI-turn has the fight to aim at rather than the player's own
-  // ground. Emptied when the turn ends.
+  let cameraFreed = false; // the player has taken the camera — see `freeCamera`
+  // The run the shown turn is working through, so a press mid-AI-turn has a
+  // fight to aim at rather than the player's own ground. Emptied at endTurn.
   let aiFights = [];
   let replayStep = 0; // where the track is standing, so a step forward can be told from a scrub
   // The two things that take the match out of the player's hands. Nothing in
@@ -369,33 +281,23 @@ export function createSession({
   let replayOpen = false;
   let bannerHolding = false;
 
-  // Repaints the planet as the replay's own board at `step` — surface, dice,
-  // the stats row, the battle readout and its history all drawn from the
-  // reconstructed board and the attacks that got it there, exactly as they
-  // stood at that point in the match rather than as the match eventually
-  // finished. `entry` is that step's own attack, so the readout shows it the
-  // same way it shows the last fight during live play; the history behind it
-  // is truncated to `step` for the same reason — opening it from partway
-  // through the track should not spoil what the track hasn't reached yet.
+  // Repaints everything — surface, dice, stats, readout, history — as the
+  // board stood at `step` rather than as the match finished. The history is
+  // truncated to `step` for the same reason: opening the track partway
+  // through should not spoil what it has not reached.
   function applyReplayStep(step, entry, nodes, { animate = false } = {}) {
     const atEnd = step >= replay.attacks.length;
     const players = replay.playersAt(step);
 
-    // A step reached by playing forward throws its dice before showing what
-    // they did, so the board this paints is the one *before* the attack —
-    // the stacks are still standing where they are about to be thrown from.
-    // Everything else about the step is drawn now either way: the readout
-    // holds its faces back (`revealed: false`) exactly as live play does, and
-    // the stats and history belong to the step being arrived at, not the one
-    // being left.
+    // A step played forward throws its dice first, so it paints the board
+    // *before* the attack — stacks still standing where they are thrown from.
+    // Everything else belongs to the step being arrived at, and the readout
+    // holds its faces back (`revealed: false`) exactly as live play does.
     const rolling = animate && entry;
     const board = rolling ? replay.boardAt(step - 1) : nodes;
-    // The board a replay draws is a board mid-match, so the fight it stopped
-    // on is marked the way a live one is — attacker held dark, defender
-    // glowing. Without it the readout names a pair of territories that the
-    // planet gives no way of finding, on a board where nothing is moving to
-    // point at them. It throbs from here on out (see tick), so a step that
-    // took a camera swing to reach isn't a still frame when it lands.
+    // Marked the way a live fight is, so the readout's pair of territories
+    // can be found on a board where nothing else is moving to point at them.
+    // It throbs from here on (see tick).
     replayFight = entry ? { entry, nodes: board, elapsed: 0 } : null;
     paintReplayBoard(board, entry, pulseAt(0));
     settleThrownDice(board);
@@ -413,12 +315,10 @@ export function createSession({
   }
 
   /**
-   * Throws this step's dice across the two territories, the way live play
-   * does, and remembers the board to land on when they stop.
-   *
-   * A replay entry is a battle *log* entry rather than the attack event the
-   * animation was written for, so the faces come out of it by hand — they are
-   * the same numbers under a different pair of names.
+   * Throws this step's dice the way live play does, and remembers the board to
+   * land on when they stop. A replay entry is a battle *log* entry rather than
+   * the attack event the animation was written for, so the faces are unpacked
+   * by hand — the same numbers under a different pair of names.
    */
   function startReplayRoll(entry, nodes) {
     replayRoll = {
@@ -447,14 +347,13 @@ export function createSession({
 
   /**
    * Stands a thrown pair of stacks back up against whatever board is about to
-   * be drawn — on the step the throw was for, or on some other step entirely
-   * if the track moved on before the dice landed.
+   * be drawn — the step the throw was for, or another entirely if the track
+   * moved on before the dice landed.
    *
-   * `dice.update` cannot do this on its own: it rebuilds a stack only when
-   * its *count* changes, and a defender that is taken with exactly as many
-   * dice as it was holding keeps its count while every one of its dice is
-   * lying scattered on the ground. `reroll` rebuilds regardless, which is why
-   * live play calls it by hand for both sides of an attack too.
+   * `dice.update` cannot do it: it rebuilds a stack only when the *count*
+   * changes, and a defender taken with exactly as many dice as it held keeps
+   * its count while every one of them lies scattered. `reroll` rebuilds
+   * regardless, which is why live play calls it by hand too.
    */
   function settleThrownDice(nodes) {
     if (!thrownDice) return;
@@ -472,35 +371,28 @@ export function createSession({
     surface.refresh({ nodes }, (territoryId) => marks.get(territoryId) ?? null);
   }
 
-  // Live play shows an attack's result while the camera is still swinging to
-  // it, because the dice landing *is* the event — arriving late to a roll
-  // already in progress is the whole point of the swing existing at all. A
-  // replay has no such event to catch up to: the board only ever changes
-  // because the track moved, so revealing it before the camera has actually
-  // arrived just looks like the planet changed for no reason. So here, and
-  // only here, the swing runs first and the board waits for it.
+  // Live play paints while the camera is still swinging, because the dice
+  // landing *is* the event. A replay has nothing to catch up to — the board
+  // changes only because the track moved, so painting before the camera
+  // arrives just looks like the planet changed for no reason. Here, and only
+  // here, the swing runs first and the board waits for it.
   function showReplayStep(step, { moveCamera = true } = {}) {
     const nodes = replay.boardAt(step);
     const entry = step > 0 ? replay.attacks[step - 1] : null;
-    // Only a step *forward* throws dice. Playing and the › button both move
-    // one at a time and are worth watching; dragging the track is a scrub
-    // through dozens of steps and animating each one would be a mess, and
-    // stepping back is arriving at a board rather than watching it happen.
+    // Only a step *forward* throws dice: playing and › move one at a time and
+    // are worth watching, where a scrub passes through dozens and stepping
+    // back is arriving at a board rather than watching it happen.
     const animate = step === replayStep + 1;
 
     replayStep = step;
     replayRoll = null; // this seek supersedes whatever was still in the air
     pendingReplayStep = null; // and whatever was still waiting on the camera
 
-    // Looks ahead through every attack still to come, not just this one, so
-    // a run of nearby fights gets one swing instead of several — the replay
-    // order is never reordered (unlike a live AI turn), only clustered.
-    //
-    // `moveCamera` is off for a step passed through mid-scrub, and `cameraFreed`
-    // for a viewer who has dragged the planet to watch one corner of it while
-    // the track runs. Both leave the board to repaint on the spot: it is only
-    // the *swing* that is suppressed, and skipping it skips the wait for it
-    // too, which is what makes a scrub keep up with the hand doing it.
+    // Looks ahead through every attack still to come, so a run of nearby
+    // fights gets one swing. `moveCamera` is off mid-scrub and `cameraFreed`
+    // for a viewer watching one corner: both suppress only the *swing*, and
+    // skipping it skips the wait for it, which is what keeps a scrub up with
+    // the hand doing it.
     if (moveCamera && !cameraFreed && entry && focusFights(replay.attacks.slice(step - 1))) {
       pendingReplayStep = { step, entry, nodes, animate };
       return; // applied once the swing lands, in tick() below
@@ -510,33 +402,25 @@ export function createSession({
   }
 
   /**
-   * Brings the live board to a settled moment: a throw still in the air, or a
-   * payout still dropping, is finished on the spot.
+   * Finishes whatever move is mid-air, so what the replay covers is a whole
+   * move rather than half of one.
    *
-   * Nothing is skipped — a long enough tick runs the countdown out and the
-   * game emits exactly what it was about to emit anyway, so the handlers clear
-   * `roll` and `reinforceAnim` themselves, the dice are stood back up, and the
-   * save that follows is of a whole move rather than half of one. Only one of
-   * the two can ever be outstanding — a turn cannot end while an attack is
-   * pending — so a single tick is the whole of it.
-   *
-   * None of it is seen: the replay paints its own opening board over the top
-   * in the same breath. It is about what there is to come back to.
+   * Nothing is skipped: a long enough tick runs the countdown out and the game
+   * emits what it was going to anyway, so the handlers clear `roll` and
+   * `reinforceAnim` themselves. Only one move can ever be outstanding — a turn
+   * cannot end on a pending attack — so one tick is the whole of it. None of
+   * it is seen; it is about what there is to come back to.
    */
   function settleLiveBoard() {
     if (game.isBusy()) game.tick(SETTLE_STEP);
   }
 
   function openReplay() {
-    // Now reachable mid-match, not only from a banner over a finished one, so
-    // there may still be a move in flight to put down first.
+    // Reachable mid-match, so there may be a move in flight to put down first.
     settleLiveBoard();
     replayOpen = true;
-    // Opening or closing a replay is arriving at a view rather than keeping
-    // one: there is one planet and two things that drive it, and whichever has
-    // just been handed it starts out driving. The offer is about the camera
-    // you are looking through now, not the one you were looking through a
-    // moment ago.
+    // One planet, two things that drive it: whichever has just been handed it
+    // starts out driving.
     cameraFreed = false;
     refreshAutoFollow(); // and in here it sits in the card, not the controls
     hud.hideOutcome();
@@ -561,10 +445,8 @@ export function createSession({
     refreshBoard();
     hud.showBattle(battles.latestBattle);
     hud.setHistory(battles.entries);
-    // Only a match that actually ended has a banner to go back to. Opened from
-    // the controls row instead — knocked out, or playing on past a surrender —
-    // there is nothing to restore, and the game simply picks up where it was
-    // paused.
+    // Only a match that actually ended has a banner to go back to; opened from
+    // the controls row there is nothing to restore.
     if (lastOutcome) hud.showOutcome(lastOutcome);
   }
 
@@ -589,27 +471,19 @@ export function createSession({
   }
 
   /**
-   * A move written down the instant it is *decided*, before any of it is
-   * shown.
+   * A move written down the instant it is *decided*, before any of it is shown.
    *
-   * This is the whole of the anti-cheat, and the thing it closes is not
-   * subtle: an attack resolves in full the moment it is declared — the faces
-   * are already rolled and `attack` carries every one of them — so a save
-   * deferred until the dice stop is a save the player can simply refuse. Read
-   * the total off the faces, reload before they land, and the restored board
-   * is the one *before* the fight, ready to be fought again for a different
-   * answer. A payout is the same trick with `rng` instead of `rollDie`: its
-   * dice scatter, and a scatter nobody likes can be reloaded away.
+   * This is the whole of the anti-cheat. An attack resolves in full when it is
+   * declared — `attack` already carries every face — so a save deferred until
+   * the dice stop is one the player can refuse: read the total, reload before
+   * they land, and the fight is back to be fought again for a different
+   * answer. A payout is the same trick against `rng`. The replay is recorded
+   * here too, since a save a move ahead of its own replay comes back missing
+   * the fight that produced it.
    *
-   * So both are written here rather than at the `change` that follows them,
-   * and the replay is recorded here too — a save whose board is a move ahead
-   * of its own replay would come back missing the fight that produced it.
-   *
-   * That `change` lands on exactly the board this wrote, so it does not write
-   * it a second time; `outcomeSaved` is what tells it so. The only thing lost
-   * by skipping it is a camera that moved during the animation, which is a
-   * move behind rather than wrong — and the camera is opportunistic in a save
-   * anyway, since nothing but a board change has ever written one.
+   * The `change` that follows lands on exactly this board, so `outcomeSaved`
+   * stops it writing twice. Only a camera that moved during the animation is
+   * given up, and the camera has always been opportunistic in a save.
    */
   let outcomeSaved = false;
   function saveOutcome() {
@@ -625,22 +499,14 @@ export function createSession({
 
   /**
    * A banner over a match that is **still running** — knocked out, or handed
-   * the win because everyone else gave up — and the match held behind it until
-   * it is answered.
+   * the win because everyone else gave up — with the match held behind it
+   * until it is answered. Both are questions, and a question that goes stale
+   * while it is being asked is worse than not asking it.
    *
-   * Holding is the whole point. Without it the AIs went on taking turns behind
-   * the banner: you were told you were out while the planet carried on being
-   * carved up underneath, and dismissing it dropped you into a board several
-   * turns past the one the banner went up over. Both of these are questions,
-   * and a question that goes stale while it is being asked is worse than not
-   * asking it.
-   *
-   * Both moments are already settled ones — a knockout is emitted after the
-   * attack has been applied, a surrender is judged at the end of a turn — so
-   * unlike the replay there is never a move in mid-air to put down first.
-   *
-   * The banner covers the whole HUD, so answering it is the only way out and
-   * the hold cannot be stranded: every action releases it.
+   * Both arrive at settled moments — a knockout after its attack is applied, a
+   * surrender at the end of a turn — so unlike the replay there is never a
+   * move in mid-air to put down first. The banner covers the whole HUD, so
+   * answering it is the only way out and the hold cannot be stranded.
    */
   function interrupt(outcome) {
     bannerHolding = true;
@@ -692,12 +558,9 @@ export function createSession({
   }
 
   game.on('attack', ({ event, eliminated, timing, upcoming }) => {
-    // Written down before a single die is drawn. The fight is already decided
-    // — `event` holds the faces it will land on — so this is the moment it
-    // becomes part of the match, whatever the player does next. See
-    // `saveOutcome`. The elimination travels with the declaration for the
-    // same reason: it is part of what this attack did, and a save that had
-    // the board without it would restore a knockout the history never saw.
+    // Before a single die is drawn — see `saveOutcome`. The elimination
+    // travels with the declaration for the same reason: a save carrying the
+    // board without it would restore a knockout the history never saw.
     replay.record(event);
     if (eliminated) replay.recordElimination(eliminated);
     saveOutcome();
@@ -706,14 +569,11 @@ export function createSession({
     // the readout with blank faces so it fills in as the roll lands
     hud.showBattle(battleEntry(event), { revealed: false });
 
-    // The AI attacks wherever it likes, including round the back of the
-    // planet. Its own fights are the ones worth turning for — the player's
-    // are on screen by definition, since they just clicked them. `upcoming`
-    // is this attack plus whatever's already queued behind it this turn, so
-    // a run of nearby attacks gets one swing instead of one each.
-    // ...unless the player has taken the camera. Somebody who dragged round to
-    // study the board asked for the planet to stay where they put it, and the
-    // fights they are missing are the price of that until they say otherwise.
+    // Only the AI's fights are worth turning for — the player's are on screen
+    // by definition, since they just clicked them. `upcoming` is this attack
+    // plus whatever is queued behind it, so a run of nearby attacks gets one
+    // swing. Unless the player has taken the camera, in which case the planet
+    // stays where they put it and the missed fights are the price.
     if (game.currentPlayer() !== humanPlayerId) {
       aiFights = upcoming; // and where a press would take them, if the camera is theirs
       if (!cameraFreed) focusFights(upcoming);
@@ -755,10 +615,8 @@ export function createSession({
       battles.record({ type: 'passed', playerId: event.playerId });
       hud.setHistory(battles.entries);
     }
-    // Deliberately no cameraFocus.lookAt here: reinforcement dice land on
-    // whichever territories they land on, all over the planet, and the drop
-    // is fast enough that swinging the camera to chase it would take longer
-    // than the animation it's chasing. It reads fine off-screen.
+    // No camera move: payout dice land all over the planet, and the drop is
+    // faster than a swing chasing it would be. It reads fine off-screen.
     hud.showReinforce({ playerId: event.playerId, count: event.landed.length });
     reinforceAnim = {
       elapsed: 0,
@@ -775,29 +633,17 @@ export function createSession({
     hud.hideReinforce();
 
     // Handing the planet over: the AI attacks wherever it likes, so the view
-    // that suits its turn is the one with the whole planet in it. Only when
-    // the player's own turn is the one ending, and only ever outwards — see
-    // `framePlanet`. It has the AI's think pause plus its first aim to land
-    // in, so it is over before there are dice to read.
-    // Ending a turn hands the camera back. Whatever the player was studying,
-    // they were studying it to decide the move they have just finished making,
-    // and what comes next is a run of turns they are only watching — which is
-    // the whole of what following is for. So the pull-back is unconditional
-    // here.
-    //
-    // It is also the backstop for an offer the player simply ignored: a turn
-    // played out without pressing it and without picking a territory still
-    // ends with the camera back on the match.
+    // that suits its turn is the one with the whole planet in it. Outwards
+    // only — see `framePlanet` — and it has the AI's think pause to land in.
+    // Ending a turn hands the camera back unconditionally too, which is the
+    // backstop for an offer the player simply ignored.
     if (event.playerId === humanPlayerId) {
       resumeAutoFollow();
       cameraFocus.framePlanet();
     }
-    // And the other side of the same handover. `endTurn` is emitted from
-    // `finishReinforce`, so by here the previous player's payout has finished
-    // landing and `state` has already moved on to whoever is next — which is
-    // both the moment the player is actually being handed the board and the
-    // first moment the camera is free to move without cutting an animation
-    // short.
+    // The other side of the same handover. `endTurn` comes from
+    // `finishReinforce`, so the payout has landed and `state` has moved on —
+    // the first moment the camera is free without cutting an animation short.
     else if (game.currentPlayer() === humanPlayerId) focusOwnGround();
   });
 
@@ -806,16 +652,12 @@ export function createSession({
     hud.setHistory(battles.entries);
     // Not recorded into the replay here: it was tagged onto its own attack at
     // the declaration, since a save written then has to carry it.
-
-    // Losing your last territory used to pass without a word: the AIs simply
-    // played on and nothing said why the board had stopped answering.
     if (event.playerId === humanPlayerId) {
       humanEliminated = true;
       if (!game.isOver()) {
-        // Deliberately not kept as `lastOutcome`: a match that carries on
-        // without you has no ending screen to be returned to, so closing a
-        // replay opened from here puts you back on the board rather than
-        // re-imposing a banner you have already answered.
+        // Not kept as `lastOutcome`: a match carrying on without you has no
+        // ending screen to return to, so closing a replay opened from here
+        // puts you back on the board rather than re-imposing the banner.
         interrupt({
           kind: 'eliminated',
           by: event.by,
@@ -830,17 +672,11 @@ export function createSession({
     dice.update(state);
     poles.settle(state); // a tower may have grown or gone at a pole
     refreshBoard();
-    // Every change, rather than on a timer or on the way out of the page:
-    // `change` is the only moment the board moves, a pagehide handler is not
-    // reliable on mobile, and the alternative is losing whatever happened
-    // since the last tick. A finished game is saved too rather than cleared:
-    // there is no turn left to take, but the replay is in there, and
-    // reopening onto the ending is how a player gets back to it.
-    //
-    // Unless the move that got here has already been written down, which is
-    // every move that was animated: `saveOutcome` stored this exact board a
-    // whole animation ago, on purpose, and re-storing it is one main-thread
-    // `setItem` for no new information.
+    // Every change rather than on a timer or on `pagehide`, which is not
+    // reliable on mobile. A finished game is saved too: no turn left to take,
+    // but the replay is in there. Unless `saveOutcome` already wrote this
+    // exact board a whole animation ago, in which case re-storing it is a
+    // main-thread `setItem` for no new information.
     if (outcomeSaved) outcomeSaved = false;
     else onSave?.(snapshot());
   });
@@ -852,11 +688,8 @@ export function createSession({
   game.on('surrendered', () => {
     lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
     interrupt(lastOutcome);
-    // Straight away rather than at the next `change`, for the same reason
-    // `playOn` writes immediately: the match is now held behind the banner, so
-    // there may not *be* another change until the question is answered — and
-    // one of the answers is "watch the replay", which leaves the board exactly
-    // where it is.
+    // Straight away: the match is held behind the banner, so there may not
+    // *be* another change until the question is answered.
     onSave?.(snapshot());
   });
 
@@ -875,9 +708,8 @@ export function createSession({
     if (action === 'replay') return openReplay();
 
     if (action === 'playOn') {
-      // Refused for good, and written down straight away rather than left for
-      // the next `change`: a reload in between would otherwise open on the
-      // banner the player has just declined.
+      // Written down straight away: a reload in between would otherwise open
+      // on the banner the player has just declined.
       game.playOn();
       lastOutcome = null;
       onSave?.(snapshot());
@@ -910,17 +742,14 @@ export function createSession({
 
   hud.onMenu(() => onMenu?.());
 
-  // A game restored after it had already been won gets no `over` event —
-  // nothing happens in it any more — so the ending it finished on goes back up
-  // by hand, which is what makes "Watch replay" reachable after a reload.
+  // A restored game that was already won gets no `over` event, so the ending
+  // it finished on goes back up by hand — which is what keeps "Watch replay"
+  // reachable after a reload.
   //
-  // A surrender that was offered and never answered is the same problem one
-  // step earlier, and it needs the same hand. `surrendered` is emitted at the
-  // end of a turn and will not fire again — it is asked once per match — so
-  // without this the player came back to an ordinary game in progress: no
-  // banner, and no Replay button either, since that reads off `playedOn`. The
-  // way out of the banner that made this easy to miss is "Watch replay", which
-  // answers nothing and leaves the question owed.
+  // A surrender offered and never answered is the same problem one step
+  // earlier: `surrendered` is asked once per match and will not fire again, so
+  // without this the player comes back to an ordinary game in progress with
+  // no banner and no Replay button, the win they were handed simply gone.
   if (game.isOver()) showEnding(game.state.winner);
   else if (game.surrenderOffered && !game.playedOn) {
     lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
@@ -934,18 +763,15 @@ export function createSession({
     settings,
 
     /**
-     * A press has landed on the planet. Answers with what letting go there
-     * would do — `pressActionOn`'s `'attack'`, `'select'` or `'drop'` — or
-     * `null` for a press with nothing to act on, which hands it straight to
-     * the camera, so a drag that started on the ocean turns the planet from
-     * its first pixel rather than after a dead zone (see `pointerArbiter.js`).
+     * A press has landed. Answers with what letting go there would do —
+     * `pressActionOn`'s `'attack'`, `'select'` or `'drop'` — or `null` for
+     * nothing to act on, which hands the press straight to the camera so a
+     * drag off the ocean turns the planet from its first pixel rather than
+     * after a dead zone (see `pointerArbiter.js`).
      *
-     * A press worth taking is *shown*: the territory it would act on is
-     * marked while the finger is still down, so releasing is a confirmation
-     * rather than a guess. The one press with nothing to mark is a tap on the
-     * ocean while holding a territory — it still has to be taken, since
-     * letting go there is how you put that territory back down, and there is
-     * nowhere to put a mark for it.
+     * A press worth taking is *shown*, so releasing is a confirmation rather
+     * than a guess. The one press with nothing to mark is a tap on the ocean
+     * while holding a territory, which is how you put that territory down.
      */
     pressAt(ndc) {
       const territoryId = pickTerritoryAt(ndc);
@@ -969,11 +795,8 @@ export function createSession({
       const territoryId = pressed;
       pressed = null;
       game.clickTerritory(territoryId);
-      // Picking a territory to attack from answers the offer: the studying is
-      // over and the move is being made. Silently, and that is the whole
-      // difference from the button — they are looking straight at ground they
-      // just found for themselves, and moving the planet under it is the very
-      // thing this exists to prevent.
+      // Picking a territory answers the offer, silently — they are looking
+      // straight at ground they just found for themselves.
       if (game.selection !== null) resumeAutoFollow();
       refreshBoard();
     },
@@ -1022,11 +845,10 @@ export function createSession({
           reinforceAnim.dropped++;
         }
       }
-      // Held while the replay has the planet, and while a banner is up over a
-      // match that is still running. Both are the same problem: letting the AI
-      // take three turns behind something the player is looking at means
-      // closing it drops them somewhere they never saw happen. `game.tick` is
-      // the only clock in the match, so not calling it is the whole of it.
+      // Held while the replay or a banner has the planet: letting the AI take
+      // three turns behind either means closing it drops the player somewhere
+      // they never saw happen. `game.tick` is the only clock in the match, so
+      // not calling it is the whole of the pause.
       if (!replayOpen && !bannerHolding) game.tick(dt);
     },
 
@@ -1035,10 +857,9 @@ export function createSession({
       reinforceAnim = null;
       replayFight = null;
       replayRoll = null;
-      // The replay drives itself on a timer now, and that timer outlives the
-      // markup `replaceChildren` is about to throw away — it would go on
-      // asking this session to paint steps onto a planet that has been taken
-      // out of the scene. Closing the replay is what stops it.
+      // The replay's timer outlives the markup `replaceChildren` is about to
+      // throw away, and would go on painting steps onto a planet no longer in
+      // the scene. Closing the replay is what stops it.
       hud.hideReplay();
       hud.dispose();
       cameraFocus.dispose();
@@ -1079,10 +900,9 @@ function restoreReplay(restored, state) {
  * The planet this match is played on, and the seed that grows it.
  *
  * A saved game names its seed, so the same planet comes back cell for cell —
- * but only as long as the generator itself has not changed. When the world it
- * rebuilds no longer fits the board that was saved on it, the save is dropped
- * and a fresh planet is grown: a new game is a far better outcome than a
- * board laid over territories that are not there any more.
+ * as long as the generator has not changed. When the world it rebuilds no
+ * longer fits the board saved on it, the save is dropped and a fresh planet
+ * grown: a new game beats a board laid over territories that are not there.
  */
 function buildWorld(settings, playerIds, saved) {
   const subdivisions = subdivisionsFor(settings);

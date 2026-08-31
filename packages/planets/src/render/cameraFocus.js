@@ -17,21 +17,15 @@ import { normalize } from '../geometry/vec3.js';
 /**
  * Turns the planet under the orbit camera to bring something into view.
  *
- * The AI plays where it likes, and half of that is round the back — a battle
- * nobody can see is a battle that may as well not have happened. So when one
- * starts outside the visible cap (see `cameraFraming.js` for where that edge
- * is and the margin that decides "too close to it"), the camera swings along
- * the shortest arc until the fight is centered.
+ * The AI plays where it likes and half of that is round the back, so a fight
+ * starting outside the visible cap gets a swing along the shortest arc until
+ * it is centred. It also draws the camera back to take the whole planet in
+ * (`framePlanet`), which is the view an AI's turn wants for the same reason.
  *
- * It also draws the camera back to take the whole planet in (`framePlanet`),
- * which is the view an AI's turn wants for the same reason: when the next
- * fight could be anywhere on the sphere, the answer is to be able to see the
- * sphere.
- *
- * Thin on purpose: every decision is in `cameraFraming.js`, and all this adds
- * is reading the camera, writing it back, and the dragging rule — the player
- * turning the planet ends the swing on the spot, because a camera fighting
- * the hand on it is worse than a missed battle.
+ * Thin on purpose: every decision is in `cameraFraming.js`. All this adds is
+ * reading the camera, writing it back, and the dragging rule — a hand on the
+ * planet ends the swing on the spot, since a camera fighting the hand on it is
+ * worse than a missed battle.
  */
 export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING, onDrag }) {
   let swing = null; // { from, to, elapsed, duration } — where the camera is looking
@@ -73,19 +67,15 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
   // OrbitControls fires `start` for the wheel as well as for a drag, and the
   // two mean different things to the two animations here.
   //
-  // A pull-back is *about* distance, so anything the player does to the
-  // controls outranks it — a wheel and a pinch say so outright, and a drag is
-  // a hand on the planet that may be about to pinch as well. A swing is about
-  // direction, so only a drag ends one; a wheel says nothing about where to
-  // look, and the swing carries on and keeps whatever distance the player
-  // lands on. (`state` is OrbitControls' own; if it ever stops being there,
-  // every `start` cancels the swing too, which is the safe way round to be
-  // wrong.)
+  // A pull-back is *about* distance, so anything the player does outranks it.
+  // A swing is about direction, so only a drag ends one — a wheel says nothing
+  // about where to look, and the swing carries on and keeps whatever distance
+  // the player lands on. (`state` is OrbitControls' own; without it every
+  // `start` cancels the swing, which is the safe way round to be wrong.)
   //
-  // `onDrag` is told about the same drags — the camera reports the hand on the
+  // `onDrag` is told about the same drags. The camera reports the hand on the
   // planet and says nothing about what it means, because what it means is a
-  // question about the *match* (see `session.js`, where a drag is what hands
-  // the camera to the player until they hand it back).
+  // question about the *match* — see `session.js`.
   const NOT_DRAGGING = -1; // OrbitControls' internal STATE.NONE
   const onControlsStart = () => {
     zoom = null;
@@ -141,23 +131,18 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
     },
 
     /**
-     * Turn the planet back to the player's own ground, for the moment a turn
+     * Turn the planet back to the player's own ground for the moment a turn
      * hands back to them. `points` is a direction per territory they hold.
      *
-     * Only fires when *none* of them is in view — see `holdingsFocus`, which
-     * is where that rule and the choice of aim live. It will draw back as well
-     * as turn, but only outwards and only when the wider view strictly shows
-     * more, so the two animations `tick` already runs together are exactly the
-     * two this needs.
+     * Only fires when *none* of them is in view — `holdingsFocus` holds that
+     * rule and the choice of aim. It will draw back as well as turn, but only
+     * outwards and only when the wider view strictly shows more.
      *
-     * `force` is for the same move made on request rather than on a handover:
-     * a player who pressed a button to be brought back does not want to be
-     * told they can already see a sliver of their own ground.
-     *
-     * `instant` is for the same move made at the moment a board first appears,
-     * and it is `framePlanet`'s argument exactly: there is no previous view to
-     * travel from, so animating would only be the planet lurching the instant
-     * it showed up.
+     * `force` is the same move on request rather than on a handover: somebody
+     * who pressed a button does not want to be told they can already see a
+     * sliver of their own ground. `instant` is the same move as a board first
+     * appears, for `framePlanet`'s reason — there is no previous view to
+     * travel from, so animating would only be a lurch.
      */
     lookAtHoldings(points, { force = false, instant = false } = {}) {
       const { direction, distance } = orbit();

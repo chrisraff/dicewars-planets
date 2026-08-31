@@ -7,50 +7,36 @@ import { add, angleBetween, centroid, normalize } from '../geometry/vec3.js';
  */
 export const DEFAULT_FRAMING = {
   /**
-   * The lever. How far in from the edge of the planet a fight has to sit
-   * before the camera leaves it alone, measured on screen: 1 is the middle of
-   * the disc, 0 is right on the edge of what can be seen (the limb, or the
-   * edge of the frame when zoomed in past it).
+   * The lever. How far in from the edge a fight has to sit before the camera
+   * leaves it alone, measured on screen: 1 is the middle of the disc, 0 is the
+   * edge of what can be seen (the limb, or the frame when zoomed in past it).
    *
-   * Raise it and the action stays comfortably central at the cost of moving
-   * more often; lower it and the planet holds still until a fight is nearly
-   * out of sight. 0 only ever moves for a fight that is strictly off screen,
-   * which sounds ideal and isn't: dice on the last visible sliver of limb are
-   * edge-on and unreadable, and the swing that then follows the *next* attack
-   * is a lurch out of nowhere.
-   *
-   * 0.2 keeps fights inside the middle four fifths of the disc, which on a
-   * default planet is everything within about 40° of the point facing the
-   * camera. Bear in mind what the sphere itself costs: barely a third of the
-   * planet faces the camera at all, so most attacks somewhere on it are out
-   * of view whatever this is set to. What the lever really trades is how
-   * squashed the dice are allowed to be when the camera does hold still.
+   * Raise it and the action stays central at the cost of moving more often. 0
+   * moves only for a fight strictly off screen, which sounds ideal and is not:
+   * dice on the last sliver of limb are edge-on and unreadable. What the lever
+   * really trades is how squashed the dice may be when the camera holds still.
    */
   margin: 0.2,
 
-  // How fast the planet turns under a swing, and the bounds on that, so a
-  // small correction doesn't crawl and a half-turn doesn't whip past. The
-  // ceiling also keeps the camera arriving before the dice land: an AI attack
-  // is aim + roll ~= 0.57s of travel before there is anything to read.
+  // How fast the planet turns under a swing, bounded so a small correction
+  // does not crawl and a half-turn does not whip past. The ceiling keeps the
+  // camera arriving before the dice land: an AI attack is aim + roll ≈ 0.57s.
   speed: 3.0, // radians per second
   minDuration: 0.25,
   maxDuration: 0.55,
 
   /**
-   * How much of the planet is allowed to fall outside the frame when the
-   * camera pulls back to take the whole thing in — a fraction of its radius,
-   * off each edge of the narrower screen dimension.
-   *
-   * Deliberately not zero. Framing the silhouette exactly means pulling back
-   * until it touches the edges, which on a phone leaves the planet noticeably
-   * smaller for little benefit.
+   * How much of the planet may fall outside the frame when the camera pulls
+   * back to take the whole thing in — a fraction of its radius, off each edge
+   * of the narrower screen dimension. Not zero: the extreme left and right of
+   * the disc are limb, unreadable anyway, and giving those slivers up buys
+   * apparent size everywhere that is not.
    */
   shave: 0.075,
 
-  // The pull-back's own pacing, same shape as a swing's. Slower, because a
-  // swing is chasing something about to happen while this is only settling —
-  // but the ceiling still clears the 0.25s AI pause plus its first aim, so
-  // the planet has stopped moving before there are dice to read.
+  // The pull-back's pacing, same shape as a swing's but slower: a swing
+  // chases something about to happen, this is only settling. The ceiling
+  // still clears the AI pause plus its first aim.
   zoomSpeed: 4.0, // planet radii per second
   minZoomDuration: 0.3,
   maxZoomDuration: 0.7,
@@ -73,16 +59,13 @@ export function narrowHalfFov(fovDegrees, aspect) {
  * to be in frame, bar `shave` of its radius off each edge.
  *
  * The silhouette of a unit sphere seen from `distance` is a circle of angular
- * radius `asin(1 / distance)` — the tangent cone, where the line of sight
- * grazes the surface. A perspective projection puts screen offsets in
- * proportion to `tan` of the angle, so the disc and the frame can be compared
- * directly in those terms: the frame's half-width is `tan(halfFov)`, the
- * disc's radius is `tan(asin(1 / distance))`, and letting the disc overrun by
- * `shave` means the frame covers `1 - shave` of it.
+ * radius `asin(1 / distance)` — the tangent cone. Perspective puts screen
+ * offsets in proportion to `tan`, so disc and frame compare directly:
+ * `tan(asin(1 / distance))` against `tan(halfFov)`, with the frame covering
+ * `1 - shave` of the disc. This solves that for the distance.
  *
- * Solving that for the distance is what this is. Note it grows without bound
- * as `halfFov` narrows, which is why the caller still clamps it to whatever
- * the controls will actually allow.
+ * It grows without bound as `halfFov` narrows, so the caller still clamps it
+ * to what the controls allow.
  */
 export function framingDistance(halfFov, shave = DEFAULT_FRAMING.shave) {
   const covered = 1 - Math.min(0.95, Math.max(0, shave));
@@ -126,14 +109,12 @@ const screenRadius = (angle, distance) => Math.sin(angle) / (distance - Math.cos
 
 /**
  * Where `point` (on the unit sphere) sits in a view looking down
- * `viewDirection`, as a fraction of the way in from the edge of what can be
- * seen: 1 dead center, 0 right on the edge, negative once it's off screen —
- * the same scale `margin` is stated in.
+ * `viewDirection`: 1 dead center, 0 on the edge of what can be seen, negative
+ * once off screen — the scale `margin` is stated in.
  *
- * Measured on the screen rather than around the planet, because the two are
- * nothing like each other near the limb: a fight 70% of the way to the
- * horizon in angle is already 91% of the way out on the disc. The eye reads
- * the picture, so the lever has to be stated in the picture's terms.
+ * Measured on the *screen* rather than around the planet, because the limb
+ * foreshortens hard: a fight 70% of the way to the horizon in angle is already
+ * 91% of the way out on the disc.
  */
 export function framingOf(viewDirection, point, { distance, halfFov }) {
   const edge = visibleAngle(distance, halfFov);
@@ -164,25 +145,19 @@ export function fightCenter(from, to) {
 
 /**
  * Where to aim to show as many of the *upcoming* `points` at once as will
- * comfortably fit, instead of swinging to just the next one and then
- * swinging again moments later for its neighbor. `points` is in the order
- * they're about to be shown, starting with the one that's about to trigger
- * a swing.
+ * fit, rather than swinging to the next one and again moments later for its
+ * neighbour. `points` is in the order they will be shown.
  *
- * Returns `null` exactly when `lookAt`/`needsRefocus` would: `points[0]` is
- * already framed, so there is nothing to do. Otherwise it grows an accepted
- * set one point at a time — generalizing `fightCenter`'s "average, then
- * normalize" from two points to however many keep fitting — and stops the
- * moment a candidate would push some already-accepted point out past the
- * margin. A point three moves out that's nowhere near this cluster should
- * never widen the aim just because it happens to be next in line; stopping
- * at the first rejection (rather than skipping over it) is what keeps that
- * from happening.
+ * `null` exactly when `needsRefocus` would say so. Otherwise it grows an
+ * accepted set one point at a time — `fightCenter`'s "average, then normalize"
+ * generalized past two — and stops the moment a candidate would push an
+ * accepted point out past the margin. Stopping at the first rejection rather
+ * than skipping it is what stops a point three moves away, nowhere near this
+ * cluster, widening the aim just for being next in line.
  *
- * `force` drops only that first rule, the same way it does in `holdingsFocus`
- * and for the same reason: a player who pressed the button asking to be taken
- * to the fight is not answered by "it is nearly framed already". How the aim
- * is chosen is untouched, so a press lands where the swing would have.
+ * `force` drops only that first rule, as in `holdingsFocus`: a player who
+ * pressed the button is not answered by "it is nearly framed already". The aim
+ * itself is untouched, so a press lands where the swing would have.
  */
 export function clusterAim(
   points,
@@ -239,23 +214,21 @@ const isFinitePoint = (p) => Number.isFinite(p.x) && Number.isFinite(p.y) && Num
 /**
  * Where to aim to see as many of `points` as possible at once.
  *
- * Deliberately "the most of them", not "the biggest connected region". What a
- * camera can show is decided by angle, and connectedness is a fact about the
- * territory graph — two territories can share a border and still want
- * different framings, while two with no border between them may sit in the
- * same glance. Counting what actually lands on screen is the question being
- * asked, so it is also the thing scored.
+ * "The most of them", not "the biggest connected region": what a camera can
+ * show is decided by angle, while connectedness is a fact about the territory
+ * graph, so two territories can share a border and still want different
+ * framings. Counting what lands on screen is the question, so it is scored.
  *
- * Every point is tried as a seed, and each seed is slid a couple of times
- * towards the middle of whatever it can see — a mean shift, which walks a seed
- * on the edge of a clump into the centre of that clump. Every aim along the
- * way is scored, so a seed that drifts somewhere worse cannot lose the good
- * position it started from. Seeding from the points themselves rather than
- * sampling the sphere evenly is what keeps this affordable: the best aim is
- * always near a point, since an aim near nothing sees nothing.
+ * Every point is tried as a seed and slid a couple of times towards the middle
+ * of what it can see — a mean shift, which walks a seed on the rim of a clump
+ * into the middle of it. Every aim along the way is scored, so a seed that
+ * drifts somewhere worse cannot lose the position it started from. Seeding
+ * from the points rather than sampling the sphere is what keeps this
+ * affordable: the best aim is always near a point, since an aim near nothing
+ * sees nothing.
  *
- * The tie-break is total framing rather than another count, so among aims that
- * show the same territories the one that shows them nearest the middle wins.
+ * The tie-break is total framing, so among aims showing the same territories
+ * the one that shows them nearest the middle wins.
  */
 export function holdingsAim(points, view, framing = DEFAULT_FRAMING) {
   let best = null;
@@ -294,23 +267,18 @@ export function holdingsAim(points, view, framing = DEFAULT_FRAMING) {
  * Where to put the camera so the player can see their own ground again, or
  * null to leave it where it is.
  *
- * Null whenever *any* of `points` is already comfortably framed. Seeing some
- * of your own ground is enough to know where you are, and a camera that moved
- * anyway would be taking away a view from somebody who already has one — the
- * same bargain `framePlanet` makes about distance, applied to direction.
+ * Null whenever *any* of `points` is already framed: seeing some of your own
+ * ground is enough to know where you are, and moving anyway would take a view
+ * away from somebody who has one — the bargain `framePlanet` makes about
+ * distance, applied to direction.
  *
- * `wideDistance` is how far back the whole planet fits (`framingDistance`).
- * Drawing back is offered rather than assumed: it is taken only when it
- * strictly shows more territories than turning alone would, and never when it
- * would mean coming in, so a player already further out than the whole planet
- * needs keeps the distance they chose.
+ * `wideDistance` is how far back the whole planet fits. Drawing back is taken
+ * only when it strictly shows more territories, and never inwards, so a player
+ * further out than the planet needs keeps the distance they chose.
  *
- * `force` drops only the first of those rules — the one about not moving a
- * camera that can already see something. It is for a player who has *asked*
- * to be brought back to their ground, where "you can already see a corner of
- * it" is not an answer: they pressed the button precisely because the corner
- * was not the view they wanted. Nothing else changes, so the aim a press lands
- * on is the same aim the handover would have chosen.
+ * `force` drops only the first rule, for a player who has *asked* to be
+ * brought back. The aim is unchanged, so a press lands where the handover
+ * would have.
  */
 export function holdingsFocus(
   points,
@@ -393,18 +361,14 @@ function pointAlong(a, b, rawT) {
 
 /**
  * The view direction `t` of the way (0..1) from `from` to `to`, moving in
- * longitude and latitude — the two axes the orbit controls themselves turn
- * on — rather than along the great circle between them.
+ * longitude and latitude — the axes the orbit controls turn on — rather than
+ * along the great circle between them.
  *
- * The great circle is the mathematically shortest path, but it is not the
- * one a hand on the controls would ever produce: two fights at the same high
- * latitude but far apart in longitude sit on a great circle that bulges up
- * toward whichever pole is nearer, so the "shortest" swing between them
- * drags that pole across the middle of the screen — a lurch that reads as a
- * glitch, not a turn. Moving lon and lat independently instead holds
- * latitude roughly steady and lets longitude carry the turn, which is what
- * dragging the controls to get from one to the other would actually look
- * like.
+ * The great circle is shortest but is not what a hand on the controls would
+ * produce: two fights at the same high latitude and far apart in longitude sit
+ * on a circle that bulges toward the nearer pole, so the "shortest" swing
+ * drags that pole across the screen. Moving lon and lat independently holds
+ * latitude roughly steady and lets longitude carry the turn.
  */
 export function swingDirection(from, to, t) {
   const a = normalize(from);
@@ -419,16 +383,13 @@ export function swingDirection(from, to, t) {
 const TRAVEL_SAMPLES = 16;
 
 /**
- * How far a swing from `from` to `to` actually moves the camera, walking the
- * same lon/lat path `swingDirection` animates rather than the straight-line
- * distance between the endpoints. The two only agree on the equator — away
- * from it the lon/lat path can be the longer route (see `swingDirection`),
- * and pacing a swing that dips or bulges by the distance "as the crow flies"
- * moves it too fast for how far it is actually travelling.
+ * How far a swing actually moves the camera, walking the same lon/lat path
+ * `swingDirection` animates rather than the straight line between endpoints.
+ * The two agree only on the equator; away from it the lon/lat path is the
+ * longer route, and pacing by the crow-flies distance moves it too fast.
  *
- * Sampled rather than integrated: this path has no closed-form length, and a
- * swing is triggered at most a few times a second — nowhere near a spot that
- * needs to be fast.
+ * Sampled rather than integrated: the path has no closed-form length, and a
+ * swing happens a few times a second at most.
  */
 export function swingTravel(from, to) {
   const a = normalize(from);

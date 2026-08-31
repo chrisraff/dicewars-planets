@@ -3,26 +3,20 @@ import { normalizeSettings } from './settings.js';
 /**
  * A game in progress, written down so a reload picks it up where it was left.
  *
- * The planet is stored as the seed it was grown from, not as its geometry: a
+ * The planet is stored as the **seed it grew from**, not as its geometry: a
  * world is a deterministic function of `(seed, settings)`, so one number
- * rebuilds every cell, every territory and every boundary exactly. What cannot
- * be recomputed — who owns what, how many dice, whose turn, what has been
- * banked, the moves that got there — is stored outright.
+ * rebuilds every cell. Everything that cannot be recomputed — owners, dice,
+ * whose turn, banked dice, the moves that got there — is stored outright.
  *
- * That trade has one failure mode, and it is the reason `SAVE_VERSION` and
- * `worldFingerprint` both exist: change the world generator and the same seed
- * grows a different planet, one the saved territories were never fought over.
- * A save is checked against the world it rebuilt before it is trusted, and a
- * mismatch is a discarded save rather than a board laid over land that is not
- * there any more.
+ * That trade has one failure mode, and it is why `SAVE_VERSION` and
+ * `worldFingerprint` exist: change the generator and the same seed grows a
+ * different planet. A save is checked against the world the seed just rebuilt,
+ * and a mismatch is discarded rather than laid over land that is not there.
  *
- * The match's `replay` travels with it, which is what lets a reload pick up a
- * replay rather than only a board — including the reload of a game already
- * *finished*, since a match that has been played out is worth coming back to
- * watch even though there is nothing left to play. The battle log is not
- * stored beside it: the history panel is read back out of the replay
- * (`historyThroughStep`), which used to mean storing every fight twice and
- * the duplicate was 87% of a save.
+ * The `replay` travels with it, which is what lets a reload pick up a replay
+ * rather than only a board — including a game already *finished*, which is
+ * worth coming back to watch. The battle log is not stored beside it: the
+ * history is read back out of the replay (`historyThroughStep`).
  */
 export const SAVE_VERSION = 2;
 
@@ -42,30 +36,26 @@ export function gameSave({
     state,
     replay,
     camera,
-    // Whether a surrender has already been waved away, and whether it has been
-    // put to the player at all. Both read as optional rather than required, so
-    // a save written before either existed simply means "not yet asked"
-    // instead of being refused as damaged.
+    // Whether a surrender has been waved away, and whether it was put to the
+    // player at all. Optional rather than required, so a save written before
+    // either existed means "not yet asked" instead of being refused as damaged.
     //
-    // The second is the one that is easy to leave out, and it was: `playedOn`
-    // is only ever set by answering, so a player who was asked and reloaded
-    // before answering — including one who went to the replay first, which is
-    // the other door out of that banner — came back to a match with no record
-    // that anything had happened.
+    // Two fields rather than one, and the second is the easy one to leave out.
+    // `playedOn` is only set by *answering*, and "Watch replay" answers
+    // nothing — so without `surrenderOffered` a player who took the replay
+    // door and reloaded came back to a match with no record it had happened.
     playedOn,
     surrenderOffered,
   };
 }
 
 /**
- * Where the player left the camera — orbit angle, pitch and zoom are all just
- * `camera.position`, since the controls never pan the target off the
- * planet's center. `camera.up` isn't here for the same reason: nothing in
- * this app ever rotates it away from its default.
+ * Where the player left the camera. Orbit angle, pitch and zoom are all just
+ * `camera.position`, since the controls never pan the target off the planet's
+ * centre, and `camera.up` is absent for the same reason.
  *
- * Older saves have no `camera` field at all, which is why this is read as
- * optional rather than required: a save missing it, or holding numbers a
- * hand edit broke, simply leaves the camera at wherever the viewer starts.
+ * Optional: a save missing it, or holding numbers a hand edit broke, leaves
+ * the camera wherever the viewer starts.
  */
 export function cameraSnapshot(camera) {
   const { x, y, z } = camera.position;
@@ -82,15 +72,14 @@ export function isUsableCamera(camera) {
 /**
  * A number that says which planet this is.
  *
- * Territory ids are positions in a list — `0`, `1`, `2` — so two entirely
- * different planets agree on every id as long as they happen to have grown the
- * same number of territories. Comparing ids would be a check that passes
- * exactly when it is least deserved, so this hashes the things that actually
- * differ: which territories touch which, and which patch of the sphere each
- * one is made of.
+ * Territory ids are list positions (`0`, `1`, `2`), so two entirely different
+ * planets agree on every id as long as they grew the same *number* of
+ * territories — comparing ids would be a check that passes exactly when it is
+ * least deserved. So this hashes shape rather than names: which territories
+ * touch which, and which patch of the sphere each is made of.
  *
- * FNV-1a, over a few thousand short strings — it runs once when a game is
- * saved and once when one is picked up, and never in a frame.
+ * FNV-1a over a few thousand short strings. It runs once on save and once on
+ * restore, never in a frame.
  */
 export function worldFingerprint({ playerIds, nodeIds, edges, cellTerritory, oceanCellIds }) {
   let hash = 0x811c9dc5;
@@ -137,14 +126,13 @@ function isUsableReplay(replay) {
 /**
  * The saved game, or null if there is not a usable one.
  *
- * Settings come back out normalized, because reading a save is one of the
- * edges settings are parsed at: a save written before an option changed its
- * range must not hand a stale value to the rest of the pipeline, which trusts
- * what it is given.
+ * Settings come back normalized: reading a save is one of the edges settings
+ * are parsed at, and a save written before an option changed its range must
+ * not hand a stale value to a pipeline that trusts what it is given.
  *
- * localStorage throws in private browsing on some engines and is missing
- * outside a browser entirely, and a half-written or hand-edited entry parses
- * to anything at all — none of which is a reason for the game not to start.
+ * localStorage throws in private browsing on some engines, is missing outside
+ * a browser, and a hand-edited entry parses to anything at all — none of which
+ * is a reason for the game not to start.
  */
 export function readSavedGame(storage) {
   try {

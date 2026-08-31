@@ -11,20 +11,16 @@ import { planDiceStacks, stackColumnCount, PIP_FACE_NORMALS } from './diceStacks
  * changes size: the scatter is handed it, `stackHalfWidth` defaults to it, and
  * the pole marker states its own clearance in dice.
  *
- * It buys readability out of border accuracy, and the two halves of that trade
- * are not the same size. A *resting* stack is one or two columns and has room
- * to spare — at this size an eight-die stack is wider than its ground on 6% of
- * territories, against 1.6% at 0.035. A *thrown* pile is spread across the
- * territory and is what runs out of room: dice landing on a neighbour's land
- * go from 2.0% to 8.7% of dice on a throw of eight, and from 0.9% to 18% of
- * *piles* on a throw of six (`diceScatter.js` shrinks its pitch to fit and then
- * overhangs rather than overlapping, so what gives is the border, never the
- * dice standing clear of each other). Measured over 1,106 territories on 20
- * default planets, against the real nearest-cell test rather than the
- * conservative disc.
+ * It buys readability out of border accuracy, and the two halves of that
+ * trade are not the same size. A *resting* stack is one or two columns and has
+ * room to spare; a *thrown* pile is spread across the whole territory and is
+ * what runs out of room (`diceScatter.js` shrinks its pitch to fit and then
+ * overhangs rather than overlapping, so what gives is the border, never dice
+ * standing clear of each other). CLAUDE.md carries the measured overhang rates
+ * at each size.
  *
- * Which is to say: the cost lands almost entirely on the second or two a
- * battle is being rolled, and the benefit is on every frame in between.
+ * Which is to say: the cost lands on the second or two a battle is in the air,
+ * and the benefit is on every frame in between.
  */
 export const DIE_SIZE = 0.042;
 const BEVEL_SEGMENTS = 3;
@@ -72,14 +68,13 @@ export function dicePosition(column, level, columns, dieSize) {
 
 /**
  * How far a stack of `diceCount` reaches sideways from its stand: the
- * outermost column's center, plus half a die.
+ * outermost column's centre, plus half a die.
  *
- * The same `COLUMN_GAP` the dice are actually placed with, deliberately —
- * this is what the pole marker asks to find out whether a tower is really in
- * its way, and a second copy of the spacing is exactly how the answer and the
- * dice would drift apart. A die that has stopped tumbling is yawed by a whole
- * number of quarter turns, so its footprint is an axis-aligned square and half
- * an edge is the true reach, not half a diagonal.
+ * The same `COLUMN_GAP` the dice are actually placed with — this is what the
+ * pole marker asks to find out whether a tower is in its way, and a second
+ * copy of the spacing is how the answer and the dice would drift apart. A die
+ * that has stopped tumbling is yawed by a whole number of quarter turns, so
+ * its footprint is an axis-aligned square and half an edge is the true reach.
  */
 export function stackHalfWidth(diceCount, dieSize = DIE_SIZE) {
   const columns = stackColumnCount(diceCount);
@@ -97,12 +92,11 @@ export function stackHalfWidth(diceCount, dieSize = DIE_SIZE) {
  * tumbling into a new orientation.
  *
  * `materialsFor(playerId)` paints the dice by owner — pass it and a territory
- * changing hands repaints its stack, pass nothing and every die on the planet
- * is bone. It is asked for a whole materials array rather than a colour
- * because a die is six textures, one per face, and swapping the array is all
- * a change of owner costs: the meshes, the geometry and the tumble are
- * untouched, so a captured stack does not turn over just because it changed
- * hands. See `createPlayerDiePipMaterials`.
+ * changing hands repaints its stack, pass nothing and every die is bone. It is
+ * asked for a whole materials array rather than a colour because a die is six
+ * textures, one per face, and swapping the array is all a change of owner
+ * costs: meshes, geometry and tumble are untouched, so a captured stack does
+ * not turn over just because it changed hands.
  */
 export function createDiceLayer(world, pipMaterials, options = {}) {
   const { dieSize = DIE_SIZE, rng = Math.random, materialsFor = null } = options;
@@ -184,11 +178,9 @@ export function createDiceLayer(world, pipMaterials, options = {}) {
      * How this territory's dice will be standing once it holds `diceCount` —
      * planned now and held for the rebuild that follows, so the two agree.
      *
-     * The reinforcement drop is the caller. A die is dropped by the animation
-     * and then replaced a frame later by the real rebuild, and the two used to
-     * disagree about which way up it was: the die landed, and then visibly
-     * turned. Asking here first means it lands already standing the way it
-     * will be left, because it is the same plan both times.
+     * The reinforcement drop is the caller. A dropped die is replaced a frame
+     * later by the real rebuild, so unless both use the same plan the die
+     * lands and then visibly turns over.
      */
     planFor(territoryId, diceCount) {
       const stand = stands.get(territoryId);

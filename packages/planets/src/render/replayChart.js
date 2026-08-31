@@ -35,21 +35,17 @@ export const CHART_METRICS = [
 /**
  * Where every player's line goes, for one reading of one replay.
  *
- * `series` is `standingsOverReplay`'s output — one entry per player, each
- * holding a value per step. `step` is where the replay track is standing, and
- * comes back as the x of the cursor, so the chart says which part of the
- * match is on the planet right now.
+ * `series` is `standingsOverReplay`'s output. `step` is where the track is
+ * standing and comes back as the x of the cursor, so the chart says which part
+ * of the match is on the planet right now.
  *
- * **The scale is the peak itself rather than a round number above it.** The
- * usual reason to round a scale up is a tidier label and the usual cost is a
- * strip of empty plot — at 60 territories a "nice" ceiling is 100, which
- * spends two fifths of a chart 200 units tall on nothing. Height is the
- * scarcer thing here, and a peak is a fact about the match rather than an
- * arbitrary axis, so it is worth reading in its own right.
+ * **The scale is the peak itself rather than a round number above it**:
+ * rounding 60 territories up to 100 spends two fifths of a short plot on
+ * nothing, and a peak is a fact about the match worth reading in its own right.
  *
- * A replay of a single step is drawn as a line across rather than as one
- * point: a dot in an empty box says nothing, and "it never changed" is the
- * truth about that match.
+ * A replay of a single step is drawn as a line across rather than one point —
+ * a dot in an empty box says nothing, and "it never changed" is the truth
+ * about that match.
  */
 export function chartView({ series, metric, step = null }) {
   const values = series.map((entry) => entry[metric] ?? []);
@@ -102,16 +98,13 @@ export function chartSummary({ metric, steps, peak }) {
 const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
 
 /**
- * The panel itself: the two tabs and the plot they switch between.
+ * The panel itself: the two tabs and the plot they switch between. Built once
+ * and repainted, since the replay's timer moves the cursor every step and the
+ * lines only change when the tab does.
  *
- * Built once and repainted, because the replay's own timer moves the cursor
- * every step and rebuilding a line per player for that would be work for
- * nothing. The lines only change when the tab does.
- *
- * The tabs are plain buttons rather than `role="tab"`, deliberately: a real
- * tablist owes a `tabpanel` its tabs point at, and this is one graphic that
- * changes what it plots. `aria-pressed` says as much without promising a
- * widget that isn't here.
+ * Plain buttons rather than `role="tab"`: a real tablist owes a `tabpanel` its
+ * tabs point at, and this is one graphic that changes what it plots.
+ * `aria-pressed` says as much without promising a widget that is not here.
  */
 export function createReplayChart(root, { playerColors = new Map(), playerNames = new Map() } = {}) {
   root.innerHTML = `

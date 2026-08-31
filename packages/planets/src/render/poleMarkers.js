@@ -14,47 +14,26 @@ import { MAX_DICE_PER_STACK } from './diceStacks.js';
  * Three things make the look, and none of them costs anything: the whole
  * effect is two draw calls of a 24-sided cone, unlit.
  *
- * - **Additive, and never writing depth.** Additive blending is what reads as
- *   light rather than as paint: it can only brighten what is behind it, so it
- *   has no surface of its own for a highlight to sit on. Not writing depth is
- *   what lets both walls of the same cone contribute, which is where any
- *   sense of volume comes from.
- * - **A rim term.** Alpha rises toward the silhouette and falls away
- *   face-on, which is what makes a thin shell read as glass. On a cone this
- *   already leans the way we want: looking down the axis every wall is
- *   edge-on and the whole thing lights up, while side-on only its outline
- *   does.
- * - **An axis term** on top of that — see `axisFalloff` below, which is the
- *   part with two knobs on it and is worth reading before turning either.
- *
- * ### Standing it on the ground
+ * - **Additive, and never writing depth.** Additive blending reads as light
+ *   rather than as paint — it can only brighten what is behind it, so it has
+ *   no surface of its own for a highlight to sit on. Not writing depth lets
+ *   both walls of the same cone contribute, which is where the sense of
+ *   volume comes from.
+ * - **A rim term.** Alpha rises toward the silhouette and falls away face-on,
+ *   which makes a thin shell read as glass. A cone already leans that way:
+ *   down the axis every wall is edge-on and the whole thing lights up, while
+ *   side-on only its outline does.
+ * - **An axis term** on top — see `axisFalloff`, which has two knobs on it and
+ *   is worth reading before turning either.
  *
  * It rests on the surface, because a marker floating above the pole reads as
  * an object rather than as part of the planet. The one thing in its way is a
- * dice tower at the pole: depth testing handles a tower *in front* correctly
- * on its own, but a tower *intersecting* the cone is the ugly case — a hard
- * line cut across a soft volume, the classic artifact — and fixing that
- * properly means sampling the depth buffer to fade the volume out as it nears
- * whatever is behind it, which is a lot of machinery for a small reference.
- *
- * So the cone steps out of the way instead: `settle` lifts its base to the top
- * of a tower that is genuinely in the way, and stands it back on the ground
- * the moment that tower is gone.
- *
- * "Genuinely" is worth being exact about, because the marker belongs on the
- * ground and every lift is a small lie. The test is a footprint overlap and
- * nothing more: a stack collides if its half-width plus the cone's base radius
- * covers the angle between them. Height does not come into it — the cone is
- * widest at its base, so a stack whose footprint overlaps has its *bottom* die
- * inside the widest part whatever the stack's height, and one whose footprint
- * clears it is clear all the way up, where the cone is narrower still. Stack
- * height only decides how far to lift, never whether to.
- *
- * Measured over 800 poles: with the base radius at `radiusInDice` and this
- * test, a pole is lifted about 2% of the time for a short tower and 4% for a
- * full-width one. An earlier version guessed the reach at a couple of dice
- * either side and lifted 17% of the time — one pole in six standing off the
- * ground for no reason anyone could see.
+ * dice tower: a tower *in front* is handled by depth testing, but a tower
+ * *intersecting* the cone is a hard line cut across a soft volume, and fixing
+ * that properly means sampling the depth buffer — a lot of machinery for a
+ * small reference. So the cone steps out of the way instead: `settle` lifts
+ * its base to the top of a tower genuinely in the way (`blockingAngle` is that
+ * test) and stands it back down the moment the tower is gone.
  */
 export const POLE_MARKER = {
   // Sized in dice rather than in radii, because what it has to clear is dice.
@@ -79,32 +58,23 @@ export const POLE_MARKER = {
 };
 
 /**
- * How much of its strength the marker keeps, given `align` — the cosine of
- * the angle between the pole's axis and the direction you are looking from.
- * 1 is straight down the pole, 0 is exactly edge-on.
+ * How much of its strength the marker keeps, given `align` — the cosine of the
+ * angle between the pole's axis and the direction you are looking from. 1 is
+ * straight down the pole, 0 is exactly edge-on.
  *
- * The two knobs do genuinely separate jobs, which is worth being clear about
- * because they are easy to confuse when tuning by eye:
+ * The two knobs do separate jobs and are easy to confuse when tuning by eye:
+ * **`sideOn` is the floor**, the value at exactly edge-on, and `axisPower`
+ * cannot move it; **`axisPower` is the shape of the ramp** from that floor to
+ * full, and never where the floor is.
  *
- * - **`sideOn` is the floor.** It is the value at exactly edge-on, and
- *   `axisPower` cannot change it. If edge-on is too faint or too loud, this
- *   is the only knob that matters.
- * - **`axisPower` is the shape of the ramp between that floor and full.** It
- *   moves how quickly you leave the floor as the pole swings toward you, and
- *   never where the floor is.
+ * At `axisPower: 1` the ramp is linear in `align` — but `align` is a cosine,
+ * so it is not linear in the angle being turned through. Cosine is flat near
+ * zero, so the marker holds nearly full strength across a wide cap over the
+ * pole (30° off is still 0.87) and falls away quickly toward the limb. Above 1
+ * stays near the floor over most of the sphere; below 1 does the opposite.
  *
- * At `axisPower: 1` the ramp is linear *in `align`* — but `align` is a
- * cosine, so it is not linear in the angle you are actually turning through.
- * Cosine is flat near zero, so at 1 the marker holds nearly full strength
- * across a wide cap over the pole (30° off is still 0.87) and then falls away
- * quickly toward the limb. Above 1 pushes the whole ramp down, so it stays
- * near the floor over most of the sphere and only comes up in a tight cone
- * right over the pole. Below 1 does the opposite: up quickly, bright over
- * most of the planet.
- *
- * Mirrors the `axis` line of the fragment shader, deliberately kept next to
- * it: one expression, in two languages, so the preview can print the curve as
- * numbers instead of leaving it to be guessed at from a moving picture.
+ * Mirrors the `axis` line of the fragment shader and is kept next to it: one
+ * expression in two languages, so the preview can print the curve as numbers.
  */
 export function axisFalloff(align, { sideOn, axisPower } = POLE_MARKER) {
   const a = Math.min(1, Math.abs(align));
@@ -115,13 +85,12 @@ export function axisFalloff(align, { sideOn, axisPower } = POLE_MARKER) {
  * How close a dice tower has to be, in radians from the pole, before it is in
  * the marker's way — its own half-width plus the cone's base radius.
  *
- * The stack's *height* is deliberately absent. The cone is widest at its base,
- * so a stack whose footprint overlaps has its bottom die inside the widest
- * part however tall it is, and one whose footprint clears it stays clear all
- * the way up, where the cone is narrower still. Height only ever decides how
- * far to lift, never whether to. What does change the answer is how many
- * columns the stack is in: five dice start a second column and reach further
- * sideways than four do.
+ * The stack's *height* is deliberately absent, and this is the whole reason a
+ * footprint test is enough. The cone is widest at its base, so a stack whose
+ * footprint overlaps has its bottom die inside the widest part however tall it
+ * is, and one whose footprint clears it stays clear all the way up. Height
+ * only decides how far to lift, never whether to. What does change the answer
+ * is column count: five dice start a second column and reach further sideways.
  */
 export function blockingAngle(diceCount, { radiusInDice } = POLE_MARKER, dieSize = DIE_SIZE) {
   return dieSize * radiusInDice + stackHalfWidth(diceCount, dieSize);

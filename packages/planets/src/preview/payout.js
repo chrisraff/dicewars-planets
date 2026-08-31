@@ -48,12 +48,11 @@ const TURN = {
 /**
  * One real HUD with a full tray in it, ready to be drained.
  *
- * `wrap` is an escape hatch for one exhibit only: setting it inline overrides
- * the stylesheet so the tray can be shown wrapping the way it used to. It is
- * deliberately an inline style set from here rather than a rule in
- * preview.css — a preview's stylesheet styles the caption, never the exhibit,
- * and a `.hud-reinforce` rule living in preview furniture would reach into
- * every other page that shows a tray.
+ * `wrap` is an escape hatch for one exhibit: setting it inline overrides the
+ * stylesheet so the two drain directions can stand side by side. An inline
+ * style rather than a rule in preview.css, because a preview's stylesheet
+ * styles the caption and never the exhibit — a `.hud-reinforce` rule living in
+ * preview furniture would reach into every other page that shows a tray.
  */
 function addTray(container, { count, wrap = null, stageClass = '' }) {
   const stage = document.createElement('div');

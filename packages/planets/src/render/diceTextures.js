@@ -151,18 +151,16 @@ export function createDiePipMaterials(options = {}) {
 
 /**
  * One set of pip materials per player, for dice painted in their owner's
- * colour rather than in bone.
+ * colour rather than bone.
  *
- * The player colour is not used raw. A die has to carry a *number* as well as
- * an identity, and its pips are the only thing on it that says which — so the
- * face is pulled toward white by `tint` until there is somewhere for an ink to
- * stand, and the ink is then chosen by the same measurement the HUD uses
- * (`readableTextColor`, which picks whichever of black or white actually
- * clears AA against that face rather than guessing from a threshold).
+ * The colour is not used raw: a die has to carry a *number* as well as an
+ * identity, and its pips are the only thing that says which — so the face is
+ * pulled toward white by `tint` until the pips have somewhere to stand, and
+ * `readableTextColor` picks the ink against it.
  *
- * `tint` at 0 is the player's colour undiluted and 1 is a plain bone die, so
- * the knob is really "how much of a die is left once it is also a flag".
- * Eight sets of six 128px canvases is the whole cost, paid once.
+ * `tint` at 0 is the player's colour undiluted and 1 is a bone die, so the
+ * knob is "how much of a die is left once it is also a flag". Eight sets of
+ * six 128px canvases is the whole cost, paid once.
  */
 export function createPlayerDiePipMaterials(playerColors, options = {}) {
   const { tint = DIE_TINT, ...rest } = options;

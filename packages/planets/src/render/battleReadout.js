@@ -8,11 +8,10 @@ const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join
 /**
  * Dice on one side, above which the full reading stops being worth showing.
  *
- * Not a width — five dice a side still fits a desktop readout comfortably.
- * Past about four the faces stop being something you take in at a glance and
- * become a row to count, which is the moment the stack mark and the total say
- * more than the faces do. Width is the *other* half of the decision and is
- * checked separately, in `fitReadout` below.
+ * About legibility rather than room: five dice a side still fits a desktop
+ * readout and is still refused, because the point where faces become a row to
+ * count comes before the point where they stop fitting. Width is the *other*
+ * half of the decision, checked separately in `fitReadout`.
  */
 export const FULL_READING_MAX_DICE = 4;
 
@@ -196,18 +195,16 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   }
 
   /**
-   * Builds both readings of a battle into `into`, and lets CSS pick one:
+   * Builds both readings of a battle into `into` and lets CSS pick one:
    *
-   *   full     every die alongside its own total — what you want whenever
-   *            there is room, because it is all legible at once
-   *   compact  a stack mark and total per side pinned to the left, with the
-   *            dice behind them in a strip that scrolls on its own
+   *   full     every die alongside its own total, all legible at once
+   *   compact  a stack mark and total per side pinned left, the dice behind
+   *            them in a strip that scrolls on its own
    *
-   * Both are built because switching between them then costs a class rather
-   * than a rebuild, which is what makes re-measuring on every resize cheap.
-   * Which one shows is `is-compact` on the row, and belongs to whoever owns
-   * that row — `fitReadout` for the readout, `setHistory` for a history row,
-   * which is always compact and has nothing to decide.
+   * Both are built so switching costs a class rather than a rebuild, which is
+   * what makes re-measuring on every resize cheap. Which one shows is
+   * `is-compact`, owned by whoever owns the row — `fitReadout` for the
+   * readout, `setHistory` for a history row, which is always compact.
    */
   function renderBattle(into, view) {
     into.replaceChildren();
@@ -236,18 +233,15 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
   }
 
   /**
-   * Which of the two readings the readout at the top shows.
+   * Which of the two readings the readout at the top shows. Two things force
+   * compact and either is enough: past `FULL_READING_MAX_DICE` a side the
+   * faces are a row to count, and a full reading that would be clipped is
+   * worse than a compact one that fits — `.battle-current` is
+   * `overflow: hidden`, so overrunning truncates rather than scrolls.
    *
-   * Two separate things force compact and either one is enough, because they
-   * answer different questions. The battle: past `FULL_READING_MAX_DICE` a
-   * side the faces are a row to count rather than a glance. The room: a full
-   * reading that would be clipped is worse than a compact one that fits,
-   * whatever the dice count says — the readout has `overflow: hidden`, so
-   * overrunning it does not scroll, it truncates.
-   *
-   * Width is what actually prevails: the dice rule is only ever consulted for
-   * a battle that would fit anyway. It is checked first purely because it is
-   * free, and skipping the measurement skips a forced reflow.
+   * **Width prevails**: the dice rule is only ever consulted for a battle that
+   * would fit anyway. It is checked first because counting dice is free and
+   * skipping the measurement skips a forced reflow.
    */
   function fitReadout() {
     if (!shownBattle) return;

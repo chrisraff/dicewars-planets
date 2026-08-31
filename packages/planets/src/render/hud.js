@@ -6,8 +6,9 @@ import { showScrollFades } from './scrollFades.js';
 import { MAX_RESERVE } from '../game/playerStats.js';
 
 // The DOM layer over the canvas: the player stats row, whose turn it is, the
-// end-turn button, the battle readout, and the game-over banner. Kept in HTML rather than drawn into the scene because text in WebGL
-// is a lot of work for no gain when it's always facing the camera anyway.
+// end-turn button, the battle readout, and the game-over banner. HTML rather
+// than drawn into the scene, because text in WebGL is a lot of work for no
+// gain when it is always facing the camera anyway.
 
 const rgb = ([r, g, b]) => `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(', ')})`;
 const rgba = ([r, g, b], alpha) =>
@@ -60,14 +61,11 @@ export function scrollLeftToReveal({
  */
 export function playerPanelView(player) {
   const classes = {
-    // Which tile is *you*, marked for the whole match. Deliberately a caret
-    // rather than the word "YOU": every other affordance the tile has is
-    // already spoken for — the border and its glow say whose turn it is (and
-    // say it again, brighter, for a winner), the lower-right corner is the
-    // banked-dice badge, the middle is the dot a knocked-out tile folds to —
-    // and colour cannot mark it either, since every tile is already its
-    // player's colour. A shape in a place nothing else uses is the one thing
-    // left that reads without being read.
+    // Which tile is *you*, marked for the whole match. A caret rather than a
+    // word or a colour because every other affordance is spoken for: the
+    // border says whose turn it is, the lower-right corner is the banked-dice
+    // badge, the middle is the dot a knocked-out tile folds to — and every
+    // tile is already its player's colour.
     'is-you': Boolean(player.isYou),
     'is-current': player.isCurrent,
     'is-out': !player.alive,
@@ -94,40 +92,28 @@ export function playerPanelView(player) {
 
 /**
  * What the indicator in the corner says. Pure, because the awkward cases are
- * all here: a game that has ended never moves its turn index off the winner,
- * so asking "whose turn is it" after the fact gives a live-looking answer to a
- * dead question — and a player knocked out mid-game is neither taking a turn
- * nor watching a finished one.
+ * all here: a finished game never moves its turn index off the winner, so
+ * "whose turn is it" gives a live-looking answer to a dead question, and a
+ * player knocked out mid-game is neither taking a turn nor watching a
+ * finished one.
  *
- * It is anchored on **you** rather than on whoever is playing, which is what
- * makes it worth the corner it sits in. "Blue is playing" was three ways
- * redundant — the stats row already borders whoever is playing, and the rail
- * along the controls already carries your color while the turn is yours — and
- * it answered a question nobody was asking. What a random seat actually leaves
- * you needing is *which of these colors am I*, and it leaves you needing it
- * for a while: `resolveStartSeat` defaults to any seat, so a six-player game
- * can open with five AI turns carving the planet up before you get a move.
+ * Anchored on **you** rather than on whoever is playing. `resolveStartSeat`
+ * defaults to any seat, so a six-player game can open with five AI turns
+ * before you get a move — which leaves you needing to know *which of these
+ * colors am I*, for a while.
  *
- * So it says one of two things, and they are one sentence at two moments.
- * Between your turns it names your color, as a chip set in that color. On your
- * own turn it says so with a *dot* in the same color — having been told you
- * are red, a red dot is what makes "Your turn" the sentence continued rather
- * than a new one, where a second chip spelling the word out again would read
- * as a change of subject.
+ * So it says one of two things, one sentence at two moments: between your
+ * turns it names your color as a chip; on your own turn it is a *dot* in that
+ * same color beside the words, the sentence continued rather than a new one.
  *
- * **The dot means "yours, now", and nothing else does.** Every other line here
- * marks its subject as a chip instead — `You` for a win or a knockout, the
- * winner's name for somebody else's — which leaves the dot appearing on
- * exactly one line in the whole game. That is worth more than the consistency
- * it costs: the dot arriving is then part of what says the planet is yours
- * again, alongside the rail and the flash, rather than a decoration that has
- * been sitting there all along changing color. `Nobody wins` names nobody and
- * so takes neither.
+ * **The dot means "yours, now", and nothing else does.** Every other line
+ * marks its subject as a chip, which leaves the dot appearing on exactly one
+ * line in the game — so its arrival is part of what says the planet is yours
+ * again rather than a decoration that changes color.
  *
- * `color` is a word that has to be set in a player's color, so it cannot just
- * be part of the string — hence the three pieces, the same shape
- * `attackHintView` returns for the same reason. The word is not always a color
- * name: it is whatever the line is *about*, which for a win or a knockout is
+ * `color` has to be set in a player's color, so it cannot be part of the
+ * string — hence the three pieces, the same shape `attackHintView` returns.
+ * The word is whatever the line is *about*, which for a win or a knockout is
  * the person rather than the hue.
  */
 export function turnIndicatorView(status, nameOf = (id) => id) {
@@ -154,13 +140,11 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
     return line({ color: nameOf(winner), after: ' wins', playerId: winner });
   }
 
-  // Nobody at the keyboard — an unattended match playing itself out. Checked
-  // before everything below and after the result above, because every line
-  // under here is about a "you" that does not exist, while a result is worth
-  // reading whoever (if anyone) was playing. Note that `humanEliminated` is
-  // derived from whether the human seat still holds ground, so an empty seat
-  // reads as eliminated and would otherwise claim somebody had been knocked
-  // out of a game they were never in.
+  // Nobody at the keyboard. Checked after the result — worth reading whoever
+  // was playing — and before everything below, which is all about a "you" that
+  // does not exist. `humanEliminated` is derived from whether the human seat
+  // holds ground, so an empty seat reads as eliminated and would otherwise
+  // claim somebody was knocked out of a game they were never in.
   if (!humanPlayerId || typeof humanPlayerId === 'symbol') return line({ show: false });
 
   if (humanEliminated) {
@@ -190,23 +174,17 @@ export function turnIndicatorText(view) {
 }
 
 /**
- * Whether the controls row carries a way back into the replay.
+ * Whether the controls row carries a way back into the replay. An offer once
+ * made is never withdrawn: the moment a match has an ending to look back at —
+ * it is over, the player is out of it, or they have been offered the win and
+ * waved it away — the button appears beside the menu and stays.
  *
- * The rule is that an offer once made is never withdrawn. The banner used to
- * be the only door: "Look at the board" closed it for good, and a replay that
- * had just been offered became unreachable without reloading the page. So the
- * moment a match has an ending to look back at — it is over, the player has
- * been knocked out of it, or they have been offered the win and waved it away
- * — the button appears beside the menu and stays.
+ * All three are asked of the match rather than latched when a banner went up,
+ * which is what makes the button survive a reload: the board says who won and
+ * who is out, and `playedOn` travels in the save.
  *
- * Those three are asked of the match rather than remembered as a flag, which
- * is what makes the button survive a reload: the board itself says who won and
- * who is out, and `playedOn` travels in the save. A latch set when the banner
- * went up would not — a played-on game reopens with no banner to set it.
- *
- * Mid-play, before any of that, there is nothing here. The match in progress
- * is the thing to look at, and a door out of it is not worth a permanent seat
- * on a row that has to stay readable on a phone.
+ * Mid-play there is nothing here — a door out is not worth a permanent seat on
+ * a row that has to stay readable on a phone.
  */
 export function replayButtonView(status) {
   const { hasReplay = false, isOver = false, humanEliminated = false, playedOn = false } = status;
@@ -215,54 +193,31 @@ export function replayButtonView(status) {
 }
 
 /**
- * Whether to offer to hand the camera back.
+ * Whether to offer to hand the camera back, and *where* to seat the offer.
  *
- * The camera follows the match on its own — round the back for an AI's fights,
- * home again when the turn is yours. A hand on the planet takes it off that
- * job, because a player turning the planet is nearly always studying it and a
- * camera that swings away mid-look is the game arguing with them. But then the
- * following has to be *offered back*, or it is gone for the rest of the match
- * and there is nothing on the screen to say so.
+ * A hand on the planet takes the camera off the match, because a player
+ * turning the planet is nearly always studying it. The following then has to
+ * be offered back, or it is gone for the rest of the match with nothing on
+ * screen to say so — the recenter button a map gives you once you have
+ * scrolled away from where you are driving.
  *
- * So: a button, up from the drag until it is answered, in the middle of the
- * column above the controls where nothing else sits. It is the recenter button
- * a map gives you when you have scrolled away from where you are driving — the
- * whole of what it means is "the camera is yours right now, press to give it
- * back", and it is worth a permanent seat only for as long as that is true.
+ * **It outlives the turn it was raised on**, which is why this never asks
+ * whose turn it is. A drag during an AI's turn suppresses the pan home, so the
+ * player's turn opens on the view they chose; taking the offer down at the
+ * handover would leave them holding a board they cannot see. (A drag during
+ * their *own* turn is never recorded at all — `session.js` says why.)
  *
- * **It outlives the turn it was raised on, and that is the point.** A drag
- * during an AI's turn suppresses the pan home at the handover, so the turn
- * that follows *opens* on the view the player chose rather than on their own
- * ground — which is exactly right, and exactly why the offer has to still be
- * standing when they get there. Taking it down at the handover would leave
- * them holding a board they cannot see with nothing on screen to fix it.
+ * **A replay follows too**, and the replay card is docked over exactly the
+ * band `'controls'` uses, so `'replay'` seats it in the card's own head
+ * beside Graph. One rule, one handler, two seats.
  *
- * Which is not the same as a drag *during* your own turn. That one is never
- * raised at all, and `session.js` says why: on your own turn there is nothing
- * for it to suppress, so there is nothing to hand back.
+ * Note the ordering: `isOver` is read *after* `replayOpen`. A finished match
+ * is silent because nothing moves the camera again — but a replay of one moves
+ * it constantly, and almost every replay watched is of a finished match, so
+ * the obvious ordering would hide the button where it is most useful.
  *
- * **A replay follows too, so the offer belongs there as well** — and answering
- * *where* is most of what this returns. A replay swings to every step's fight,
- * which is right for watching a match back and wrong for watching one corner
- * of the planet through it; a drag says which, and the button says how to
- * change your mind. It cannot be offered in the same place, because the replay
- * card is docked over exactly that band, so `'replay'` puts it in the card's
- * own head beside Graph and `'controls'` puts it where it lives the rest of
- * the time. One rule, one handler, two seats.
- *
- * Note which silencer that had to survive: **a finished match is silent only
- * while no replay is open.** `isOver` is a silencer at all because nothing
- * moves the camera again once a match ends — but a replay of a finished match
- * moves it constantly, and almost every replay watched is of one. Reading
- * `isOver` first would have hidden the button in the one place it is most
- * useful.
- *
- * The other silencer is unconditional: a banner needs no rule, since it covers
- * the whole HUD.
- *
- * A player who is *out* is still offered it, and so is an unattended match:
- * the camera goes on following the fights for whoever is watching, and that is
- * a real thing to be handed back.
+ * A player who is out is still offered it, and so is an unattended match: the
+ * camera goes on following the fights for whoever is watching.
  */
 export function autoFollowButtonView(status) {
   const { freed = false, isOver = false, replayOpen = false } = status;
@@ -275,27 +230,19 @@ export function autoFollowButtonView(status) {
  * The prompt a first-time player gets on their turn, or `null` when there is
  * nothing worth saying.
  *
- * Dice Wars has exactly one move in it and no way to discover it: the planet
- * looks like something to rotate, so a player who has never seen the game
- * turns it over, finds nothing to press, and never learns that a territory is
- * the button. One sentence fixes that, and only ever needs saying once —
- * `seen` is answered by `hints.js` from storage, so the second game says
- * nothing.
+ * The planet looks like something to rotate, so a player who has never seen
+ * the game turns it over and never learns that a territory is the button. One
+ * sentence fixes it, once — `seen` is answered by `hints.js` from storage.
  *
- * It is only ever advice about the turn you are taking, so every state where
- * there is no such turn — an opponent playing, a game already decided, a
- * player knocked out of one — is silence rather than an instruction you cannot
- * follow. `coarsePointer` is the one thing this cannot work out for itself:
- * telling somebody on a phone to click is the sort of small wrongness that
- * makes the rest of the sentence less believable.
+ * It is advice about the turn you are taking, so every state without one is
+ * silence rather than an instruction you cannot follow. `coarsePointer` is the
+ * one thing this cannot work out for itself.
  *
- * The sentence comes back in three pieces because one word of it — the color
- * the player is — has to be set in that color, and a first-timer needs it
- * more than anything else here: "one of your territories" is only actionable
- * once you know which of the eight colors on the planet is yours. `playerName`
- * is already a color name (`PLAYER_NAMES` is the palette in order), so naming
- * it and coloring it are the same word. Without one, the sentence closes over
- * the gap rather than being left with a hole in it.
+ * Three pieces because the color name has to be set in that color, and a
+ * first-timer needs it most: "one of your territories" is only actionable once
+ * you know which of the eight colors is yours. `playerName` is already a color
+ * name (`PLAYER_NAMES` is the palette in order), so naming it and coloring it
+ * are the same word; without one the sentence closes over the gap.
  */
 export function attackHintView(status) {
   const { seen = false, isHumanTurn = false, coarsePointer = false, playerName = null } = status;
@@ -320,20 +267,17 @@ export function attackHintText(view) {
 }
 
 /**
- * What a won-by-surrender banner says under the title. Kept up here as a
- * constant because it is the one line in the game that has to be honest about
- * an ending the board has not actually reached: the planet is *not* all yours
- * when this goes up — a quarter of it is typically still in play.
+ * What a won-by-surrender banner says under the title. A constant because it
+ * is the one line that has to be honest about an ending the board has not
+ * reached: the planet is *not* all yours when this goes up.
  */
 export const SURRENDER_DETAIL = 'Your rivals have surrendered.';
 
 /**
- * The banner that interrupts play, and what it offers to do next.
- *
- * Winning is the point of the whole game, so it gets the screen to itself
- * until the player decides to move on — the menu no longer barges in over it.
- * Being knocked out is the other moment worth stopping for: without this the
- * game simply carries on without you and never says why.
+ * The banner that interrupts play, and what it offers to do next. Winning is
+ * the point of the whole game, so it gets the screen to itself until the
+ * player moves on; being knocked out is the other moment worth stopping for,
+ * since otherwise the game carries on without you and never says why.
  */
 export function outcomeView(outcome, nameOf = (id) => id) {
   const { kind, winner = null, humanPlayerId, by = null, canReplay = false } = outcome;
@@ -345,9 +289,8 @@ export function outcomeView(outcome, nameOf = (id) => id) {
       title: 'You are out',
       detail: by ? `${nameOf(by)} took your last territory.` : 'Your last territory is gone.',
       // Gentlest first: stay and watch, look back at how it went, start again.
-      // The replay belongs here as much as on a win — being knocked out is the
-      // moment there is most to look back at, and the match you were in is
-      // over whatever the board goes on doing without you.
+      // The replay belongs here as much as on a win — being knocked out is
+      // when there is most to look back at.
       actions: [
         { id: 'watch', label: 'Spectate', primary: true },
         ...(canReplay ? [{ id: 'replay', label: 'Watch replay', primary: false }] : []),
@@ -404,10 +347,9 @@ export const REPLAY_STEP_MS = 900;
 
 /**
  * `humanPlayerId` is which seat the person at the keyboard has. Told to the
- * HUD once here rather than threaded through `playerStatsFor` as well, for the
- * same reason the pointer kind and the color name are: it is a fact about this
- * interface rather than about the board, and one source for it is what stops
- * the caret and the rail ever disagreeing about who you are.
+ * HUD once rather than also threaded through `playerStatsFor`: it is a fact
+ * about this interface rather than about the board, and one source is what
+ * stops the caret and the rail ever disagreeing about who you are.
  */
 export function createHud(
   root,
@@ -492,12 +434,9 @@ export function createHud(
   const bannerTitle = banner.querySelector('.hud-banner-title');
   const bannerDetail = banner.querySelector('.hud-banner-detail');
   const bannerActions = banner.querySelector('.hud-banner-actions');
-  // Behind the card — see `.hud-banner-card`'s `position` for why that takes
-  // both an insertion point and a rule.
-  //
-  // `reducedMotion` is null in the game, which means ask the browser at the
-  // moment of playing; a preview pins it false so the page shows what it says
-  // it is showing on a machine that has the setting switched on.
+  // Behind the card — see `.hud-banner-card`'s `position`. `reducedMotion` is
+  // null in the game, meaning ask the browser at play time; a preview pins it
+  // false so the page shows what it says on a machine that has it switched on.
   const fireworks = createFireworks(banner, {
     before: banner.querySelector('.hud-banner-card'),
     reducedMotion,
@@ -514,17 +453,15 @@ export function createHud(
   const replayOpenButton = root.querySelector('.hud-replay-open');
   let replayOffered = false; // what the match last said; the overlay outranks it
 
-  // The match drawn as two lines per player — territories held and dice
-  // standing — over every step the track can reach. It is the one thing the
-  // replay cannot say by playing: the planet shows a moment, and a run of
-  // moments watched one after another is still not the shape of the game.
+  // Two lines per player — territories held and dice standing — over every
+  // step the track can reach. The one thing the replay cannot say by playing:
+  // a run of moments watched in order is still not the shape of the game.
   const chartPanel = root.querySelector('.hud-chart');
   const chartButton = root.querySelector('.hud-replay-graph');
   const chart = createReplayChart(chartPanel, { playerColors, playerNames });
 
-  // Shut, every time the replay opens. What was asked for is the match on the
-  // planet; the chart is a second question, and it costs the planet the
-  // bottom of the screen for as long as it is up.
+  // Shut every time the replay opens: what was asked for is the match on the
+  // planet, and the chart costs it the bottom of the screen while it is up.
   function showChart(open) {
     chartPanel.hidden = !open;
     chartButton.setAttribute('aria-pressed', String(open));
@@ -533,12 +470,10 @@ export function createHud(
 
   chartButton.addEventListener('click', () => showChart(chartPanel.hidden));
 
-  // Two questions decide whether the button is there and they are answered in
-  // different places, so both go through here: whether the match has an ending
-  // to look back at, and whether the replay is already open — while it is, the
-  // × is the way back and a second door beside it is one too many, exactly as
-  // for the menu button. It takes no room when it is not there, rather than
-  // holding a gap open all match for something that mostly isn't offered.
+  // Two questions answered in different places, so both go through here:
+  // whether the match has an ending to look back at, and whether the replay is
+  // already open — while it is, the × is the way back and a second door beside
+  // it is one too many, exactly as for the menu button.
   function applyReplayButton() {
     replayOpenButton.hidden = !replayOffered || !replayOverlay.hidden;
   }
@@ -551,20 +486,15 @@ export function createHud(
     replayPlay.setAttribute('aria-label', 'Play');
   }
 
-  // Moves the track to `step` (clamped) and tells the session to repaint the
-  // board there — the one path every control (drag, the buttons, the timer)
-  // goes through, so the track's value is never out of step with what is on
-  // screen.
+  // Moves the track to `step` (clamped) and repaints the board there — the one
+  // path every control goes through, so the track's value is never out of step
+  // with what is on screen.
   //
-  // `settled` is whether this is a step the player has actually stopped on. A
-  // hand dragging the track passes through dozens on the way, and a camera
-  // that swung to each of them would be a camera swinging at a board nobody
-  // has looked at yet — worse, the board itself waits for those swings to land
-  // (see `showReplayStep`), so chasing them makes the one thing a scrub is for
-  // lag behind the hand doing it. So a drag repaints and does not move the
-  // camera, and the release that follows is the seek the camera answers.
-  // Everything else — the arrows, the timer, a click on the track — is settled
-  // by definition and passes straight through.
+  // `settled` is whether the player has actually stopped here. A scrub passes
+  // through dozens of steps, and the board waits for a swing to land (see
+  // `showReplayStep`), so chasing them makes the one thing a scrub is for lag
+  // behind the hand doing it. A drag therefore repaints without moving the
+  // camera, and the release is the seek the camera answers.
   function paintReplayStep(step, settled = true) {
     const max = Number(replayTrack.max);
     const clamped = Math.max(0, Math.min(max, step));
@@ -611,14 +541,12 @@ export function createHud(
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   /**
-   * The stats row scrolls sideways at a full table and has no scrollbar to
-   * say so, exactly like the dice strip in the readout below it — so it wears
-   * the same fade over whichever edge it can still be scrolled towards.
+   * The stats row scrolls sideways at a full table with no scrollbar to say
+   * so, so it wears the same fade as the dice strip below it.
    *
-   * Coalesced to a frame because three things ask for it and one of them
-   * arrives in a flood: a knocked-out tile folding down fires `transitionend`
-   * per property per tile, and every one of them changes how much there is
-   * left to scroll.
+   * Coalesced to a frame because a knocked-out tile folding down fires
+   * `transitionend` per property per tile, and every one of them changes how
+   * much there is left to scroll.
    */
   let fadesQueued = false;
   function refreshRowFades() {
@@ -675,9 +603,8 @@ export function createHud(
     element.style.setProperty('--player-color', rgb(color));
     element.style.setProperty('--player-ink', rgb(ink));
     element.style.setProperty('--player-ink-dim', rgba(ink, 0.62));
-    // The name and count are wrapped rather than sitting directly in the tile
-    // so that the tile can close over them as one, leaving the dot — which is
-    // outside the wrapper, and so survives the collapse — behind.
+    // Name and count are wrapped so the tile can close over them as one,
+    // leaving the dot — outside the wrapper — behind.
     element.innerHTML = `
       <span class="hud-player-dot" aria-hidden="true"></span>
       <span class="hud-player-body">
@@ -688,9 +615,8 @@ export function createHud(
     `;
     element.querySelector('.hud-player-name').textContent = nameOf(playerId);
     // The caret says "you" to anyone looking at the row; this says it to
-    // anyone who is not. The color name stays in both, because the rest of the
-    // interface still talks about colors — a tile that only said YOU would
-    // leave "Blue is playing" with nothing to attach to.
+    // anyone who is not. The color name stays in both, since the rest of the
+    // interface still talks about colors.
     if (playerId === humanPlayerId) {
       element.setAttribute('aria-label', `${nameOf(playerId)}, you`);
     }
@@ -972,11 +898,10 @@ export function createHud(
     },
 
     /**
-     * Everything in here that outlives its markup. The replay's timer is
-     * stopped by `session.js` closing the replay; the fireworks' is not
-     * reachable that way, and while a stray one would only empty a layer that
-     * has already been thrown away, a match being disposed should not leave a
-     * timer running for four seconds on the strength of that.
+     * Everything here that outlives its markup. The replay's timer is stopped
+     * by `session.js` closing the replay; the fireworks' is not reachable that
+     * way, and a disposed match should not leave a timer running for four
+     * seconds even if it would only empty a layer already thrown away.
      */
     dispose() {
       fireworks.dispose();
@@ -984,29 +909,19 @@ export function createHud(
 
     /**
      * Opens the replay over the banner, for `count` recorded attacks, and
-     * starts it playing. Someone who has just pressed "Watch replay" has said
-     * what they want; leaving them on a still board to go and find the play
-     * button is asking the question twice.
+     * starts it playing — somebody who has just pressed "Watch replay" has
+     * said what they want, and leaving them on a still board to find the play
+     * button asks the question twice.
      *
-     * It opens on step 0 — the board before the first attack — and asks the
-     * session to paint it, same as every later step, so there is no state
-     * here that isn't also reachable by scrubbing the track back to the
-     * start. The first beat is spent on that opening board, which is the one
-     * view of the match nothing else shows.
+     * It opens on step 0, the board before the first attack, painted the same
+     * way as every later step, so nothing here is unreachable by scrubbing
+     * back to the start. Any touch of the transport pauses it: `seekReplay`
+     * stops the timer before it paints.
      *
-     * Any touch of the transport stops it: `seekReplay` pauses before it
-     * paints, so dragging the track or stepping with the arrows takes it back
-     * off the player's hands the moment they reach for it.
-     *
-     * The controls row stands down while this is open — both the menu and the
-     * button that may have opened it: the × is the way back, and a second way
-     * out sitting right next to it is one too many.
-     *
-     * `standings` is the whole match as `standingsOverReplay` gives it, for
-     * the graph behind the Graph button. It arrives here rather than being
-     * asked for when that button is pressed because it is a fact about a
-     * match that has already finished being recorded — there is nothing to
-     * wait for, and nothing that can change it while the replay is open.
+     * `standings` is the whole match as `standingsOverReplay` gives it. It
+     * arrives here rather than on the Graph button because it is a fact about
+     * a match already finished being recorded — nothing to wait for, and
+     * nothing that can change while the replay is open.
      */
     showReplay(count, { standings = [] } = {}) {
       stopReplaying();

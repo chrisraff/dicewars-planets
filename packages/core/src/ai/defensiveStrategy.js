@@ -20,11 +20,9 @@ export const DEFENSIVE_TUNING = Object.freeze({
 
 /**
  * What everything below wants to know about one territory, from the seat of
- * the player deciding: how many of its neighbours are not ours, the two
- * strongest of those, and how many neighbours it has at all.
- *
- * "Not ours" rather than "belongs to whoever holds this one" deliberately —
- * see improvement 2 in `createDefensiveStrategy`.
+ * the player deciding: how many neighbours are not ours, the two strongest of
+ * those, and how many neighbours there are at all. "Not ours" rather than
+ * "the defender's colour" deliberately — see `createDefensiveStrategy`.
  */
 function threatsAround(state, nodeId, playerId) {
   let rivals = 0;
@@ -156,27 +154,24 @@ export function defensiveMovesFor(state, playerId, tuning = DEFENSIVE_TUNING) {
  *    which on a crowded board misses the third player sitting right next to
  *    the prize.
  *
- * Neither changes how well it plays — over 100 six-player games against a
- * field of the original, both land within a point of the original's own 23%,
- * where seat order alone is worth about that much.
+ * Neither changes how well it plays: both land within a point of the
+ * original's own 23% six-handed, where seat order alone is worth about that.
  *
- * A third looked just as obvious and is not made. The counter-attack test
- * compares the rival to the attacker's dice, though a winner garrisons the
- * prize with `dice - 1`, so a rival exactly as strong as the attacker passes
- * a test it would fail by one. Closing that gap costs the AI the game: with
- * dice this small a single die is most of the margin, so it refuses nearly
- * every fight, and since reinforcement is paid on the largest connected
- * region, refusing to grow is losing slowly. It wins 1 game in 100 instead of
- * 23 and finishes holding half a territory. The leniency is load-bearing.
+ * **A third looked just as obvious and is not made, and this is the one thing
+ * to know before tidying it.** The counter-attack test compares the rival to
+ * the *attacker's* dice, though a winner garrisons the prize with `dice - 1`,
+ * so a rival exactly as strong passes a test it would fail by one. Closing
+ * that gap takes the AI from winning 23 games in 100 to winning 1: at this
+ * scale a single die is most of the margin, so it refuses nearly every fight,
+ * and reinforcement being paid on the largest connected region makes refusing
+ * to grow a slow way to lose. The leniency is load-bearing.
  *
  * One deliberate non-fix: among two sealing attackers of equal dice the
- * original keeps the one with *more* neighbours, while the comment beside it
- * says it prefers the less connected. The code's behaviour is kept — more
- * neighbours means more friendly ones (the rival count is 1 either way), so
- * it is picking the better-supported attacker, which is the defensive read —
- * but it is a tie-break of a tie-break, and flipping `home.total` to its
- * negation in `defensiveMovesFor` is the whole change if the comment was the
- * intent.
+ * original keeps the one with *more* neighbours while the comment beside it
+ * claims the opposite. The behaviour is kept — more neighbours means more
+ * friendly ones, so it is picking the better-supported attacker — but negating
+ * `home.total` in `defensiveMovesFor` is the whole change if the comment was
+ * the intent.
  */
 export function createDefensiveStrategy(tuning = DEFENSIVE_TUNING) {
   return function defensiveStrategy(state, playerId) {

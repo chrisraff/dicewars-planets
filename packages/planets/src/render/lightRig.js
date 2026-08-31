@@ -10,44 +10,30 @@ import * as THREE from 'three';
  *
  * ### Why the camera and not the world
  *
- * The dice stand on a sphere, so their up faces point in every direction
- * there is, while the camera is free to orbit to any of them. A key light
- * fixed in the world therefore lights *some* hemisphere of dice and leaves
- * the rest on ambient alone — and ambient does not shade a normal map, so on
- * the unlit side the pip dimples that `diceTextures` goes to such trouble
- * over stop existing altogether. Measured on the rig this replaces (a single
- * directional light from `(3, 5, 4)`), the Lambert term on the up faces of
- * the territories actually in view was:
+ * Dice stand on a sphere, so their up faces point every way there is, while
+ * the camera orbits freely. A key light fixed in the world lights *some*
+ * hemisphere of dice and leaves the rest on ambient alone — and ambient does
+ * not shade a normal map, so on the far side the pip dimples `diceTextures`
+ * goes to such trouble over stop existing altogether.
  *
- * | camera                   | min  | median | max  |
- * |--------------------------|------|--------|------|
- * | equator, toward the light| 0.00 | 0.75   | 1.00 |
- * | equator, away from it    | 0.00 | 0.00   | 0.32 |
- * | down on the north pole   | 0.00 | 0.62   | 1.00 |
- * | down on the south pole   | 0.00 | 0.00   | 0.45 |
- *
- * Two of those four views have the *median visible die* on ambient alone.
- * That is not a rig to be tuned; the same lights carried around by the camera
- * read 0.74 at the median from every one of those four positions, because a
- * die facing the camera is now always a die facing the light. The point is
- * less that the numbers are better than that the orbit can no longer produce
- * a bad one — there is no view left to tune *for*.
+ * Carried by the camera, the angle between an up face and the light no longer
+ * depends on where the camera went, so every view reads the same. The claim is
+ * not that the numbers are better; it is that **there is no view left to tune
+ * for**. `preview/dice.html` carries both rigs on a toggle, and CLAUDE.md the
+ * measurement.
  *
  * ### What the three lights are for
  *
  * A die is a cube with a number on top, and the two readings want opposite
- * things: the top face wants the light straight down the view axis, and the
- * sides want it off to one side or the cube reads as a flat tile. So the key
- * sits a little up and to the right of the axis — far enough that the two
- * visible sides of a die differ, near enough that every up face keeps most of
- * its light. At the defaults it lands `cos(31°) = 0.86` on an up face and
- * `±sin(31°) = ±0.52` on the sides, which is the whole of the modelling.
+ * things: the up face wants the light down the view axis and keeps `cos`, the
+ * two visible sides want it off to one side and get `±sin`, and nothing can
+ * have both. So the key sits a little up and across — at the defaults 31° off,
+ * which is 0.86 on an up face and ±0.51 on the sides, and that is the whole of
+ * the modelling.
  *
- * The fill is opposite in azimuth and slightly below, and exists only so the
- * dark side of a die is not the same value as the dark side of every other
- * die. Ambient is the floor under both, and is deliberately low: it was 0.6
- * of a 1.8 total before, which is a third of every surface arriving as the
- * one term that cannot describe a shape.
+ * The fill is opposite in azimuth and weak: a shadow side, not a second key.
+ * Ambient is the floor and is deliberately low, since a large ambient term is
+ * every surface arriving as the one term that cannot describe a shape.
  */
 export const LIGHT_RIG = {
   // Flat floor, in every direction at once. Enough that an unlit face is not
@@ -106,14 +92,13 @@ export function offAxisAngle(elevation, azimuth) {
  * with the camera.
  *
  * A directional light's direction is `position - target`, and both targets
- * are left where they are built, at the world origin — so each light's
- * position *is* its direction and placing it is one rotation. Parenting the
- * lights to the camera instead would look tidier and be wrong: the offset
- * would then be measured against the camera's *distance*, so the rig would
- * quietly swing wider every time the player zoomed in.
+ * stay at the world origin, so each light's position *is* its direction.
+ * Parenting the lights to the camera would look tidier and be wrong: the
+ * offset would then be measured against the camera's *distance*, so the rig
+ * would swing wider every time the player zoomed in.
  *
  * `set()` takes any subset of the options, so a preview can put a slider on
- * each of them without knowing which ones are angles.
+ * each without knowing which are angles.
  */
 export function createLightRig(camera, overrides = {}) {
   const options = { ...LIGHT_RIG, ...overrides };
