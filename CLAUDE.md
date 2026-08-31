@@ -568,6 +568,31 @@ before any of this, which is what the handicaps are measured against.
   builds the next rather than resetting a dozen things. It also decides what is
   worth saving and hands it to `onSave`; where that goes is `main.js`'s
   business, so nothing in here knows that localStorage exists.
+
+  It is the composition root, so it is the one place allowed to reach for
+  everything. Two things it used to hold outright have moved out, and both
+  moved for the same reason: they were rules and state buried in a closure
+  nothing could construct in a test.
+- `autoFollow.js` — who is driving the camera. A hand on the planet takes it
+  off the match, and every automatic move is off until it is handed back; this
+  is which drags count (`dragTakesCamera`), where a press should go
+  (`aimKind`), and when a handover's pan home is held back (`panHomeBlocked`).
+  Pure, and deliberately ignorant of what a replay or a banner *is* — both
+  arrive as a plain flag from the caller. `session.js` keeps only the half that
+  can actually move a camera, and `hud.js` keeps `autoFollowButtonView`, which
+  is about where the offer is *drawn*.
+- `replayPlayer.js` — the replay painted onto the planet. While it is open the
+  surface, the dice, the poles, the stats row and the readout are all drawn
+  from a *reconstructed* board rather than from the live match, which is held
+  still underneath. It is handed the same objects live play draws through, and
+  the three questions a step has to ask the camera (`focusFights`,
+  `isSwinging`, `cameraFreed`) and nothing more.
+
+  What deliberately stayed in `session.js` is the **handover** —
+  `openReplay`/`closeReplay`, which decide when the replay has the board at
+  all. That is a question about the match rather than about a step: it settles
+  whatever move was mid-air, takes the camera off whoever had it, and puts the
+  live board and its banner back afterwards.
 - `replay.js` — every move of the match, in order, plus the board they build
   forward from (the **anchor**). Nothing per step is remembered: a step is
   rebuilt by walking the moves over the anchor, which is what makes the
@@ -1031,8 +1056,8 @@ been handed it starts out driving.
 
 **Dragging the track is not a seek the camera chases.** A hand scrubbing passes
 through dozens of steps, and the board deliberately *waits* for a swing to land
-before it paints (`pendingReplayStep`), so chasing them made the one thing a
-scrub is for lag behind the hand doing it. The track's `input` therefore seeks
+before it paints (`replayPlayer`'s `pendingStep`), so chasing them made the one
+thing a scrub is for lag behind the hand doing it. The track's `input` therefore seeks
 unsettled — repaint, no camera — and its `change` is the release the camera
 answers. Everything else (the arrows, the timer, a click on the track) is
 settled by definition.

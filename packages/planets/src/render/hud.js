@@ -492,9 +492,9 @@ export function createHud(
   //
   // `settled` is whether the player has actually stopped here. A scrub passes
   // through dozens of steps, and the board waits for a swing to land (see
-  // `showReplayStep`), so chasing them makes the one thing a scrub is for lag
-  // behind the hand doing it. A drag therefore repaints without moving the
-  // camera, and the release is the seek the camera answers.
+  // `replayPlayer.showStep`), so chasing them makes the one thing a scrub is
+  // for lag behind the hand doing it. A drag therefore repaints without moving
+  // the camera, and the release is the seek the camera answers.
   function paintReplayStep(step, settled = true) {
     const max = Number(replayTrack.max);
     const clamped = Math.max(0, Math.min(max, step));
