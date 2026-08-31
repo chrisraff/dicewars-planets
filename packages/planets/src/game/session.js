@@ -14,6 +14,7 @@ import { playerStatsFor } from './playerStats.js';
 import { playerIdsFor, resolveStartSeat, strategyFor, subdivisionsFor } from './settings.js';
 import { AIM_FIGHTS, AIM_REPLAY, createAutoFollow, panHomeBlocked } from './autoFollow.js';
 import { createReplayPlayer } from './replayPlayer.js';
+import { createOutcomeBanner } from './outcomeBanner.js';
 import { cameraSnapshot, gameSave, isUsableCamera, saveMatchesWorld } from './saveGame.js';
 import { createPlanetSurface } from '../render/planetSurface.js';
 import { createDiceLayer } from '../render/diceLayer.js';
@@ -175,6 +176,14 @@ export function createSession({
     finalWinner: () => game.state.winner,
   });
 
+  // The banner that interrupts play, and whether the match is held behind it.
+  // Which of the three kinds holds, and which is an ending worth coming back
+  // to, is `BANNER_RULES` in `outcomeBanner.js`.
+  const banner = createOutcomeBanner({
+    show: (outcome) => hud.showOutcome(outcome),
+    hide: () => hud.hideOutcome(),
+  });
+
   /**
    * A turn has handed back to the player, so put their own ground in front of
    * them — but only when *none* of it is on screen, since seeing some is
@@ -186,7 +195,12 @@ export function createSession({
    * planet, or a banner is holding it.
    */
   function focusOwnGround() {
-    if (panHomeBlocked({ humanEliminated, isOver: game.isOver(), replayOpen, bannerHolding })) {
+    if (panHomeBlocked({
+      humanEliminated,
+      isOver: game.isOver(),
+      replayOpen,
+      bannerHolding: banner.holding,
+    })) {
       return false;
     }
 
@@ -277,15 +291,14 @@ export function createSession({
   let reinforceAnim = null; // the end-of-turn payout being animated
   // not stored in a save: the board itself says whether you still hold ground
   let humanEliminated = !isPlayerAlive(game.state, humanPlayerId);
-  let lastOutcome = null; // so closing the replay can bring the banner back
   // Done the moment they dismiss it or attack — having just done the thing it
   // describes, being told again next game would be noise.
   let hintSeen = attackHintSeen;
   let pressed = null; // the territory a finger is down on, marked while it is
-  // The two things that take the match out of the player's hands. Nothing in
-  // it moves while either is true — see tick() at the bottom.
+  // The replay is one of the two things that take the match out of the
+  // player's hands; `banner.holding` is the other. Nothing in it moves while
+  // either is true — see tick() at the bottom.
   let replayOpen = false;
-  let bannerHolding = false;
 
   /**
    * Finishes whatever move is mid-air, so what the replay covers is a whole
@@ -314,7 +327,7 @@ export function createSession({
     // starts out driving.
     autoFollow.reset();
     refreshAutoFollow(); // and in here it sits in the card, not the controls
-    hud.hideOutcome();
+    banner.dismiss();
     hud.showReplay(replay.attacks.length, { standings: replay.standings(playerIds) });
   }
 
@@ -333,8 +346,10 @@ export function createSession({
     hud.showBattle(battles.latestBattle);
     hud.setHistory(battles.entries);
     // Only a match that actually ended has a banner to go back to; opened from
-    // the controls row there is nothing to restore.
-    if (lastOutcome) hud.showOutcome(lastOutcome);
+    // the controls row there is nothing to restore. It comes back with its
+    // hold, since "Watch replay" answered the question without settling it —
+    // see `restore`.
+    banner.restore();
   }
 
   // What it would take to rebuild this match: the planet as the number it grew
@@ -384,28 +399,16 @@ export function createSession({
     onAttackHintSeen?.();
   }
 
-  /**
-   * A banner over a match that is **still running** — knocked out, or handed
-   * the win because everyone else gave up — with the match held behind it
-   * until it is answered. Both are questions, and a question that goes stale
-   * while it is being asked is worse than not asking it.
-   *
-   * Both arrive at settled moments — a knockout after its attack is applied, a
-   * surrender at the end of a turn — so unlike the replay there is never a
-   * move in mid-air to put down first. The banner covers the whole HUD, so
-   * answering it is the only way out and the hold cannot be stranded.
-   */
-  function interrupt(outcome) {
-    bannerHolding = true;
-    hud.showOutcome(outcome);
-  }
+  // The three banners. Whether each holds the match and whether it is an
+  // ending to come back to is `BANNER_RULES` in `outcomeBanner.js`; all that
+  // is decided here is what they say.
+  const canReplay = () => replay.attacks.length > 0;
+  const surrendered = () => ({ kind: 'surrendered', humanPlayerId, canReplay: canReplay() });
 
-  // The banner a finished match ends on. In one place because it goes up
-  // twice: when the game is won, and when a save of a game already won is
-  // opened again. No hold: there is nothing left to play.
+  // In one place because it goes up twice: when the game is won, and when a
+  // save of a game already won is opened again.
   function showEnding(winner) {
-    lastOutcome = { kind: 'over', winner, humanPlayerId, canReplay: replay.attacks.length > 0 };
-    hud.showOutcome(lastOutcome);
+    banner.raise({ kind: 'over', winner, humanPlayerId, canReplay: canReplay() });
   }
 
   function refreshBoard(pulse = 1) {
@@ -542,15 +545,11 @@ export function createSession({
     if (event.playerId === humanPlayerId) {
       humanEliminated = true;
       if (!game.isOver()) {
-        // Not kept as `lastOutcome`: a match carrying on without you has no
-        // ending screen to return to, so closing a replay opened from here
-        // puts you back on the board rather than re-imposing the banner.
-        interrupt({
-          kind: 'eliminated',
-          by: event.by,
-          humanPlayerId,
-          canReplay: replay.attacks.length > 0,
-        });
+        // Held, and deliberately *not* remembered — a match carrying on
+        // without you has no ending screen to return to, so closing a replay
+        // opened from here puts you back on the board. Both of those follow
+        // from the kind; see `BANNER_RULES`.
+        banner.raise({ kind: 'eliminated', by: event.by, humanPlayerId, canReplay: canReplay() });
       }
     }
   });
@@ -573,8 +572,7 @@ export function createSession({
   // the player is offered the win now rather than the twenty turns of mopping
   // up that would otherwise stand between them and it.
   game.on('surrendered', () => {
-    lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
-    interrupt(lastOutcome);
+    banner.raise(surrendered());
     // Straight away: the match is held behind the banner, so there may not
     // *be* another change until the question is answered.
     onSave?.(snapshot());
@@ -590,7 +588,7 @@ export function createSession({
     // Whatever it is, the question has been answered — so the match is no
     // longer held for it. 'replay' hands the hold straight over to the replay
     // itself, which keeps it until the overlay closes.
-    bannerHolding = false;
+    banner.answered();
     if (action === 'newGame') return onNewGame?.();
     if (action === 'replay') return openReplay();
 
@@ -598,11 +596,11 @@ export function createSession({
       // Written down straight away: a reload in between would otherwise open
       // on the banner the player has just declined.
       game.playOn();
-      lastOutcome = null;
+      banner.playedOn();
       onSave?.(snapshot());
     }
 
-    hud.hideOutcome(); // 'watch', 'dismiss' and 'playOn' all just get out of the way
+    banner.dismiss(); // 'watch', 'dismiss' and 'playOn' all just get out of the way
     refreshBoard();
   });
 
@@ -638,10 +636,7 @@ export function createSession({
   // without this the player comes back to an ordinary game in progress with
   // no banner and no Replay button, the win they were handed simply gone.
   if (game.isOver()) showEnding(game.state.winner);
-  else if (game.surrenderOffered && !game.playedOn) {
-    lastOutcome = { kind: 'surrendered', humanPlayerId, canReplay: replay.attacks.length > 0 };
-    interrupt(lastOutcome);
-  }
+  else if (game.surrenderOffered && !game.playedOn) banner.raise(surrendered());
 
   game.start();
 
@@ -719,7 +714,7 @@ export function createSession({
       // three turns behind either means closing it drops the player somewhere
       // they never saw happen. `game.tick` is the only clock in the match, so
       // not calling it is the whole of the pause.
-      if (!replayOpen && !bannerHolding) game.tick(dt);
+      if (!replayOpen && !banner.holding) game.tick(dt);
     },
 
     dispose() {

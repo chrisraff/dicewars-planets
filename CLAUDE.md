@@ -581,6 +581,13 @@ before any of this, which is what the handicaps are measured against.
   arrive as a plain flag from the caller. `session.js` keeps only the half that
   can actually move a camera, and `hud.js` keeps `autoFollowButtonView`, which
   is about where the offer is *drawn*.
+- `outcomeBanner.js` — the banner that interrupts play, and what the match
+  does behind it. Three things put one up and they differ in two ways that used
+  to be decided at the call sites: whether the match is **held** for an answer,
+  and whether the banner is an **ending to come back to** after a replay.
+  `BANNER_RULES` is that table, and getting either column wrong fails quietly —
+  a match carved up behind a question, or a win that stops existing on reload.
+  What a banner *says* is still `outcomeView` in `hud.js`.
 - `replayPlayer.js` — the replay painted onto the planet. While it is open the
   surface, the dice, the poles, the stats row and the readout are all drawn
   from a *reconstructed* board rather than from the live match, which is held
@@ -752,12 +759,12 @@ says who won and who is out, and `playedOn` travels in the save. Before this,
 and left the replay one press away and unreachable.
 
 Two of those banners go up over a match that is **still running**, and the
-match is held behind them until they are answered (`interrupt` in
-`session.js`). Without it the AIs went on taking turns underneath: you were
-told you were out while the planet carried on being carved up, and dismissing
-the banner dropped you into a board several turns past the one it went up
-over. Both banners are questions, and a question that goes stale while it is
-being asked is worse than not asking it. Holding outright is safe because both
+match is held behind them until they are answered (`BANNER_RULES` in
+`outcomeBanner.js`). Without it the AIs went on taking turns underneath: you
+were told you were out while the planet carried on being carved up, and
+dismissing the banner dropped you into a board several turns past the one it
+went up over. Both banners are questions, and a question that goes stale while
+it is being asked is worse than not asking it. Holding is safe because both
 arrive at a settled moment — a knockout is emitted after its attack has been
 applied, a surrender is judged at the end of a turn — so unlike the replay
 there is never a move in mid-air to put down first. The banner covers the whole
@@ -773,9 +780,21 @@ replay has the planet — `game.tick` is the only clock in it, so not calling it
 is the whole of the pause. There is one board between them, and letting the AI
 take three turns behind the overlay would mean closing it dropped the player
 somewhere they never saw happen. Closing puts the banner back only if the match
-actually *ended* — `lastOutcome` is set for a win and a surrender and
-deliberately not for a knockout, since a game carrying on without you has no
+actually *ended* — `BANNER_RULES` remembers a win and a surrender and
+deliberately not a knockout, since a game carrying on without you has no
 ending screen to return to and "You are out" is a question already answered.
+
+**It comes back with its hold, and that is the part that is easy to get
+wrong.** Every answer releases the hold and **"Watch replay" is an answer** —
+it is the one button that settles nothing — so a banner put back by only
+*showing* it again returns over a match that is running. That was the bug: a
+surrender banner restored after a replay let the AIs take a round of turns
+behind a "You win" card, with the turn-handover flash going off behind it, and
+"Play on" then dropped the player onto a board several turns past the one they
+had been offered. `restore` is therefore a full `raise`, which re-applies the
+kind's rule rather than needing to know which kind it is holding: a win holds
+nothing because there is nothing left to play, and a knockout is never
+remembered, so it never reaches the restore path at all.
 
 A replay throws its dice too, at `REPLAY_TIMING` — briefer than even the AI's
 pace, because the track advances itself every `REPLAY_STEP_MS` and a throw
