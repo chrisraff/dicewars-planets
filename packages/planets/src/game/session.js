@@ -24,7 +24,7 @@ import { createReinforceAnimation } from '../render/reinforceAnimation.js';
 import { createCameraFocus } from '../render/cameraFocus.js';
 import { fightCenter } from '../render/cameraFraming.js';
 import { createTerritoryPicker } from '../render/pickTerritory.js';
-import { createHud } from '../render/hud.js';
+import { CANCELLED_TOAST, createHud } from '../render/hud.js';
 import { createTurnFlash } from '../render/turnFlash.js';
 import { assignPlayerColors } from '../render/palette.js';
 import { highlightsFor, pulseAt } from '../render/highlights.js';
@@ -514,6 +514,56 @@ export function createSession({
     dice.reroll(event.to, state);
   });
 
+  /**
+   * The attack was taken back before its dice came up.
+   *
+   * Nothing in the rules moved — `createGame` had parked the result rather
+   * than applying it — so this is only putting back what *showing* the attack
+   * disturbed: the replay entry written at the declaration, the dice lying
+   * mid-throw, the blank readout, and the save that was written one board
+   * ahead.
+   *
+   * The save is the ordering that matters. `saveOutcome` wrote the post-attack
+   * board the instant the attack was declared, which is what stops a player
+   * reading the dice and reloading; a cancel has to overwrite that with the
+   * board as it actually stands, or a reload would restore a fight that never
+   * happened. It is written here rather than left to the `change` that follows
+   * for the same reason `saveOutcome` exists at all — this is the moment the
+   * truth about the match changed.
+   */
+  game.on('cancelled', ({ event }) => {
+    replay.dropLast();
+    roll = null;
+    hud.hideCancel();
+
+    // Both stacks are mid-throw, scattered across their territories. The board
+    // never changed, so standing them back up off the live state puts them
+    // exactly where they were before the attack was declared.
+    dice.reroll(event.from, game.state);
+    dice.reroll(event.to, game.state);
+
+    // Back to the fight before this one — which is the last one the *log* has,
+    // since a battle is only logged once its dice land. A first attack
+    // cancelled leaves nothing, and the readout hides itself.
+    hud.showBattle(battles.entries.at(-1) ?? null);
+
+    hud.showToast(CANCELLED_TOAST);
+    saveOutcome();
+    refreshBoard();
+  });
+
+  // Picking a territory to attack from is the player moving on, so the line
+  // about the attack they cancelled has done its job and goes early rather
+  // than sitting over the next one. Its own clock is only the backstop for a
+  // cancel nobody followed up on.
+  //
+  // The attacker restored by `cancelAttack` itself does not count — that
+  // arrives before the `cancelled` event, deliberately, so there is no toast
+  // up yet for it to take down.
+  game.on('selection', (selection) => {
+    if (selection !== null) hud.hideToast();
+  });
+
   game.on('reinforce', (event) => {
     // Decided, so written down — where the dice land is `rng`'s answer and it
     // is given once. See `saveOutcome`.
@@ -643,6 +693,12 @@ export function createSession({
     refreshBoard();
   });
 
+  // The × on the readout. The other way in is a press on the planet — see
+  // `pressPlanet` and the arbiter order in `main.js` — and both come through
+  // `game.cancelAttack`, which is what decides whether it is still early
+  // enough for either to mean anything.
+  hud.onCancel(() => game.cancelAttack());
+
   hud.onMenu(() => onMenu?.());
 
   // A restored game that was already won gets no `over` event, so the ending
@@ -701,6 +757,20 @@ export function createSession({
       refreshBoard();
     },
 
+    /** Whether there is an attack a tap would cancel — see `selectPress.js`. */
+    canCancelAttack() {
+      return game.cancelOffer !== null;
+    },
+
+    /**
+     * Cancels the attack in the air, if it is still early enough — the answer
+     * says which. Both ways in come through here: the × on the readout, and a
+     * tap anywhere on the planet.
+     */
+    cancelAttack() {
+      return game.cancelAttack();
+    },
+
     /** It turned into a drag, or the system took it away. Nothing happens. */
     cancelPress() {
       if (pressed === null) return;
@@ -718,6 +788,12 @@ export function createSession({
         roll.animation.apply(roll.elapsed);
         refreshBoard(pulseAt(roll.elapsed));
       }
+      // Read back off the game every frame rather than counted here: the
+      // window is the game's own clock, and a second copy of it in the
+      // renderer could offer a cancel the game would refuse.
+      const offer = game.cancelOffer;
+      if (offer) hud.showCancel(offer.left / offer.total);
+      else hud.hideCancel();
       if (reinforceAnim) {
         reinforceAnim.elapsed += dt;
         const started = reinforceAnim.animation.apply(reinforceAnim.elapsed);

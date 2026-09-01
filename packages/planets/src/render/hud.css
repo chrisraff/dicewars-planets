@@ -1499,3 +1499,99 @@
     rgb(var(--flash-color)) var(--flash-outer)
   );
 }
+
+/* ---- the cancel offer on the readout ----------------------------------
+
+   While the player's own attack can still be taken back, the readout is the
+   way to take it back: the dice it is showing are still blank, so there is no
+   history worth opening underneath it and no reading worth expanding. The
+   mark takes the chevron's slot rather than a slot of its own —
+   `.battle-current` is a fixed width precisely so the chevron stops riding
+   around on each battle's own content, and a control that pushed that width
+   about for a second would be that same bounce all over again. */
+.battle-current.is-cancelable > .battle-chevron { display: none; }
+.battle-current.is-cancelable { border-color: rgba(255, 255, 255, 0.4); }
+
+.battle-cancel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.3rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+}
+.battle-cancel[hidden] { display: none; }
+
+/* The time left, as the mark's own background draining away. Behind the ×
+   rather than beside it, so the control stays one small square whatever is
+   left on it — a bar with a length of its own would be one more thing
+   changing width inside a readout that is deliberately not allowed to.
+
+   A transform rather than a width: this is written every frame, and a width
+   is a layout the whole readout pays for where a transform is not. Anchored
+   left, so it drains towards the mark rather than away from it. */
+.battle-cancel-bar {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: rgba(255, 255, 255, 0.45);
+}
+.battle-cancel-mark {
+  position: relative;
+  font-size: 1rem;
+  line-height: 1;
+  color: #f2f2f2;
+}
+
+/* ---- the toast --------------------------------------------------------
+
+   A line that says what just happened, and then goes. It sits at the top of
+   the transient band above the controls, *over* the auto-follow offer and the
+   payout tray rather than beside them: all three are occasional, any two can
+   coincide, and a row that reflows because two turned up at once is worse
+   than a column that grows upwards.
+
+   Not interactive — it says something, it does not ask anything — so it keeps
+   `#hud`'s `pointer-events: none` rather than opting back in the way every
+   real control does. Centred, because the one thing it must not do is sit
+   under the finger that is about to attack again. */
+.hud-toast {
+  align-self: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--panel-radius);
+  background: rgba(8, 8, 11, 0.88);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #e8e8ee;
+
+  /* It fades rather than vanishing: nothing is waiting on a toast, so it
+     should leave the way a thing leaves that nobody is watching. `hidden` is
+     still what takes it out of the layout — the band above the controls has to
+     close up behind it — so the class carries the opacity and `hidden` is set
+     a fade later.
+
+     `--toast-fade` is written from `TOAST_FADE_MS` when the HUD is built, so
+     the length of the fade and the delay before `hidden` goes back on are one
+     number rather than two that can drift — a CSS fade outlasting its own
+     timer is a line cut off halfway out. */
+  opacity: 0;
+  transition: opacity var(--toast-fade) ease;
+}
+.hud-toast.is-shown { opacity: 1; }
+.hud-toast[hidden] { display: none; }
+
+/* Rightmost while it is there, which is the chevron's own trick and for the
+   same reason: the row packs to the start, so without this the × would sit
+   wherever the dice it follows happened to end. It replaces the chevron
+   rather than joining it, so it inherits the pin along with the slot. */
+.battle-cancel { margin-left: auto; }

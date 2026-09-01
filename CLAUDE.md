@@ -1505,6 +1505,195 @@ territory. It still has to be *taken* — letting go there is how you put that
 territory back down — so it is the one case where a press is owned with nothing
 on screen to show for it.
 
+### Calling off an attack
+
+A declared attack can be taken back for about a second, before its dice come
+up. The × sits on the battle readout, and **any press on the planet does the
+same thing** — the player is watching the dice they just threw, on the far side
+of the screen from the readout, so a window this short has to have no target to
+find and hit. Both ways in go through `session.cancelAttack`, which is what
+decides whether it is still early enough.
+
+**Nothing in the rules is unwound, because nothing had happened yet.**
+`performAttack` runs `reduce` at the declaration but parks the result in
+`pending`; `finishAttack` swaps it into `state` when the countdown runs out. So
+for the whole animation the live board is still the pre-attack one, and a
+cancel is dropping `pending` and putting back the three things declaring an
+attack disturbed: the selection, `attackedThisTurn`, and the replay entry.
+
+`attackedThisTurn` is **restored rather than cleared**. A cancelled attack is
+not an attack, but the player may have made a real one earlier in the same
+turn, and clearing it would report that turn as a pass.
+
+The selection coming back is what makes it an undo rather than a reset: the
+fight you cancelled is one press away, not two, because the attacker is back
+in your hand.
+
+**The window is load-bearing for game integrity, not just for the save.**
+Cancel and re-declare rolls fresh dice, so an offer that outlived *any* of the
+outcome becoming visible would be a re-roll button. `cancelWindow(timing)` is
+therefore stated as a function of the animation — `aim` plus the fraction of
+`roll` before `settleFrom`, less a slow frame's margin — and
+`rollTimeline.test.js` pins it by asserting `sampleAttack(cancelWindow(t),
+t).settle` is still exactly 0. It is not a tunable constant and must not become
+one.
+
+**The bounce is that window made visible**, and it is the reason it is long
+enough to use. `settleFrom` had to move from 0.55 to 0.75 of the roll beat to
+buy a person time to react — 0.25s of `aim` is not time to see a bar, decide,
+and hit it — and dice that simply hang in the air for that extra time look
+broken rather than undecided. So the player's throw lands, bounces once and
+settles, which takes the same 1.0s it always did. It is on the player's own
+throw and nowhere else: `AI_TIMING` and `REPLAY_TIMING` settle early and do not
+bounce, because **a throw nobody can cancel has nothing to withhold.** The two
+go together and neither is a free choice.
+
+Three things about the shape of it, all of which it got wrong first time and
+all of which read as "unnatural" rather than as anything nameable:
+
+- **`travel` is one curve across the whole roll and must not be split at the
+  touchdown.** Two eased halves meet with zero slope between them, so the die
+  slid, stopped dead on the ground, and set off again — which is the one thing
+  a bounce never does. Sliding on through is both simpler and what actually
+  happens: a bouncing thing keeps the speed it had, and the die still has
+  about 30% of its distance to cover when it first lands.
+- **The arcs are parabolas, not sine.** The difference is small in the air and
+  obvious at the landing, where a sine comes in soft and a thrown die does not.
+- **The bounce's timing is not a second number.** `touchdownAt` derives it from
+  the height, because under gravity a hop's time goes as the square root of its
+  height — a bounce 0.3 as high lasts 0.55 as long. Picking the two
+  independently is exactly how a bounce ends up looking wrong. It also falls
+  out of the arcs that the die leaves the ground at `sqrt(height)` of the speed
+  it arrived at, which is the coefficient of restitution, consistent for free
+  rather than as a third number to get wrong.
+
+- **The flight ends at `groundedAt`, not at the end of the roll.** The roll has
+  two halves and that is the seam: a flight, and then the die on the ground.
+  Everything that can only honestly happen against something solid happens
+  after it — the tumble braking, the faces resolving — and nothing needing air
+  happens after it. Before this the die braked and settled onto its face
+  *in mid-air*, which is the same class of thing as the two above.
+
+  **`settleFrom` is one moment wearing three hats and they have to be the same
+  moment**: the flight ends, the tumble starts braking, and the faces start
+  resolving. Splitting them is how this was wrong twice. It is also where the
+  cancel window closes, which is not a coincidence — a die rocks onto its face
+  once it has stopped bouncing and not before, so "the answer is not in the
+  picture yet" and "the dice are still in the air" are the same statement.
+  `groundedAt` and `firstLandingAt` are that arithmetic in one place;
+  `touchdownAt` is where the bounce sits inside the flight, and
+  `firstLandingAt` is where the flight sits inside the roll.
+
+And the worst of the four, which is about the tumble rather than the arc:
+**rotation must not slow to nothing mid-flight and then appear to pick up
+again.** `spin` was `easeOutCubic` across the whole roll, which is down to 12%
+of its starting rate by the first landing — so the die bounced essentially
+motionless and `settle` then swung it onto its face, reading as the rotation
+restarting. Nothing is touching a die in the air, so nothing is slowing it
+down: `tumbleAt` holds **one rate for the whole flight** and comes off it only
+over the settling stretch, where a real die is scrubbing spin off against the
+ground. The rate is `2 / (1 + settleFrom)` rather than 1 because the braking
+tail covers half the ground a constant rate would, and spending the flight at
+that rate is what still lands it on a whole number of turns.
+
+**Do not extend the cancel window by arguing the dice are spinning too fast to
+read.** That was proposed once the tumble held its speed, and it is the wrong
+reason: the window is not protected by illegibility, it is protected by the
+answer not being in the picture at all. While `settle` is 0 the orientation is
+`tumble ∘ restQuaternion` — the *stacked* orientation turned about an arbitrary
+axis — and has no relationship to the rolled face. That is provable and
+testable; "too fast to read" is neither, and it does not survive a screenshot
+or a frame-stepped recording. The moment the offer closes is itself observable,
+so the last frame before the bar empties is exactly the frame somebody would
+look at.
+
+The window can still only move by moving `settleFrom`, since they are the same
+number, and the trade is poor: taking it to the apex of the bounce (0.823) buys
+**73ms — 7.7% — for 29% less time to land the die on its face**, and the settle
+blend has an arbitrary rotation to cover, so compressing it is how the landing
+gets a snap in it.
+
+What makes the impact read, now that speed no longer marks it, is that the die
+**changes the axis it tumbles about** when it lands (`bouncedAxis`). Carrying
+on about the very same axis reads as having passed through the ground. It is
+**composed onto what has already been turned rather than switched to** — a
+switch would snap the die to a different orientation on the frame it lands,
+which looks like a dropped frame rather than an impact — so the orientation
+carries straight through and only the direction of turning changes. It is off
+for throws with no bounce, which is the whole of what keeps the AI's and the
+replay's dice as they were.
+
+The save needs no new timing. `saveOutcome` still writes the post-attack board
+the instant the attack is declared, which is what stops a player reading the
+dice and reloading; the `cancelled` handler simply writes over it with the
+board as it stands. Written there rather than left to the `change` that follows,
+for the reason `saveOutcome` exists at all — that is the moment the truth about
+the match changed.
+
+`replay.dropLast` unwrites the entry, and takes the elimination tagged onto it
+with it. Safe because a cancel can only ever be the last thing recorded — the
+board is held behind a pending attack, so nothing else can have been written
+since, the same argument `recordElimination` makes. At `REPLAY_LIMIT` there is
+one loss and it is not a correctness one: if that entry's own `record` pushed
+the log over the cap, the oldest move was folded into the anchor and popping
+does not unfold it, so the replay still rebuilds exactly the right board, one
+move shorter of history than it could have been.
+
+**Cancelling an attack is not a third entry in the arbiter.** It is another
+thing a tap can mean, so `selectPress` asks it first, before it asks what is
+under the press. It was a handler of its own in front of `select` for exactly
+as long as it took to try it, and that **stops selection working entirely**: a
+handler that yields on `onDown` hands the press over through `onAdopt`, which
+`select` does not implement and which `handOn` ignores the return of anyway —
+so every press arrived owned but never started, and nothing on the board could
+be picked up. `pointerArbiter.test.js` states both halves of that so it cannot
+be re-introduced, and it is why `orbitHandler` — the one thing genuinely
+behind another — carries an `onAdopt` that synthesises the press it never saw
+begin.
+
+**Only a tap cancels, and that is why the press is held rather than answered
+on the way down.** Turning the planet is reading it, and a player who reaches
+for the planet mid-throw is looking at the board rather than changing their
+mind about it — so `onDown` only asks whether there is anything to cancel
+(`canCancelAttack`) and keeps the press, `onMove` hands it to the camera past
+the slop exactly as it always would, and `onUp` is where the cancel actually
+happens. Answering on the press instead meant a pan cancelled the attack under
+the hand that was only trying to look at the board.
+
+The tap is then **swallowed rather than passed on**. Falling through to the
+rest of the release would let one press cancel the attack and — since
+cancelling puts the attacker back in the player's hand — immediately declare
+another one on the same target, the exact opposite of what pressing it meant.
+
+The toast (`CANCELLED_TOAST`, "You canceled the attack") is past tense and
+names *you* as the one who did it, because the one thing it must not read as is
+the move having been *rejected* by the game. It is not ticked — it has no
+planet to agree with — so it runs on a timer, the same argument `fireworks.js`
+makes, and it sits at the top of the transient band above the controls rather
+than beside the auto-follow offer and the payout tray: all three are
+occasional, any two can coincide, and a row that reflows because two turned up
+at once is worse than a column that grows upwards.
+
+It **fades** rather than vanishing, because nothing is waiting on it and it
+should leave the way a thing leaves that nobody is watching — a line that
+blinks out reads as having been dismissed by something, which invites a look at
+what. `hidden` is still what takes it out of the layout, since the band has to
+close up behind it, so the class carries the opacity and `hidden` goes back on
+a fade later; `--toast-fade` is written from `TOAST_FADE_MS` so the transition
+and that delay cannot drift into a fade cut off halfway out. The class also
+cannot go on in the same frame the element stops being `display: none` — there
+is no layout in between for a transition to start from — hence the frame's
+wait.
+
+**Picking a territory to attack with takes it down early.** Its own clock is
+the backstop for a cancel nobody followed up on; a player who has moved on
+should not have a line about the last attack sitting over the next one. That
+makes the order inside `cancelAttack` load-bearing: the attacker goes back in
+the player's hand **before** `cancelled` is emitted, because putting the board
+back is part of cancelling rather than a consequence of it — announced the
+other way round, the cancel's own restore would take down the toast the cancel
+had just put up. `createGame.test.js` pins the order for exactly that reason.
+
 ## Rendering conventions
 
 - The planet mesh gives each cell its own private vertices so a cell can carry

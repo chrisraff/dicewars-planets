@@ -154,10 +154,19 @@ addFaceGrid();
 
 // --- one battle at a time -------------------------------------------------
 
+const entryOf = (attacker, defender, attack, defend) =>
+  createBattleLog().record(attackEvent({ attacker, defender, attack, defend }));
+
 const oneBattle = (attacker, defender, attack, defend, options) => ({ readout }) => {
-  const log = createBattleLog();
-  readout.show(log.record(attackEvent({ attacker, defender, attack, defend })), options);
+  readout.show(entryOf(attacker, defender, attack, defend), options);
 };
+
+/**
+ * How long the offer runs on this page. Not `cancelWindow(DEFAULT_TIMING)`:
+ * the real one is under a second, which is right in a game and too short to
+ * study. Slowed down deliberately, and said so on the page.
+ */
+const CANCEL_DEMO_MS = 4000;
 
 addScenario({
   title: 'Attacker wins',
@@ -176,6 +185,56 @@ addScenario({
   note: 'What shows while the dice are tumbling on the planet: the right count in the right '
     + 'colors, faces blank, no totals. The readout must not give the result away early.',
   build: oneBattle('p2', 'p1', [4, 4, 2, 6, 1], [3, 3, 3], { revealed: false }),
+});
+
+// The state the whole cancel feature is read in, and the one that is hardest
+// to catch in the game: it is up for well under a second.
+addScenario({
+  title: 'Cancelable — the offer draining',
+  note: 'The player’s own attack, still callable off. Same blank dice as “Still rolling”, with '
+    + 'the × in the chevron’s slot so the readout does not change width for the second it is '
+    + 'there. The bar behind the × is the time left, run at four seconds here against the real '
+    + 'window of about one — long enough to look at. Any press on the planet does what pressing '
+    + 'this does.',
+  build: ({ readout, section }) => {
+    readout.show(entryOf('p2', 'p1', [4, 4, 2, 6, 1], [3, 3, 3]), { revealed: false });
+
+    let started = null;
+    const run = () => {
+      started = performance.now();
+      const frame = () => {
+        const left = 1 - (performance.now() - started) / (CANCEL_DEMO_MS);
+        if (left <= 0) {
+          readout.hideCancel();
+          return;
+        }
+        readout.showCancel(left);
+        requestAnimationFrame(frame);
+      };
+      frame();
+    };
+
+    readout.onCancel(() => {
+      readout.hideCancel();
+      note.textContent = 'Cancelled — in the game a toast says so and the board goes back.';
+    });
+
+    const controls = document.createElement('div');
+    controls.className = 'controls';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Run the window again';
+    button.addEventListener('click', () => {
+      note.textContent = '';
+      run();
+    });
+    const note = document.createElement('span');
+    note.className = 'count';
+    controls.append(button, note);
+    section.append(controls);
+
+    run();
+  },
 });
 
 addScenario({

@@ -617,3 +617,78 @@ test('the history a reload shows is the history the live log had before it', () 
     'saying the same things'
   );
 });
+
+// --- an attack that was taken back ----------------------------------------
+
+// Wired the way `session.js` really wires it, which is the whole point here:
+// the replay is written at the *declaration*, one animation before the board
+// moves, so a cancel has to unwrite it. Recording at `resolved` — which the
+// helper above does — would make this test pass without `dropLast` existing.
+function liveRecordedGame(w, options) {
+  const game = createGame({ world: w, ...options });
+  const replay = createReplay({
+    nodes: game.state.nodes,
+    reserves: new Map([...game.state.players].map(([id, player]) => [id, player.reserve])),
+  });
+  // The knockout comes off the *declaration's* payload, not off the
+  // `eliminated` event — that one is held back until the dice land, which is
+  // an animation after the entry it belongs to was written. Same as the
+  // session.
+  game.on('attack', ({ event, eliminated }) => {
+    replay.record(event);
+    if (eliminated) replay.recordElimination(eliminated);
+  });
+  game.on('cancelled', () => replay.dropLast());
+  game.on('reinforce', (event) => replay.recordReinforcement(event));
+  return { game, replay };
+}
+
+test('an attack taken back leaves nothing behind in the replay', () => {
+  const { game, replay } = liveRecordedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.equal(replay.attacks.length, 1, 'written down the moment it was declared');
+
+  game.cancelAttack();
+  assert.deepEqual(replay.attacks, [], 'and unwritten when it was cancelled');
+  assert.deepEqual(replay.moves, []);
+});
+
+test('the board a replay rebuilds never shows a fight that was cancelled', () => {
+  const { game, replay } = liveRecordedGame(world(), { rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  game.cancelAttack();
+
+  // the real one, this time — one press, since a cancel hands the attacker back
+  game.clickTerritory('b');
+  advance(game, 3);
+
+  assert.equal(replay.attacks.length, 1, 'one fight happened, so one is on the record');
+  assert.deepEqual(
+    [...replay.boardAt(replay.moves.length)].map(([id, n]) => [id, n.owner, n.dice]),
+    [...game.state.nodes].map(([id, n]) => [id, n.owner, n.dice]),
+    'and the replay ends on the board the match is actually standing on'
+  );
+});
+
+test('a cancel takes back the knockout that was tagged onto it', () => {
+  // b is p2's only ground, so declaring this attack records an elimination
+  // onto the very entry the cancel is about to drop.
+  const { game, replay } = liveRecordedGame(
+    chainWorld([
+      ['a', { owner: 'p1', dice: 8 }],
+      ['b', { owner: 'p2', dice: 1 }],
+    ]),
+    { rollDie: alwaysRolls(6) }
+  );
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.ok(replay.attacks[0].elimination, 'the knockout travels with the declaration');
+
+  game.cancelAttack();
+  assert.deepEqual(replay.moves, [], 'and goes back with it, rather than being orphaned');
+});

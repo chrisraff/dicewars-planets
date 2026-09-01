@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createDiceLayer } from '../src/render/diceLayer.js';
 import { createRollAnimation } from '../src/render/rollAnimation.js';
-import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
+import { attackDuration, firstLandingAt, groundedAt, DEFAULT_TIMING }
+  from '../src/render/rollTimeline.js';
 import { PIP_FACE_NORMALS } from '../src/render/diceStacks.js';
 import { seededRng } from '@dicewars/core/test-support';
 
@@ -79,9 +80,13 @@ test('dice leave the stack while rolling and come down flat on the ground', () =
   const attacker = layer.standFor('a');
   const resting = attacker.meshes.map((m) => m.position.clone());
 
-  animation.apply(DEFAULT_TIMING.aim + DEFAULT_TIMING.roll / 2);
+  // The top of the first hop rather than the middle of the roll: the throw
+  // bounces, and the flight is over well before the roll is.
+  animation.apply(
+    DEFAULT_TIMING.aim + DEFAULT_TIMING.roll * (firstLandingAt(DEFAULT_TIMING) / 2)
+  );
   attacker.meshes.forEach((m, i) => {
-    assert.ok(m.position.y > resting[i].y, 'mid-roll the dice are in the air');
+    assert.ok(m.position.y > resting[i].y, 'mid-throw the dice are in the air');
   });
 
   animation.apply(attackDuration());
@@ -168,4 +173,46 @@ test('dice tumble independently rather than in lockstep', () => {
     if (orientations[i].angleTo(orientations[0]) > 0.05) differing++;
   }
   assert.ok(differing >= 2, 'dice mid-roll should not all be at the same angle');
+});
+
+// The impact is the one moment a die's tumble axis has any reason to change,
+// and changing it there is what makes a bounce read as a bounce rather than as
+// a hover. But it has to be *composed* onto what has already been turned, not
+// switched to: switching would snap the die to a different orientation on the
+// frame it lands, which looks like a dropped frame rather than an impact.
+test('a die changes what it tumbles about when it lands, without jumping', () => {
+  const event = { attackRolls: [4, 4], defendRolls: [3] };
+  const { layer, animation } = setup(2, 1, event, 3);
+  const die = layer.standFor('a').meshes[0];
+
+  const at = (p) => {
+    animation.apply(DEFAULT_TIMING.aim + DEFAULT_TIMING.roll * p);
+    return die.quaternion.clone();
+  };
+
+  const touchdown = firstLandingAt(DEFAULT_TIMING);
+  const step = 0.004;
+  const before = at(touchdown - step);
+  const landing = at(touchdown);
+  const after = at(touchdown + step);
+
+  const turned = (a, b) => a.angleTo(b);
+  const arriving = turned(before, landing);
+  const leaving = turned(landing, after);
+
+  assert.ok(arriving > 0, 'it is turning on the way in');
+  // Continuous: the same amount of turning either side, rather than a jump.
+  assert.ok(
+    Math.abs(leaving - arriving) < arriving * 0.25,
+    `it turned ${arriving.toFixed(4)} into the landing and ${leaving.toFixed(4)} out of it`
+  );
+
+  // And genuinely about something else: keeping the same axis would put the
+  // orientation two steps on almost exactly where extending the first step
+  // twice would — `after` is two steps from `before`, so that is t = 2.
+  const straightOn = before.clone().slerp(landing, 2);
+  assert.ok(
+    turned(after, straightOn) > arriving * 0.5,
+    'it carried on turning about the very same axis'
+  );
 });

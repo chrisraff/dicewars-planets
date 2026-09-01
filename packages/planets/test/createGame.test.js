@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, AI_TIMING, AUTOPLAY } from '../src/game/createGame.js';
-import { attackDuration, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
+import { attackDuration, cancelWindow, DEFAULT_TIMING } from '../src/render/rollTimeline.js';
 import { reinforceDuration, MAX_REINFORCE_DURATION } from '../src/render/reinforceTimeline.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createInitialState, createSimpleStrategy, reviveState, serializeState }
@@ -732,4 +732,158 @@ test('being knocked out is announced with the board already settled', () => {
   assert.equal(mine.busy, false, 'nothing is still in the air when the banner goes up');
   assert.equal(mine.owner, 'p2', 'and the attack that did it has already been applied');
   assert.equal(mine.over, false, 'p3 is still standing, so the match carries on without you');
+});
+
+// --- taking an attack back -------------------------------------------------
+
+// The property the whole feature stands on. Cancelling and attacking again
+// rolls fresh dice, so an offer that outlived *any* of the outcome becoming
+// visible would be a re-roll button rather than an undo. `cancelWindow` is
+// where that line is drawn and `rollTimeline.test.js` pins it against the
+// animation; this is the half of it that lives in the turn loop.
+test('the offer is up from the declaration and gone before the dice come up', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const window = cancelWindow(DEFAULT_TIMING);
+
+  assert.equal(game.cancelOffer, null, 'nothing to take back before anything is declared');
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.equal(game.cancelOffer.left, window, 'the whole window, the moment it is declared');
+  assert.equal(game.cancelOffer.total, window);
+
+  advance(game, window / 2);
+  assert.ok(game.cancelOffer.left < window, 'and it drains');
+  assert.ok(game.cancelOffer.left > 0);
+
+  advance(game, window / 2 + 0.02);
+  assert.equal(game.cancelOffer, null, 'shut, while the dice are still in the air');
+  assert.ok(game.isBusy(), 'which is not the same as the attack being over');
+});
+
+test('a cancel inside the window puts the board back exactly as it was', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const before = boardOf(game.state);
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.equal(game.cancelAttack(), true);
+
+  assert.deepEqual(boardOf(game.state), before, 'not a die moved');
+  assert.equal(game.isBusy(), false, 'and nothing is left in the air');
+
+  // And the match carries on. One tap, not two: the attacker is back in hand
+  // (below), so the fight that was cancelled is a single press away.
+  game.clickTerritory('b');
+  advance(game, attackDuration(DEFAULT_TIMING) + 0.1);
+  assert.equal(game.state.nodes.get('b').owner, 'p1');
+});
+
+// A cancel is the undoing of an attack, so it hands back what declaring one
+// took — including the territory that was in the player's hand. Anything else
+// makes calling it off cost a click it should not.
+test('the attacker is back in your hand afterwards', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.equal(game.selection, null, 'declaring an attack puts it down');
+
+  game.cancelAttack();
+  assert.equal(game.selection, 'a', 'and taking the attack back picks it up again');
+});
+
+test('once the window has shut the press means nothing and the attack stands', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, cancelWindow(DEFAULT_TIMING) + 0.05);
+
+  assert.equal(game.cancelAttack(), false, 'and it says so, so the press can mean something else');
+  advance(game, attackDuration(DEFAULT_TIMING));
+  assert.equal(game.state.nodes.get('b').owner, 'p1', 'the attack went through');
+});
+
+// The one piece of turn state a declaration touches that a cancel has to put
+// back rather than clear — see `cancelAttack`.
+test('a turn spent cancelling is a turn in which you passed', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const payouts = [];
+  game.on('reinforce', (event) => payouts.push(event.passed));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  game.cancelAttack();
+  game.endTurn();
+
+  assert.deepEqual(payouts, [true], 'nothing was actually attacked');
+});
+
+test('but cancelling after a real attack does not turn that turn into a pass', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const payouts = [];
+  game.on('reinforce', (event) => payouts.push(event.passed));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, attackDuration(DEFAULT_TIMING) + 0.1); // this one lands
+
+  game.clickTerritory('b');
+  game.clickTerritory('d');
+  game.cancelAttack();
+  game.endTurn();
+
+  assert.deepEqual(payouts, [false], 'the attack that landed still counts');
+});
+
+// A stray tap during somebody else's turn cancelling *their* move would be
+// absurd, and the arbiter cannot tell one press from another.
+test('an AI attack is never cancelable', () => {
+  const game = createGame({
+    world: balanced(),
+    humanPlayerId: 'p1',
+    rollDie: alwaysRolls(6),
+  });
+
+  game.endTurn(); // hand over to p2
+  advance(game, 1);
+
+  assert.ok(game.isBusy(), 'the AI is mid-attack');
+  assert.equal(game.cancelOffer, null);
+  assert.equal(game.cancelAttack(), false);
+});
+
+test('a cancelled attack says which attack it was, so it can be unwritten', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const cancelled = [];
+  game.on('cancelled', (payload) => cancelled.push(payload));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  game.cancelAttack();
+
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].event.from, 'a', 'the replay entry to drop is keyed on this');
+  assert.equal(cancelled[0].event.to, 'b');
+});
+
+// Putting the attacker back is part of cancelling, not a consequence of it,
+// and the order it happens in is load-bearing. The session takes the "you
+// canceled the attack" line down as soon as the player picks a territory to
+// attack with — so if the restore were announced *after* the cancel, the
+// cancel's own restore would take down the line the cancel had just put up.
+test('the attacker is back in hand before the cancel is announced', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+  const order = [];
+
+  game.on('selection', (selection) => order.push(`selection:${selection}`));
+  game.on('cancelled', () => order.push('cancelled'));
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  order.length = 0; // only what the cancel itself does
+
+  game.cancelAttack();
+  assert.deepEqual(order, ['selection:a', 'cancelled']);
 });

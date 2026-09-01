@@ -79,6 +79,10 @@ if (savedGame) {
 // knowing is that a press is *owned* while it is still down, so the board can
 // show what letting go would do while there is still time to drag away
 // instead.
+//
+// Calling off an attack is not a third entry here. It is another thing a tap
+// can mean, so `select` asks it first — see `selectPress.js`, which explains
+// why a handler in front of it would stop selection working entirely.
 viewer.pointers.register('select', createSelectHandler(canvas, () => session, {
   blocked: () => menu.isOpen(),
 }));

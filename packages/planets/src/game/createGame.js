@@ -10,12 +10,12 @@ import {
   livingPlayerIds,
   neighbors,
 } from '@dicewars/core';
-import { attackDuration, DEFAULT_TIMING } from '../render/rollTimeline.js';
+import { attackDuration, cancelWindow, DEFAULT_TIMING } from '../render/rollTimeline.js';
 import { reinforceDuration } from '../render/reinforceTimeline.js';
 
 // The AI plays the same animation, just briskly — a computer turn of six
 // attacks at human pace is a long time to sit and watch.
-export const AI_TIMING = { aim: 0.12, roll: 0.45, read: 0.25 };
+export const AI_TIMING = { aim: 0.12, roll: 0.45, read: 0.25, settleFrom: 0.55 };
 const AI_THINK_PAUSE = 0.25; // beat between one AI move and the next
 
 /**
@@ -73,6 +73,10 @@ export function createGame({
   let pending = null; // the resolved-but-not-yet-shown result of an attack
   let pendingEvents = []; // everything else that happened in the same action
   let countdown = 0; // seconds left before `pending` is applied
+  // The player's own attack, while it can still be cancelled: how long is
+  // left to do it in, and what taking it back has to put back. Only ever set
+  // for the human — see `performAttack`.
+  let cancelable = null; // { left, event, selection, attacked } or null
   let pendingReinforce = null; // the resolved-but-not-yet-applied end of turn
   let pendingReinforceEvents = []; // 'endTurn' and, if it applies, 'gameOver'
   let reinforceCountdown = 0; // seconds left before `pendingReinforce` is applied
@@ -101,6 +105,9 @@ export function createGame({
   const currentPlayer = () => getCurrentPlayerId(state);
   const isHumanTurn = () => currentPlayer() === humanPlayerId;
   const isBusy = () => pending !== null || pendingReinforce !== null;
+  // Not `isBusy`: an attack that can still be taken back is exactly the state
+  // where a press means something other than "wait".
+  const canCancel = () => cancelable !== null && cancelable.left > 0;
   const isOver = () => state.phase === 'gameover';
 
   function timingFor(playerId) {
@@ -166,6 +173,14 @@ export function createGame({
     // belongs after the roll that did it, not before
     pendingEvents = result.events.filter((e) => e.type !== 'attack');
     countdown = attackDuration(beats);
+    // Everything a cancel would have to put back, captured before any of it
+    // is disturbed. Only the player's own throw: an attack nobody declared
+    // cannot be regretted, and a stray tap during an AI's turn cancelling
+    // *its* move would be absurd.
+    const window = cancelWindow(beats);
+    cancelable = currentPlayer() === humanPlayerId
+      ? { left: window, total: window, event, selection, attacked: attackedThisTurn }
+      : null;
     attackedThisTurn = true;
     setSelection(null);
     // `eliminated` travels with the declaration as well as being emitted
@@ -212,9 +227,49 @@ export function createGame({
     return moves;
   }
 
+  /**
+   * Takes back an attack that has been declared but whose dice have not come
+   * up yet — see `cancelWindow`, which is the whole of what makes this safe.
+   *
+   * There is nothing in the rules to unwind. `reduce` has already run, but its
+   * result was parked in `pending` and the live board has not moved, so a
+   * cancel is dropping that result and putting back the three things the
+   * declaration disturbed on the way past: the selection, whether this player
+   * has attacked yet, and — through the `cancelled` event — the entry the
+   * replay wrote down.
+   *
+   * `attacked` is *restored* rather than cleared: a cancelled attack is not an
+   * attack, but the player may well have made a real one earlier in the same
+   * turn, and clearing it would report that turn as a pass.
+   */
+  function cancelAttack() {
+    if (!canCancel()) return false;
+
+    const { event, selection: held, attacked } = cancelable;
+    pending = null;
+    pendingEvents = [];
+    countdown = 0;
+    cancelable = null;
+    attackedThisTurn = attacked;
+
+    // The attacker goes back in the player's hand *before* the cancel is
+    // announced, and the order is load-bearing: a listener that treats picking
+    // a territory as having moved on from the cancel would otherwise be told
+    // about this restore and undo its own announcement. Putting the board back
+    // is part of cancelling, not a consequence of it.
+    setSelection(held);
+    emit('cancelled', { event });
+    // The board never changed, so this says "nothing happened after all"
+    // rather than "here is what happened" — which is exactly what anything
+    // writing a save down off the back of it needs to hear.
+    emit('change', state);
+    return true;
+  }
+
   function finishAttack() {
     state = pending;
     pending = null;
+    cancelable = null;
 
     emit('resolved', state);
     for (const event of pendingEvents) emit(event.type, event);
@@ -347,6 +402,22 @@ export function createGame({
       return pending ?? pendingReinforce ?? state;
     },
 
+    /**
+     * The offer to take the attack back, while there is one: how long is left
+     * and how long there was, which is a bar. `null` the rest of the time,
+     * including the stretch of the same attack after the window has shut.
+     */
+    get cancelOffer() {
+      return canCancel() ? { left: cancelable.left, total: cancelable.total } : null;
+    },
+
+    /**
+     * Takes back the attack in the air, if it is still early enough. Answers
+     * whether it did, so a press that arrives a frame late falls through to
+     * meaning whatever it would otherwise have meant.
+     */
+    cancelAttack,
+
     /** Whether the player has already refused a surrender this match. */
     get playedOn() {
       return playedOn;
@@ -412,6 +483,10 @@ export function createGame({
 
       if (pending !== null) {
         countdown -= dt;
+        // Runs out first, and on its own clock: the offer has to close well
+        // before the dice do. Left at zero rather than nulled, so the
+        // renderer can tell "the window has shut" from "there was never one".
+        if (cancelable !== null) cancelable.left = Math.max(0, cancelable.left - dt);
         if (countdown <= 0) finishAttack();
         return;
       }

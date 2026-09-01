@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cancelWindow,
+  firstLandingAt,
+  groundedAt,
+  touchdownAt,
   sampleAttack,
   attackDuration,
   DEFAULT_TIMING,
@@ -29,24 +33,96 @@ test('nothing moves before the dice are thrown', () => {
   assert.deepEqual([lift, spin, settle], [0, 0, 0]);
 });
 
-test('dice hop: off the ground in the middle of the roll, back down at both ends', () => {
-  assert.equal(sampleAttack(T.aim).lift, 0);
-  assert.ok(sampleAttack(T.aim + T.roll / 2).lift > 0.9);
-  assert.ok(sampleAttack(T.aim + T.roll * 0.999).lift < 0.01);
-  assert.equal(sampleAttack(T.aim + T.roll).lift, 0);
+// The player's own throw bounces: out, down, a shorter hop, down again. It is
+// the cancel window made visible — the dice have to still be moving for as
+// long as the outcome is being withheld, and a die that simply hangs in the
+// air for that time looks broken rather than undecided.
+test('the player’s dice land, bounce once, and land again', () => {
+  const at = (p) => sampleAttack(T.aim + T.roll * p).lift;
+  const first = firstLandingAt(T);
+  const grounded = groundedAt(T);
+  const { height } = T.bounce;
+
+  assert.equal(at(0), 0, 'on the ground when the throw starts');
+  assert.ok(at(first / 2) > 0.99, 'the top of the first hop');
+  assert.ok(at(first) < 1e-9, 'and down again part way through the roll');
+
+  const second = at(first + (grounded - first) / 2);
+  assert.ok(second > 0.99 * height, 'the top of the bounce');
+  assert.ok(second < at(first / 2), 'which is shorter than the throw it came off');
+  assert.equal(at(grounded), 0, 'and the flight ends on the ground');
 });
 
-test('the tumble only ever goes forwards, and eases to a stop', () => {
+// The half of the roll that used to not exist. Everything that can only
+// honestly happen against something solid happens here — the tumble braking,
+// the faces resolving — and nothing that needs air happens after it.
+test('the flight ends before the roll does, and the die is down for the rest of it', () => {
+  const grounded = groundedAt(T);
+  assert.ok(grounded < 1, 'there is a stretch of roll left after the dice are down');
+
+  for (const p of [grounded, grounded + 0.05, 0.9, 1]) {
+    assert.equal(sampleAttack(T.aim + T.roll * p).lift, 0, `airborne again at ${p}`);
+  }
+  assert.ok(sampleAttack(T.aim + T.roll * (grounded - 0.05)).lift > 0, 'and still flying before it');
+
+  // The three things that share that moment, which is the whole reason it is
+  // one number and not three.
+  assert.equal(sampleAttack(T.aim + T.roll * grounded).settle, 0, 'the faces start resolving here');
+  assert.equal(cancelWindow(T), T.aim + grounded * T.roll - 0.05, 'and the cancel closes here');
+});
+
+// A throw nobody can cancel has nothing to withhold, so it settles early and
+// does not bounce — the two go together, and neither is a free choice.
+test('the AI’s throw and a replay’s neither bounce nor hold out', () => {
+  for (const timing of [AI_TIMING, REPLAY_TIMING]) {
+    assert.equal(timing.bounce, undefined);
+    assert.ok(timing.settleFrom < T.settleFrom, 'the faces come up sooner');
+    // One arc, highest exactly halfway through its *flight* — which a bounce
+    // never is, and which is not halfway through the roll for anybody now.
+    const flight = groundedAt(timing);
+    assert.ok(sampleAttack(timing.aim + (timing.roll * flight) / 2, timing).lift > 0.999);
+    assert.equal(firstLandingAt(timing), flight, 'its only landing is the landing');
+  }
+});
+
+// The other half of the complaint the bounce was reported with, and the worse
+// half: rotation that slows to nothing mid-flight and then appears to pick up
+// again is the single most unnatural thing a thrown die can do. Nothing is
+// touching a die in the air, so nothing is slowing it down — it turns at one
+// rate for the whole flight and comes off that rate only at the end, against
+// the ground, over the same stretch the faces are settling on.
+test('the tumble holds one rate through the air and only slows at the end', () => {
+  const steps = 60;
+  const rateAt = (i) => {
+    const p = i / steps;
+    return sampleAttack(T.aim + T.roll * (p + 1 / steps) * 0.9999).spin
+      - sampleAttack(T.aim + T.roll * p).spin;
+  };
+
+  const flying = Math.round(T.settleFrom * steps);
+  const cruise = rateAt(0);
+
+  for (let i = 0; i < flying; i++) {
+    assert.ok(Math.abs(rateAt(i) - cruise) < cruise * 0.01, `rate changed at ${i / steps}`);
+  }
+
+  let previous = cruise;
+  for (let i = flying; i < steps - 1; i++) {
+    const rate = rateAt(i);
+    assert.ok(rate <= previous + 1e-9, `sped back up at ${i / steps}`);
+    previous = rate;
+  }
+  assert.ok(previous < cruise * 0.35, 'and it is nearly stopped by the time it is read');
+});
+
+test('the tumble never runs backwards, and still lands on a whole number of turns', () => {
   let previous = -1;
-  const speeds = [];
   for (let i = 0; i <= 40; i++) {
-    const t = T.aim + (T.roll * i) / 40;
-    const { spin } = sampleAttack(t);
+    const { spin } = sampleAttack(T.aim + (T.roll * i) / 40);
     assert.ok(spin >= previous, 'dice never spin backwards');
-    if (previous >= 0) speeds.push(spin - previous);
     previous = spin;
   }
-  assert.ok(speeds[0] > speeds.at(-1) * 5, 'it should be much slower at the end than the start');
+  assert.equal(sampleAttack(T.aim + T.roll).spin / (2 * Math.PI), TUMBLE_TURNS);
 });
 
 test('the roll ends on a whole number of turns, square on the rolled face', () => {
@@ -97,4 +173,75 @@ test('a replay throw still holds the dice still long enough to be read', () => {
   // lands would be motion for its own sake
   assert.ok(REPLAY_TIMING.read > 0.2);
   assert.equal(sampleAttack(attackDuration(REPLAY_TIMING) - 0.01, REPLAY_TIMING).phase, 'read');
+});
+
+
+// --- how long a cancel stays open -----------------------------------------
+
+// The one that matters. Cancel and re-declare rolls fresh dice, so a window
+// that leaked anything at all about the outcome would be a re-roll button
+// rather than an undo. Nothing leaks while every die is still tumbling, and
+// `settle` is exactly what stops being true first.
+test('the cancel window closes before a single face has begun to resolve', () => {
+  for (const timing of [DEFAULT_TIMING, AI_TIMING, REPLAY_TIMING]) {
+    const beat = sampleAttack(cancelWindow(timing), timing);
+    assert.equal(beat.settle, 0, 'not merely small — nothing has resolved at all');
+    assert.equal(beat.phase, 'roll', 'the dice are in the air, which is why it is safe');
+  }
+});
+
+test('and it is a window a person can actually react in', () => {
+  // The whole point of pushing `settleFrom` back and bouncing the dice. The
+  // aim beat alone is a quarter of a second, which is not time to see a bar
+  // appear, decide, and hit it.
+  assert.ok(cancelWindow(DEFAULT_TIMING) > 0.8, 'a beat, not a flinch');
+  assert.ok(cancelWindow(DEFAULT_TIMING) > DEFAULT_TIMING.aim * 3);
+});
+
+test('a cancel closes well before the throw does', () => {
+  // Otherwise the readout would still be offering an X over dice that have
+  // already been read, which is the one thing this must never do.
+  assert.ok(cancelWindow(DEFAULT_TIMING) < attackDuration(DEFAULT_TIMING) - DEFAULT_TIMING.read);
+});
+
+
+// The defect this shape was reported with, and the reason `travel` is one
+// curve across the whole roll rather than one per hop: two eased halves meet
+// with zero slope between them, so the die slid, stopped dead on the ground at
+// the touchdown, and then set off again. Nothing that bounces does that — it
+// keeps the speed it had.
+test('a die never stops moving forward part way through its throw', () => {
+  const steps = 200;
+  let previous = 0;
+
+  for (let i = 1; i <= steps; i++) {
+    const p = i / steps;
+    const { travel } = sampleAttack(T.aim + T.roll * p * 0.999);
+    const moved = travel - previous;
+    previous = travel;
+    assert.ok(moved > 0, `stalled at ${p.toFixed(3)} of the roll`);
+  }
+});
+
+test('and it is still travelling when it first lands, which is what a bounce is', () => {
+  const touchdown = touchdownAt(T.bounce);
+  const just = (p) => sampleAttack(T.aim + T.roll * p).travel;
+
+  const arriving = just(touchdown) - just(touchdown - 0.02);
+  const leaving = just(touchdown + 0.02) - just(touchdown);
+  assert.ok(leaving > arriving * 0.5, 'it carries most of its speed through the landing');
+  assert.ok(just(touchdown) < 0.85, 'and still has ground to cover when it gets there');
+});
+
+// The timing of the bounce is not a free number — under gravity a hop's time
+// goes as the square root of its height. Stated here because the pair is easy
+// to pick apart by hand and hard to name when it looks wrong.
+test('the bounce takes as long as its height says it should', () => {
+  for (const height of [0.1, 0.3, 0.6]) {
+    const at = touchdownAt({ height });
+    assert.ok(
+      Math.abs((1 - at) / at - Math.sqrt(height)) < 1e-12,
+      `a bounce ${height} as high should last sqrt(${height}) as long`
+    );
+  }
 });

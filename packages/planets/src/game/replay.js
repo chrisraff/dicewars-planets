@@ -91,6 +91,27 @@ export function createReplay({
     },
 
     /**
+     * Unwrites the last move — the one case being an attack the player took
+     * back before its dice came up. A cancelled attack is the undoing of an
+     * attack rather than a move in its own right: it never happened, so the
+     * history and the graph must not show it happening.
+     *
+     * Safe because a cancel can only ever be the very last thing recorded: the
+     * board is held behind a pending attack, so nothing else can have been
+     * written since (the same argument `recordElimination` makes, and it takes
+     * the elimination back with it, since that was tagged onto this entry).
+     *
+     * At the cap there is one loss and it is not a correctness one. If this
+     * entry's own `record` pushed the log over `limit`, the oldest move was
+     * folded into the anchor and popping does not unfold it — so the replay
+     * still rebuilds exactly the right board, one move shorter of history than
+     * it could have been.
+     */
+    dropLast() {
+      log.pop();
+    },
+
+    /**
      * Records where an end-of-turn payout landed, one die per entry, plus what
      * the player earned — `landed` alone says how many dice found room, not
      * how many were banked before the cap trimmed them, which is what

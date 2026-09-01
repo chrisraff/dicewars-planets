@@ -288,3 +288,46 @@ test('the distance is the diagonal, not the further of the two axes', () => {
   assert.equal(movedPastSlop(press, 4, 3), false, 'exactly 5 is still the limit');
   assert.equal(movedPastSlop(press, 8, 6), true);
 });
+
+// --- how a handler learns it now owns a press ------------------------------
+
+// The trap that cost a working selection once, written down so it cannot cost
+// it again. A handler that yields on `onDown` passes ownership on, but the one
+// that receives it is told *only* through `onAdopt` — it never gets an
+// `onDown` of its own. So a handler written to start its work in `onDown`
+// silently does nothing at all when it is sat behind another one.
+//
+// This is why cancelling an attack is a question `selectPress` asks itself
+// rather than a handler registered in front of it, and why `orbitHandler` —
+// the one thing in the game that really is behind another — has an `onAdopt`
+// that synthesises the press it never saw begin.
+test('a handler handed a press mid-gesture hears about it through onAdopt and nowhere else', () => {
+  const element = target();
+  const arbiter = createPointerArbiter(element, { document: target() });
+  const heard = [];
+
+  arbiter.register('first', { onDown: () => YIELD });
+  arbiter.register('second', {
+    onDown: () => heard.push('down'),
+    onAdopt: () => heard.push('adopt'),
+  });
+
+  element.emit('pointerdown', pointerEvent());
+  assert.deepEqual(heard, ['adopt'], 'no onDown — a handler expecting one would do nothing');
+});
+
+// And the other half: what `onAdopt` returns is not a way to hand the press
+// further on. A handler that cannot use the press it has been given has to be
+// the last word on it, or say so some other way.
+test('a press cannot be refused from inside onAdopt', () => {
+  const element = target();
+  const arbiter = createPointerArbiter(element, { document: target() });
+  const heard = [];
+
+  arbiter.register('first', { onDown: () => YIELD });
+  arbiter.register('second', { onAdopt: () => YIELD });
+  arbiter.register('third', { onAdopt: () => heard.push('third') });
+
+  element.emit('pointerdown', pointerEvent());
+  assert.deepEqual(heard, [], 'the yield is ignored and the press stops at the second');
+});

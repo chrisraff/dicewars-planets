@@ -286,6 +286,16 @@ export function attackHintText(view) {
 export const SURRENDER_DETAIL = 'Your rivals have surrendered.';
 
 /**
+ * What the toast says when an attack is cancelled.
+ *
+ * Past tense, and it names *you* as the one who did it: "Attack canceled"
+ * would be the same words a game uses when it refuses something itself, and
+ * the one thing this must not read as is the move having been rejected. The
+ * player did this on purpose and the sentence should say so.
+ */
+export const CANCELLED_TOAST = 'You canceled the attack';
+
+/**
  * The banner that interrupts play, and what it offers to do next. Winning is
  * the point of the whole game, so it gets the screen to itself until the
  * player moves on; being knocked out is the other moment worth stopping for,
@@ -358,6 +368,32 @@ export function outcomeView(outcome, nameOf = (id) => id) {
 export const REPLAY_STEP_MS = 900;
 
 /**
+ * How long a toast stays up.
+ *
+ * Long enough to be read after it has been noticed, which is the harder half:
+ * the eye is on the planet when one appears, not on the band above the
+ * controls. Short enough that it is gone before the turn it is about has
+ * moved on — a cancel is followed by the player attacking again, and a line
+ * about the last attack still sitting there under the next one would read as
+ * being about that one.
+ */
+export const TOAST_MS = 2600;
+
+/**
+ * How long it takes to go.
+ *
+ * Fading rather than vanishing because a toast is not answering anything —
+ * nothing is waiting on it, so it should leave the way a thing leaves that
+ * nobody is watching. A line that blinks out reads as having been dismissed by
+ * something, which invites a look at what.
+ *
+ * It is also what makes being dismissed early look deliberate: picking a
+ * territory takes it away, and doing that instantly would read as a flicker
+ * next to the press rather than as the press clearing it.
+ */
+export const TOAST_FADE_MS = 260;
+
+/**
  * The camera on the auto-follow button, in both of the seats that button
  * takes. One copy rather than one per seat, since the two are the same offer
  * and a glyph that differed between them would read as a different control.
@@ -393,6 +429,7 @@ export function createHud(
       <div class="hud-battle"></div>
     </div>
     <div class="hud-controls">
+      <div class="hud-toast" role="status" hidden></div>
       <div class="hud-auto-follow" hidden>
         <button class="hud-auto-follow-button" type="button">${CAMERA_ICON}Auto-follow</button>
       </div>
@@ -456,6 +493,29 @@ export function createHud(
     playerNames,
   });
   const controlsRow = root.querySelector('.hud-controls-row');
+  const toast = root.querySelector('.hud-toast');
+  let toastTimer = null;
+  let toastFade = null;
+  let toastFrame = null;
+  // One number for the fade, not two: the stylesheet times the transition off
+  // this, and `fadeToastOut` waits exactly as long before taking the element
+  // out of the layout.
+  toast.style.setProperty('--toast-fade', `${TOAST_FADE_MS}ms`);
+
+  function clearToastTimers() {
+    clearTimeout(toastTimer);
+    clearTimeout(toastFade);
+    cancelAnimationFrame(toastFrame);
+  }
+
+  function fadeToastOut() {
+    clearToastTimers();
+    if (toast.hidden) return;
+    toast.classList.remove('is-shown');
+    // Out of the layout only once it has finished fading, or the band above
+    // the controls snaps shut under a line still on its way out.
+    toastFade = setTimeout(() => { toast.hidden = true; }, TOAST_FADE_MS);
+  }
   const turnIndicator = root.querySelector('.hud-turn');
   const dot = root.querySelector('.hud-dot');
   const turnText = root.querySelector('.hud-turn-text');
@@ -678,6 +738,53 @@ export function createHud(
     /** The last fight's dice. `revealed: false` while they are still in the air. */
     showBattle(entry, options) {
       battle.show(entry, options);
+    },
+
+    /**
+     * The offer to take back the attack in the air, drained from 1 to 0. It
+     * lives on the readout because it is about the battle the readout is
+     * showing — see `showCancel` there for why it takes the chevron's slot.
+     */
+    showCancel(remaining) {
+      battle.showCancel(remaining);
+    },
+
+    hideCancel() {
+      battle.hideCancel();
+    },
+
+    onCancel(handler) {
+      battle.onCancel(handler);
+    },
+
+    /**
+     * A line that says what just happened and then goes away, in the band
+     * above the controls with everything else that is transient.
+     *
+     * Not ticked, unlike every animation that has to agree with the planet:
+     * this one has nothing to agree with — it is a sentence about something
+     * already over — so it runs on a timer of its own, the same argument
+     * `fireworks.js` makes. Re-showing restarts the clock rather than queuing,
+     * because the newer message is always the true one.
+     */
+    showToast(text) {
+      clearToastTimers();
+      toast.textContent = text;
+      toast.hidden = false;
+      // Not in the same frame it stops being `display: none`: there is no
+      // layout in between for a transition to start from, so it would simply
+      // appear. A frame later there is.
+      toastFrame = requestAnimationFrame(() => toast.classList.add('is-shown'));
+      toastTimer = setTimeout(fadeToastOut, TOAST_MS);
+    },
+
+    /**
+     * Takes a toast away early. Its own clock is a backstop for a line nobody
+     * did anything about; anything that answers what it said should not wait
+     * for it.
+     */
+    hideToast() {
+      fadeToastOut();
     },
 
     setHistory(entries) {
@@ -953,6 +1060,10 @@ export function createHud(
      */
     dispose() {
       fireworks.dispose();
+      // The one thing here that outlives the markup: a toast raised on the
+      // last move of a match would otherwise fire into a HUD that has been
+      // thrown away. Harmless, but they are timers, and timers get cleared.
+      clearToastTimers();
     },
 
     /**

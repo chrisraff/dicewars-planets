@@ -130,6 +130,10 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
+      <span class="battle-cancel" hidden>
+        <span class="battle-cancel-bar" aria-hidden="true"></span>
+        <span class="battle-cancel-mark" aria-hidden="true">&times;</span>
+      </span>
     </button>
     <div class="battle-history" hidden>
       <div class="battle-history-head">
@@ -142,6 +146,8 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
 
   const current = root.querySelector('.battle-current');
   const currentContent = root.querySelector('.battle-current-content');
+  const cancel = root.querySelector('.battle-cancel');
+  const cancelBar = root.querySelector('.battle-cancel-bar');
   const history = root.querySelector('.battle-history');
   const historyList = root.querySelector('.battle-history-list');
   const closeButton = root.querySelector('.battle-history-close');
@@ -331,10 +337,20 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
       && Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y) > DRAG_SLOP;
     pressedAt = null;
   });
+  // While an attack can still be taken back, this readout is the way to do it
+  // and nothing else — the dice it is showing are blank, so there is no
+  // history worth opening and no reading worth expanding. One button, and
+  // which of the two it is is decided by whether the offer is up.
+  let onCancel = null;
+
   // still `click`, not `pointerup`, so Enter and Space keep working
   current.addEventListener('click', () => {
     if (dragged) {
       dragged = false;
+      return;
+    }
+    if (!cancel.hidden) {
+      onCancel?.();
       return;
     }
     setOpen(!openState);
@@ -389,6 +405,39 @@ export function createBattleReadout(root, { playerColors, playerNames = new Map(
         empty.textContent = 'No battles yet';
         historyList.append(empty);
       }
+    },
+
+    /**
+     * Puts up — and drains — the offer to take back the attack being shown.
+     * `remaining` runs 1 to 0.
+     *
+     * It takes the chevron's slot rather than a slot of its own, which is the
+     * whole reason it can appear for a second and vanish without the readout
+     * moving: `.battle-current` is a fixed width on purpose (the chevron used
+     * to ride around on each battle's own content), and a control that pushed
+     * that width about for a second would be exactly the bounce that width
+     * exists to stop.
+     */
+    showCancel(remaining) {
+      // Called every frame the offer is up, so only the bar is written every
+      // frame: the rest is a state change and is done once, on the way in.
+      if (cancel.hidden) {
+        cancel.hidden = false;
+        current.classList.add('is-cancelable');
+        current.setAttribute('aria-label', 'Cancel this attack');
+      }
+      cancelBar.style.transform = `scaleX(${Math.max(0, Math.min(1, remaining))})`;
+    },
+
+    hideCancel() {
+      if (cancel.hidden) return;
+      cancel.hidden = true;
+      current.classList.remove('is-cancelable');
+      current.setAttribute('aria-label', 'Last battle — open history');
+    },
+
+    onCancel(handler) {
+      onCancel = handler;
     },
 
     isOpen: () => openState,
