@@ -153,11 +153,16 @@ export function createSession({
   // Covers as many *upcoming* fights as fit in one frame rather than just the
   // next. `pairs` is `{from, to}` in the order they will be shown. Returns
   // whether a swing actually started, since a caller may need to wait for it.
-  function focusFights(pairs, { force = false } = {}) {
+  //
+  // `pullBack` is the press rather than the automatic swing — see
+  // `lookAtCluster`. Following the match keeps whatever zoom the player chose;
+  // a press is a request to be put back where the camera would have been, and
+  // that includes being far enough out to see what it is showing.
+  function focusFights(pairs, { force = false, pullBack = false } = {}) {
     const points = pairs.map(({ from, to }) =>
       fightCenter(dice.standFor(from).normal, dice.standFor(to).normal)
     );
-    return cameraFocus.lookAtCluster(points, { force });
+    return cameraFocus.lookAtCluster(points, { force, pullBack });
   }
 
   // The replay drawn onto the planet. It is handed the same surface, dice and
@@ -258,6 +263,14 @@ export function createSession({
    * somebody who pressed a button asking to be taken there. `AIM_FIGHTS` is a
    * preference rather than a verdict — a run that cannot be framed falls
    * through to home rather than leaving the press unanswered.
+   *
+   * All three draw back as well as turning, outwards only and only when it
+   * shows more, because the camera this is putting back is one that had been
+   * pulled back: `endTurn` frames the whole planet before handing over, so a
+   * turn spent following the AI is a turn spent at that distance. Restoring
+   * the direction and not the distance answers half the press — a run round
+   * the back, swung to from a tight zoom, arrives with the fight after it
+   * still off screen.
    */
   function autoFollowAim() {
     const aim = autoFollow.aimKind({
@@ -269,10 +282,15 @@ export function createSession({
     // Same aim `replayPlayer.showStep` would have taken, so a press catches up
     // with the replay rather than landing somewhere it never went.
     if (aim === AIM_REPLAY) {
-      return focusFights(replay.attacks.slice(replayPlayer.step - 1), { force: true });
+      return focusFights(replay.attacks.slice(replayPlayer.step - 1), {
+        force: true,
+        pullBack: true,
+      });
     }
     if (aim === null) return false;
-    if (aim === AIM_FIGHTS && focusFights(autoFollow.fights, { force: true })) return true;
+    if (aim === AIM_FIGHTS) {
+      if (focusFights(autoFollow.fights, { force: true, pullBack: true })) return true;
+    }
     return cameraFocus.lookAtHoldings(ownGround(), { force: true });
   }
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_FRAMING,
   clusterAim,
+  clusterFocus,
   fightCenter,
   framingDistance,
   framingOf,
@@ -247,6 +248,56 @@ test('two nearby upcoming fights are pulled into one aim that frames them both',
   assert.ok(aim !== null);
   assert.ok(framingOf(aim, first, FAR) >= DEFAULT_FRAMING.margin, 'the first fight is still well framed');
   assert.ok(framingOf(aim, second, FAR) >= DEFAULT_FRAMING.margin, 'so is the second');
+});
+
+// `clusterFocus` is `clusterAim` plus the distance to see it from, and the
+// pair stand to each other as `holdingsFocus` and `holdingsAim` do. WIDE is
+// where the whole planet fits from; CLOSE is a player zoomed most of the way
+// in, where only about 15° of planet is on screen at once.
+const WIDE = framingDistance(HALF_FOV, DEFAULT_FRAMING.shave);
+const framedFrom = (aim, points, view) =>
+  points.filter((p) => framingOf(aim, p, view) >= DEFAULT_FRAMING.margin).length;
+
+test('clusterFocus is silent wherever clusterAim is', () => {
+  assert.equal(clusterFocus([], FACING, FAR, WIDE), null);
+  assert.equal(clusterFocus([spherical(10)], FACING, FAR, WIDE), null, 'already framed');
+});
+
+// The press from a tight zoom. Two fights 40° apart cannot share a frame from
+// 1.5 out however the aim is chosen, so a swing alone lands on the first with
+// the second still off screen and has to move again a moment later.
+test('clusterFocus draws back when the wider view frames more of the run', () => {
+  const run = [spherical(150), spherical(190)];
+  const focus = clusterFocus(run, FACING, CLOSE, WIDE, DEFAULT_FRAMING, { force: true });
+
+  assert.ok(focus.distance > CLOSE.distance, 'it drew back');
+  const arrived = { distance: focus.distance, halfFov: HALF_FOV };
+  assert.equal(framedFrom(focus.aim, run, arrived), 2, 'and both fights are on screen from there');
+
+  // The aim is scored at the distance it arrives at, not the one it leaves —
+  // which is the whole reason this is one decision rather than a pull-back
+  // bolted alongside a `clusterAim`.
+  const leaving = clusterAim(run, FACING, CLOSE, DEFAULT_FRAMING, { force: true });
+  assert.equal(framedFrom(leaving, run, CLOSE), 1, 'chosen from here, only one fight fits');
+});
+
+// Outwards only, and only when it buys something. A zoom is the player's own
+// business everywhere else in this module, so it is given up only where
+// keeping it would leave the press unanswered.
+test('clusterFocus keeps the zoom when the run already fits from where it is', () => {
+  const run = [spherical(150), spherical(160)];
+  const focus = clusterFocus(run, FACING, CLOSE, WIDE, DEFAULT_FRAMING, { force: true });
+
+  assert.equal(focus.distance, CLOSE.distance);
+  assert.equal(framedFrom(focus.aim, run, CLOSE), 2);
+});
+
+test('clusterFocus never pulls a camera in from further out than the planet needs', () => {
+  const run = [spherical(150), spherical(190)];
+  const farOut = { distance: WIDE + 2, halfFov: HALF_FOV };
+  const focus = clusterFocus(run, FACING, farOut, WIDE, DEFAULT_FRAMING, { force: true });
+
+  assert.equal(focus.distance, farOut.distance);
 });
 
 test('a fight too far away to share a frame is left for its own swing later', () => {

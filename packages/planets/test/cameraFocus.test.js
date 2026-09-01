@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createCameraFocus } from '../src/render/cameraFocus.js';
+import { DEFAULT_FRAMING, framingOf } from '../src/render/cameraFraming.js';
 
 // OrbitControls needs a DOM element, and nothing here needs its input
 // handling — only the three things `cameraFocus` actually touches: a target to
@@ -53,10 +54,16 @@ class FakeControls extends THREE.EventDispatcher {
   }
 }
 
-function setup() {
+function setup({ distance = 3.2, maxDistance } = {}) {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, 0, 3.2);
+  camera.position.set(0, 0, distance);
   const controls = new FakeControls(camera);
+  // The real controls' ceiling (`createViewer`), and opt-in because without it
+  // every pull-back measures `Math.min(undefined, …)` — which is NaN, and so
+  // silently never draws back. Only the tests that are *about* drawing back
+  // want it; the rest are about a swing and were written against a camera
+  // that stays where it is.
+  if (maxDistance !== undefined) controls.maxDistance = maxDistance;
   return { camera, controls, focus: createCameraFocus({ camera, controls }) };
 }
 
@@ -245,6 +252,71 @@ test('lookAtCluster swings to cover more than just the very next point', () => {
   const landed = direction(camera);
   assert.ok(landed.angleTo(BACK) > 1e-6);
   assert.ok(landed.angleTo(near) > 1e-6);
+});
+
+// A run of fights round the back, spread wider than a zoomed-in camera can
+// hold: from 1.6 out only 15° of planet is on screen at once, so the two ends
+// of this one cannot share a frame however it is aimed.
+const SPREAD_RUN = [
+  BACK,
+  BACK.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (40 * Math.PI) / 180).normalize(),
+];
+
+// The press mid-AI-turn, from a camera the player has zoomed right in on. A
+// swing alone answers half of it: it lands on the first fight of the run with
+// the next one still off screen, and has to swing again moments later.
+test('a forced lookAtCluster draws back when the run will not fit from here', () => {
+  const { camera, focus } = setup({ distance: 1.6, maxDistance: 8 });
+
+  assert.equal(focus.lookAtCluster(SPREAD_RUN, { force: true, pullBack: true }), true);
+  play(focus);
+
+  assert.ok(camera.position.length() > 1.6 + 1e-3, 'it pulled back');
+  // ...and far enough that both fights of the run are actually on screen,
+  // which is the whole point of drawing back rather than swinging twice. This
+  // is also what says the aim was scored against the distance it arrived at
+  // rather than the one it left: chosen at 1.6, it would have been the first
+  // fight alone, and the second would still be off the edge from here.
+  const view = focus.currentView();
+  const facing = { x: view.direction.x, y: view.direction.y, z: view.direction.z };
+  for (const point of SPREAD_RUN) {
+    assert.ok(framingOf(facing, point, view) >= DEFAULT_FRAMING.margin);
+  }
+});
+
+// Outwards only, and only when it buys something. A player who zoomed in to
+// read a stack and then pressed the button is not asking to have that zoom
+// thrown away — they are asking to be shown the fight, and it already fits.
+test('a forced lookAtCluster keeps the zoom when the run fits from where it is', () => {
+  const { camera, focus } = setup({ distance: 1.6, maxDistance: 8 });
+
+  assert.equal(focus.lookAtCluster([BACK], { force: true, pullBack: true }), true);
+  play(focus);
+
+  assert.ok(Math.abs(camera.position.length() - 1.6) < 1e-9, 'a lone fight is no reason to move');
+  assert.ok(direction(camera).angleTo(BACK) < 1e-6);
+});
+
+test('a forced lookAtCluster never hauls a player in from further out', () => {
+  const { camera, focus } = setup({ distance: 6, maxDistance: 8 });
+
+  assert.equal(focus.lookAtCluster(SPREAD_RUN, { force: true, pullBack: true }), true);
+  play(focus);
+
+  assert.ok(Math.abs(camera.position.length() - 6) < 1e-9);
+});
+
+// The default, and the one that matters most: following the match is not a
+// licence to undo a zoom. A pinch says where the player wants to be and
+// nothing about where they want to look, so the swing keeps it — only a press
+// asks for the distance back as well.
+test('an automatic lookAtCluster leaves the zoom alone however badly the run fits', () => {
+  const { camera, focus } = setup({ distance: 1.6, maxDistance: 8 });
+
+  assert.equal(focus.lookAtCluster(SPREAD_RUN), true);
+  play(focus);
+
+  assert.ok(Math.abs(camera.position.length() - 1.6) < 1e-9);
 });
 
 test('currentView reports where the camera is actually looking', () => {

@@ -417,7 +417,7 @@ for (const [label, onClick] of [
     const points = fight.map(({ from, to }) =>
       fightCenter(offerStage.dice.standFor(from).normal, offerStage.dice.standFor(to).normal)
     );
-    offerStage.focus.lookAtCluster(points, { force: true });
+    offerStage.focus.lookAtCluster(points, { force: true, pullBack: true });
     setOffer(false);
   }],
 ]) {

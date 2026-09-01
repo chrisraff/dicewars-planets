@@ -187,6 +187,55 @@ export function clusterAim(
 }
 
 /**
+ * Where to put the camera to show a run of upcoming fights — `clusterAim`'s
+ * aim, plus the distance to see it from, and the pair stand to `clusterAim`
+ * exactly as `holdingsFocus` stands to `holdingsAim`.
+ *
+ * `wideDistance` is how far back the whole planet fits. Drawing back is taken
+ * only when it frames strictly more of the run, and never inwards, so a player
+ * further out than the planet needs keeps the distance they chose and one
+ * fight already framed from where they are is not a reason to move them.
+ *
+ * That conditional is the whole of "if necessary". It matters because a zoom
+ * is the player's own business everywhere else in this module — it says where
+ * they want to be and nothing about where they want to look, which is why an
+ * automatic swing keeps whatever distance they land on. The one caller that
+ * wants this is the *press*, where a run that cannot be framed from here means
+ * the button lands them somewhere they still cannot see.
+ *
+ * The aim is scored against the distance it will *arrive* at rather than the
+ * one it is leaving, which is the reason this is one function rather than a
+ * pull-back bolted alongside a `clusterAim`: from a tight zoom nothing but the
+ * first fight ever fits, so an aim chosen there would swing to that one fight
+ * and then need swinging again for its neighbour a second later — the exact
+ * thing `clusterAim` exists to avoid.
+ */
+export function clusterFocus(
+  points,
+  viewDirection,
+  view,
+  wideDistance,
+  framing = DEFAULT_FRAMING,
+  { force = false } = {}
+) {
+  const near = clusterAim(points, viewDirection, view, framing, { force });
+  if (near === null) return null;
+  if (!(wideDistance > view.distance)) return { aim: near, distance: view.distance };
+
+  // Forced, because the decision to move has already been made above: this
+  // second call is only asking what the wider view would show, and refusing to
+  // answer because the run is framed from there is not an answer.
+  const wideView = { distance: wideDistance, halfFov: view.halfFov };
+  const wide = clusterAim(points, viewDirection, wideView, framing, { force: true });
+  if (wide === null) return { aim: near, distance: view.distance };
+
+  return coverage(points, wide, wideView, framing).framed
+    > coverage(points, near, view, framing).framed
+    ? { aim: wide, distance: wideDistance }
+    : { aim: near, distance: view.distance };
+}
+
+/**
  * How many of `points` are comfortably framed from `aim`, and how well — the
  * score `holdingsAim` maximizes, in that order.
  */

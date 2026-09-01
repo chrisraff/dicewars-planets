@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   DEFAULT_FRAMING,
-  clusterAim,
+  clusterFocus,
   framingDistance,
   holdingsFocus,
   narrowHalfFov,
@@ -40,6 +40,13 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
 
   const halfFov = () => narrowHalfFov(camera.fov, camera.aspect);
 
+  // How far back the whole planet fits, clamped to what the controls allow.
+  // The three moves that can draw back all measure it the same way, and a
+  // second copy of it would drift silently — the planet would be framed to one
+  // distance and pulled back to another.
+  const wideDistance = () =>
+    Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
+
   // Where the camera is looking, as far as this module knows, and whether the
   // move that got it there was one of ours. The controls announce our writes
   // exactly as they announce the player's, so the flag is what tells the two
@@ -73,6 +80,10 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
       elapsed: 0,
       duration: swingDuration(swingTravel(direction, to), framing),
     };
+  };
+
+  const startZoomTo = (from, to) => {
+    zoom = { from, to, elapsed: 0, duration: zoomDuration(from, to, framing) };
   };
 
   // A pull-back is *about* distance, so anything the player does outranks it —
@@ -147,14 +158,27 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
      * `force` swings even from a view that already frames the run, for the
      * same reason `lookAtHoldings` has it: a press is a request, not a
      * handover, and "close enough already" is not an answer to one.
+     *
+     * `pullBack` lets it draw back as well as turn, on the same terms
+     * `lookAtHoldings` draws back on — outwards only, and only when the wider
+     * view frames strictly more of the run. Off by default, and that default
+     * is the deliberate half: an automatic swing keeps whatever zoom the
+     * player is on, because a zoom says where they want to be and nothing
+     * about where they want to look. It is on for the *press*, where a run
+     * that will not fit from here means the button lands them somewhere they
+     * still cannot see. `clusterFocus` picks the aim against the distance it
+     * is about to arrive at, so the two halves cannot disagree.
      */
-    lookAtCluster(points, { force = false } = {}) {
+    lookAtCluster(points, { force = false, pullBack = false } = {}) {
       const { direction, distance } = orbit();
       const view = { distance, halfFov: halfFov() };
-      const aim = clusterAim(points, direction, view, framing, { force });
-      if (aim === null) return false;
+      const wide = pullBack ? wideDistance() : distance;
 
-      startSwingTo(aim);
+      const focus = clusterFocus(points, direction, view, wide, framing, { force });
+      if (focus === null) return false;
+
+      startSwingTo(focus.aim);
+      if (focus.distance > distance + 1e-3) startZoomTo(distance, focus.distance);
       return true;
     },
 
@@ -175,9 +199,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
     lookAtHoldings(points, { force = false, instant = false } = {}) {
       const { direction, distance } = orbit();
       const view = { distance, halfFov: halfFov() };
-      const wide = Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
-
-      const focus = holdingsFocus(points, direction, view, wide, framing, { force });
+      const focus = holdingsFocus(points, direction, view, wideDistance(), framing, { force });
       if (focus === null) return false;
 
       if (instant) {
@@ -187,14 +209,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
       }
 
       startSwingTo(focus.aim);
-      if (focus.distance > distance + 1e-3) {
-        zoom = {
-          from: distance,
-          to: focus.distance,
-          elapsed: 0,
-          duration: zoomDuration(distance, focus.distance, framing),
-        };
-      }
+      if (focus.distance > distance + 1e-3) startZoomTo(distance, focus.distance);
       return true;
     },
 
@@ -213,7 +228,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
      */
     framePlanet({ instant = false } = {}) {
       const { direction, distance } = orbit();
-      const target = Math.min(controls.maxDistance, framingDistance(halfFov(), framing.shave));
+      const target = wideDistance();
       if (distance >= target - 1e-3) return false;
 
       if (instant) {
@@ -222,12 +237,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
         return true;
       }
 
-      zoom = {
-        from: distance,
-        to: target,
-        elapsed: 0,
-        duration: zoomDuration(distance, target, framing),
-      };
+      startZoomTo(distance, target);
       return true;
     },
 

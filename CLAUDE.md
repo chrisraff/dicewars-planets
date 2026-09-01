@@ -1108,12 +1108,44 @@ restore point with nothing coming: reopened mid-AI-turn, the next attack swings
 the camera itself within a second.
 
 **Pressing it moves the camera in the same breath**, `force`d past
-`holdingsFocus`'s and `clusterAim`'s "it is on screen already" rules — those
+`holdingsFocus`'s and `clusterFocus`'s "it is on screen already" rules — those
 are right for a handover nobody asked for and wrong for a request, since the
 player pressed the button precisely because what they could see was not the
 view they wanted. The other two answers move nothing at all, which is the
 difference: a player picking a territory has found their own way there, and a
 player ending their turn is handing the board over anyway.
+
+**A press restores the distance as well as the direction**, and for a while it
+only did the second. The camera it is putting back is one that had been *pulled
+back*: `endTurn` frames the whole planet before handing over, so a turn spent
+following the AI is a turn spent at that distance. Restoring only where it was
+looking therefore answered half the press — a run round the back, swung to from
+a tight zoom, arrived with the fight after it still off screen. Home already
+drew back (`holdingsFocus` compares the near view against the wide one), and
+the fights did not: `clusterAim` has no distance in it at all. `clusterFocus`
+is the missing half, and it stands to `clusterAim` exactly as `holdingsFocus`
+stands to `holdingsAim`.
+
+Two things about it. It draws back **only when the wider view frames strictly
+more of the run**, outwards only — the bargain the rest of the module makes,
+so a player who zoomed in to read a stack and pressed the button on a single
+pending fight keeps the zoom and gets the fight up close. And it picks the aim
+against the distance it is about to *arrive* at rather than the one it is
+leaving, which is why it is one decision rather than a pull-back bolted
+alongside a `clusterAim`: from a tight zoom nothing but the first fight ever
+fits, so an aim chosen there would swing to that one and need swinging again
+for its neighbour a second later — the exact thing `clusterAim` exists to
+avoid.
+
+**The automatic swing still keeps whatever zoom the player is on**, and that
+default is the deliberate half of `pullBack`. A zoom never takes the camera off
+the match (`onControlsChange` reports turns and not distance), so a player who
+pinches in mid-AI-turn is still being followed, and the swings go on centring
+each fight — at their zoom, which is what pinching in asked for. What they get
+is more swings showing less each, not a view they cannot read, and it settles
+itself at the handover: the pan home draws back if it needs to, and their own
+`endTurn` frames the planet outright. There is no button in that state and
+should not be, because nothing is being suppressed.
 
 **Where a press goes is not the same all match**, and getting this wrong is
 the obvious mistake: home is only the answer on your own turn. On somebody
