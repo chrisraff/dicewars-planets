@@ -111,6 +111,11 @@ export function playerPanelView(player) {
  * line in the game — so its arrival is part of what says the planet is yours
  * again rather than a decoration that changes color.
  *
+ * It also says what the end-turn button beside it is doing, in three states
+ * rather than two: `ready`, `waiting` (yours, mid-roll), `hidden` (somebody
+ * else's turn — keep the space, it is coming back) and `gone` (spectating —
+ * out, over, or nobody at the keyboard, so it never is).
+ *
  * `color` has to be set in a player's color, so it cannot be part of the
  * string — hence the three pieces, the same shape `attackHintView` returns.
  * The word is whatever the line is *about*, which for a win or a knockout is
@@ -133,11 +138,11 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
   });
 
   if (isOver) {
-    if (!winner) return line({ before: 'Nobody wins' });
+    if (!winner) return line({ before: 'Nobody wins', endTurn: 'gone' });
     if (winner === humanPlayerId) {
-      return line({ color: 'You', after: ' win', playerId: humanPlayerId });
+      return line({ color: 'You', after: ' win', playerId: humanPlayerId, endTurn: 'gone' });
     }
-    return line({ color: nameOf(winner), after: ' wins', playerId: winner });
+    return line({ color: nameOf(winner), after: ' wins', playerId: winner, endTurn: 'gone' });
   }
 
   // Nobody at the keyboard. Checked after the result — worth reading whoever
@@ -145,10 +150,17 @@ export function turnIndicatorView(status, nameOf = (id) => id) {
   // does not exist. `humanEliminated` is derived from whether the human seat
   // holds ground, so an empty seat reads as eliminated and would otherwise
   // claim somebody was knocked out of a game they were never in.
-  if (!humanPlayerId || typeof humanPlayerId === 'symbol') return line({ show: false });
+  if (!humanPlayerId || typeof humanPlayerId === 'symbol') {
+    return line({ show: false, endTurn: 'gone' });
+  }
 
   if (humanEliminated) {
-    return line({ color: 'You', after: ' are out — watching', playerId: humanPlayerId });
+    return line({
+      color: 'You',
+      after: ' are out — watching',
+      playerId: humanPlayerId,
+      endTurn: 'gone',
+    });
   }
 
   if (currentPlayerId === humanPlayerId) {
@@ -765,6 +777,13 @@ export function createHud(
       turnText.replaceChildren(...parts);
 
       turnIndicator.hidden = !view.show;
+      // Two ways of not being there, and the difference is whether it is
+      // coming back. On somebody else's turn it keeps its space, so the row
+      // does not shuffle sideways twice a round under a cursor already aimed
+      // at Menu. Spectating — out, over, or nobody at the keyboard — it is
+      // never coming back, and holding a slot for it pushes Menu and Replay
+      // in from the edge for a button that will never be drawn there again.
+      endTurnButton.hidden = view.endTurn === 'gone';
       endTurnButton.disabled = view.endTurn !== 'ready';
       endTurnButton.style.visibility = view.endTurn === 'hidden' ? 'hidden' : 'visible';
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { narrowHalfFov, orbitRotateSpeed } from './cameraFraming.js';
 import { createLightRig } from './lightRig.js';
 import { createPointerArbiter } from './pointerArbiter.js';
 
@@ -121,6 +122,20 @@ export function createViewer(canvas) {
 
   function render() {
     resize();
+
+    // Pixels into degrees is a fixed rate in OrbitControls, and degrees are
+    // the wrong unit: a drag pushes the surface around, and how much surface
+    // a degree is worth is entirely how close the camera is. Zoomed in, an
+    // unchanged rate throws the planet several times as far under the same
+    // finger. `orbitRotateSpeed` is that correction, and it is set here rather
+    // than once at construction because it moves with both the distance and
+    // the aspect — every frame, so a wheel and a resize are both already in it
+    // by the time the next pointer move is read.
+    controls.rotateSpeed = orbitRotateSpeed(
+      camera.position.distanceTo(controls.target),
+      narrowHalfFov(camera.fov, camera.aspect)
+    );
+
     controls.update();
     // after the controls, never before: they are what may just have moved the
     // camera, and the lights are aimed off the camera's own frame.

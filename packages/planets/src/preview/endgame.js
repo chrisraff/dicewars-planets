@@ -1,4 +1,4 @@
-import { createHud, outcomeView, turnIndicatorView } from '../render/hud.js';
+import { createHud, outcomeView, turnIndicatorText, turnIndicatorView } from '../render/hud.js';
 import { playerStatsFor } from '../game/playerStats.js';
 import { assignPlayerColors } from '../render/palette.js';
 
@@ -98,7 +98,7 @@ function addScenario({ title, note, stageClass = '', outcome, status, hasReplay,
   const readout = document.createElement('pre');
   readout.className = 'menu-readout';
   const view = turnIndicatorView(status, (id) => playerNames.get(id) ?? id);
-  readout.textContent = `turn indicator: "${view.text}"   ·   end turn: ${view.endTurn}`;
+  readout.textContent = `turn indicator: "${turnIndicatorText(view)}"   ·   end turn: ${view.endTurn}`;
   section.append(readout);
 
   const attacks = replayable ? fakeAttacks(playerIds) : [];

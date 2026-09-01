@@ -9,6 +9,7 @@ import {
   framingOf,
   narrowHalfFov,
   needsRefocus,
+  orbitRotateSpeed,
   swingDirection,
   swingDuration,
   swingTravel,
@@ -392,4 +393,74 @@ test('a pull-back starts and ends where it says, and eases in between', () => {
   assert.equal(zoomAlong(1.5, 4.9, 0.5), (1.5 + 4.9) / 2, 'symmetric about the middle');
   assert.ok(zoomAlong(1.5, 4.9, 0.1) - 1.5 < (4.9 - 1.5) * 0.1, 'eased in, not linear');
   assert.equal(zoomAlong(1.5, 4.9, 2), 4.9, 'and it cannot overshoot');
+});
+
+// --- how far a drag turns the planet ----------------------------------------
+
+// The whole point, stated in what a hand actually feels: the same drag should
+// push the same amount of *screen* past under it, whatever the zoom. Written
+// against the projection directly rather than against the multiplier, so it
+// would fail for a factor that scaled smoothly and wrongly.
+const screenTravel = (distance, halfFov, pixels) => {
+  // pixels -> radians the way OrbitControls does it, times our correction
+  const angle = pixels * 2 * Math.PI * orbitRotateSpeed(distance, halfFov);
+  // where the point under the finger lands, as a fraction of the frame
+  return Math.sin(angle) / (distance - Math.cos(angle)) / Math.tan(halfFov);
+};
+
+test('a drag moves the same amount of planet past the finger at every zoom', () => {
+  const halfFov = narrowHalfFov(45, PHONE);
+  const wide = framingDistance(halfFov, DEFAULT_FRAMING.shave);
+  const drag = 0.02; // a fiftieth of the screen, small enough to be a nudge
+
+  const reference = screenTravel(wide, halfFov, drag);
+  for (const distance of [1.5, 2, 3, 4, wide]) {
+    const travel = screenTravel(distance, halfFov, drag);
+    assert.ok(
+      Math.abs(travel / reference - 1) < 0.05,
+      `at ${distance}: moved ${(travel / reference).toFixed(2)}x what the framed view does`
+    );
+  }
+});
+
+// The complaint this exists for. Zoomed all the way in the planet is nearly
+// three times the size on screen it is at the distance the base rate suits, so
+// leaving the rate alone throws it nearly three times as far under the finger.
+test('zoomed in, a drag turns the planet a fraction of what it used to', () => {
+  const halfFov = narrowHalfFov(45, DESKTOP);
+  assert.ok(orbitRotateSpeed(1.5, halfFov) < 0.4, 'and it is a fraction, not a shading');
+  assert.ok(
+    orbitRotateSpeed(1.5, halfFov) < orbitRotateSpeed(2, halfFov),
+    'monotonic, so there is no zoom where pushing further in speeds it up'
+  );
+});
+
+// Correcting the direction that is uncontrollable, not the one that is merely
+// gentle: further out than the framed view the surface already moves slower
+// than the finger, and speeding it up would spin a planet nobody can read.
+test('zoomed out, the drag is left exactly as it was', () => {
+  for (const aspect of [PHONE, DESKTOP]) {
+    const halfFov = narrowHalfFov(45, aspect);
+    const wide = framingDistance(halfFov, DEFAULT_FRAMING.shave);
+    assert.equal(orbitRotateSpeed(wide, halfFov), 1, 'unchanged at the view it opens on');
+    assert.equal(orbitRotateSpeed(8, halfFov), 1, 'and all the way out to maxDistance');
+  }
+});
+
+// Each screen is measured against how far *it* has to sit back, which is what
+// stops the correction being a phone tax: the fov cancels, so both open on the
+// speed the base rate was chosen for.
+test('a phone and a desktop feel the same at their own framing distances', () => {
+  for (const aspect of [PHONE, DESKTOP, 1]) {
+    const halfFov = narrowHalfFov(45, aspect);
+    const wide = framingDistance(halfFov, DEFAULT_FRAMING.shave);
+    assert.equal(orbitRotateSpeed(wide * 0.5 + 0.5, halfFov), 0.5, 'halfway in, half the speed');
+  }
+});
+
+test('a drag always moves the planet, however close the controls ever let you get', () => {
+  const halfFov = narrowHalfFov(45, DESKTOP);
+  for (const distance of [1.001, 1, 0.5]) {
+    assert.equal(orbitRotateSpeed(distance, halfFov), DEFAULT_FRAMING.minRotateSpeed);
+  }
 });

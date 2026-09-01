@@ -51,6 +51,24 @@ test('between your turns it names your color, not the player taking one', () => 
   assert.equal(view.endTurn, 'hidden');
 });
 
+// Two ways of not being there, and only one of them keeps its space. Between
+// your own turns the button is coming back, so the row holds a slot for it
+// rather than shuffling Menu sideways twice a round. Spectating it never is,
+// and a held slot there pushes Menu and Replay in from the edge for a button
+// that will never be drawn again.
+test('the button keeps its space between your turns and gives it up once you are only watching', () => {
+  assert.equal(turnIndicatorView(playing({ currentPlayerId: 'p2' }), nameOf).endTurn, 'hidden');
+
+  for (const [what, status] of [
+    ['knocked out', { currentPlayerId: 'p2', humanEliminated: true }],
+    ['over', { isOver: true, winner: 'p1' }],
+    ['lost', { isOver: true, winner: 'p2', currentPlayerId: 'p2' }],
+    ['nobody at the keyboard', { humanPlayerId: Symbol('autoplay') }],
+  ]) {
+    assert.equal(turnIndicatorView(playing(status), nameOf).endTurn, 'gone', what);
+  }
+});
+
 // One sentence at two moments: told you are red, a red dot is what makes
 // "Your turn" mean the same red. A second chip spelling the word out again
 // would read as a change of subject.
@@ -73,7 +91,7 @@ test('it says which color you are on every turn that is not yours', () => {
 test('once it is over the indicator reports the result, not a turn', () => {
   const won = turnIndicatorView(playing({ isOver: true, winner: 'p1' }), nameOf);
   assert.equal(turnIndicatorText(won), 'You win', 'not "Your turn", which the raw state still implies');
-  assert.equal(won.endTurn, 'hidden');
+  assert.equal(won.endTurn, 'gone');
 
   const lost = turnIndicatorView(
     playing({ isOver: true, winner: 'p2', currentPlayerId: 'p2' }),
@@ -133,7 +151,7 @@ test('a player knocked out mid-game is told they are watching', () => {
   assert.equal(view.color, 'You', 'the word that is set in a color');
   assert.equal(view.playerId, 'p1', 'and the color is yours, not the player still playing');
   assert.equal(view.dot, false);
-  assert.equal(view.endTurn, 'hidden');
+  assert.equal(view.endTurn, 'gone');
 });
 
 // `humanEliminated` is derived from whether the human seat still holds ground,
@@ -166,7 +184,7 @@ test('the result outranks being knocked out earlier', () => {
 test('a game with no winner at all still says something sensible', () => {
   const view = turnIndicatorView(playing({ isOver: true, winner: null }), nameOf);
   assert.equal(turnIndicatorText(view), 'Nobody wins');
-  assert.equal(view.endTurn, 'hidden');
+  assert.equal(view.endTurn, 'gone');
 });
 
 // An unattended match — `createGame`'s AUTOPLAY leaves nobody in the human

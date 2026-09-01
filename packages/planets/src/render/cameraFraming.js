@@ -40,6 +40,15 @@ export const DEFAULT_FRAMING = {
   zoomSpeed: 4.0, // planet radii per second
   minZoomDuration: 0.3,
   maxZoomDuration: 0.7,
+
+  /**
+   * The floor under `orbitRotateSpeed`, so a drag never stops moving the
+   * planet however far in the controls let the player go. At the 1.5 the
+   * controls currently stop at it is nowhere near binding — that works out
+   * around 0.23 — so this only ever catches a future `minDistance` nearer
+   * the surface, where the scale factor runs to zero.
+   */
+  minRotateSpeed: 0.1,
 };
 
 /**
@@ -71,6 +80,38 @@ export function framingDistance(halfFov, shave = DEFAULT_FRAMING.shave) {
   const covered = 1 - Math.min(0.95, Math.max(0, shave));
   const apparent = Math.atan(Math.tan(halfFov) / covered);
   return 1 / Math.sin(apparent);
+}
+
+/**
+ * How fast a drag should turn the planet, as a multiplier on the speed that
+ * suits the fully-framed view.
+ *
+ * OrbitControls turns pixels into degrees at one fixed rate, and degrees are
+ * the wrong unit for it: what the hand is doing is pushing the *surface*
+ * around, and how much surface a degree is worth depends entirely on how
+ * close the camera is. A point `angle` off the view axis projects to
+ * `sin(angle) / (distance - cos(angle))`, so near the middle of the disc —
+ * which is where a finger is — the scale is `1 / (distance - 1)`. At the 1.5
+ * the controls stop at, the planet is over four times the size on screen it is
+ * at 3.2, so one unchanged degree per pixel throws it four times as far.
+ *
+ * Hence a multiplier of exactly that ratio, taken against `framingDistance` —
+ * the distance the whole planet fits at, which is the view a session opens on
+ * and the one the base speed was chosen for. `halfFov` appears on both sides
+ * and cancels, which is what keeps a phone and a desktop feeling the same:
+ * each is measured against how far *it* has to sit back.
+ *
+ * Never above 1. Further out than the framing distance the surface already
+ * moves slower than the finger, and speeding the drag up to compensate would
+ * mean a planet that is small on screen spinning faster than it can be read —
+ * the direction that is worth correcting is the one that is uncontrollable,
+ * not the one that is merely gentle.
+ */
+export function orbitRotateSpeed(distance, halfFov, framing = DEFAULT_FRAMING) {
+  const wide = framingDistance(halfFov, framing.shave);
+  if (!(wide > 1)) return 1;
+  const scale = (distance - 1) / (wide - 1);
+  return Math.min(1, Math.max(framing.minRotateSpeed, scale));
 }
 
 /**

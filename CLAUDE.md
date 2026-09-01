@@ -966,6 +966,21 @@ it as pure functions:
   the fight is strictly off screen) only takes that to one in two. Most of the
   planet is simply not facing you, and no setting changes that — what the
   lever really trades is how squashed the dice may be when it does hold still.
+- **How far a drag turns it.** OrbitControls turns pixels into degrees at one
+  fixed rate, and degrees are the wrong unit: a drag pushes the *surface*
+  around, and how much surface a degree is worth is entirely how close the
+  camera is. Near the middle of the disc — which is where a finger is — the
+  scale is `1 / (distance - 1)`, so zoomed all the way in the planet is several
+  times the size it is at the framed view and one unchanged rate throws it
+  several times as far. `orbitRotateSpeed` is exactly that ratio, taken against
+  `framingDistance`, and `createViewer` writes it onto `controls.rotateSpeed`
+  every frame so a wheel and a resize are both already in it. `halfFov` appears
+  on both sides and cancels, which is what keeps a phone and a desktop feeling
+  the same — each is measured against how far *it* has to sit back. It is
+  capped at 1 and so only ever slows the drag down: further out than the framed
+  view the surface already moves slower than the finger, and the direction
+  worth correcting is the one that is uncontrollable rather than the one that
+  is merely gentle.
 
 A swing is paced by distance and capped at 0.55s, which is shorter than an AI
 attack's aim-plus-roll, so the camera has arrived before there is anything to
