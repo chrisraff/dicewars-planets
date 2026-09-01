@@ -969,9 +969,23 @@ it as pure functions:
 
 A swing is paced by distance and capped at 0.55s, which is shorter than an AI
 attack's aim-plus-roll, so the camera has arrived before there is anything to
-read. A hand on the planet cancels it outright — a wheel zoom doesn't, since
-that says nothing about where to look, and the swing keeps whatever distance
-the player lands on.
+read. A hand that **turns** the planet cancels it outright; a zoom doesn't,
+since that says nothing about where to look, and the swing keeps whatever
+distance the player lands on.
+
+That rule is read off the **movement** rather than off the gesture, and the
+difference is a pinch. The three zooms — the wheel, a pinch, a middle-button
+dolly — all say where the player wants to be and nothing about where they want
+to look, but only the first of them looks like a zoom to OrbitControls: its
+`state` reads as a one-finger *rotate* for the moment between the two fingers
+of a pinch landing, and again as one of them lifts. Asking it which gesture it
+is in therefore called a pinch a drag, and the camera came off the match before
+it had zoomed a single pixel — on the one device where pinching is the only way
+to zoom at all. Comparing where the camera is looking against where we last
+left it makes all three one case, and needs nothing of the controls but the
+`change` they already announce every move with. What tells our own swing from a
+hand is a flag set across `aimAt`, since the controls announce both the same
+way.
 
 The camera also turns **back to the player's own ground** when a turn hands to
 them (`lookAtHoldings` / `holdingsFocus`), because the other side of following
@@ -1011,9 +1025,9 @@ camera moved at all. A player dragging round the planet is nearly always
 reading it — counting an opponent's stacks, working out where a border is —
 and before this they got about one AI attack's worth of looking before the
 camera swung off to a fight somewhere else. So `cameraFocus` reports drags
-(`onDrag`, the same drags that already cancel a swing — a wheel is not one,
-for the reason it never was), and the camera being *freed* suppresses all three
-automatic moves: the pan home, the swing to the AI's fights, and the
+(`onDrag`, once per hand and on exactly what cancels a swing — a zoom is not
+one, for the reason it never was), and the camera being *freed* suppresses all
+three automatic moves: the pan home, the swing to the AI's fights, and the
 end-of-turn pull-back.
 
 **`game/autoFollow.js` is where those rules live**, and it is pure — no

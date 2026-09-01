@@ -12,7 +12,7 @@ import {
   zoomAlong,
   zoomDuration,
 } from './cameraFraming.js';
-import { normalize } from '../geometry/vec3.js';
+import { angleBetween, normalize } from '../geometry/vec3.js';
 
 /**
  * Turns the planet under the orbit camera to bring something into view.
@@ -23,9 +23,9 @@ import { normalize } from '../geometry/vec3.js';
  * (`framePlanet`), which is the view an AI's turn wants for the same reason.
  *
  * Thin on purpose: every decision is in `cameraFraming.js`. All this adds is
- * reading the camera, writing it back, and the dragging rule — a hand on the
- * planet ends the swing on the spot, since a camera fighting the hand on it is
- * worse than a missed battle.
+ * reading the camera, writing it back, and the dragging rule — a hand that
+ * turns the planet ends the swing on the spot, since a camera fighting the
+ * hand on it is worse than a missed battle.
  */
 export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING, onDrag }) {
   let swing = null; // { from, to, elapsed, duration } — where the camera is looking
@@ -40,11 +40,22 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
 
   const halfFov = () => narrowHalfFov(camera.fov, camera.aspect);
 
+  // Where the camera is looking, as far as this module knows, and whether the
+  // move that got it there was one of ours. The controls announce our writes
+  // exactly as they announce the player's, so the flag is what tells the two
+  // apart — see `onControlsChange`.
+  let facing = orbit().direction;
+  let selfMoving = false;
+  let turnReported = false;
+
   const aimAt = (direction, distance) => {
+    selfMoving = true;
     camera.position
       .copy(controls.target)
       .addScaledVector(new THREE.Vector3(direction.x, direction.y, direction.z), distance);
     controls.update();
+    selfMoving = false;
+    facing = orbit().direction;
   };
 
   // Stop moving the camera at all — both what it is looking at and how far
@@ -64,27 +75,44 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
     };
   };
 
-  // OrbitControls fires `start` for the wheel as well as for a drag, and the
-  // two mean different things to the two animations here.
-  //
-  // A pull-back is *about* distance, so anything the player does outranks it.
-  // A swing is about direction, so only a drag ends one — a wheel says nothing
-  // about where to look, and the swing carries on and keeps whatever distance
-  // the player lands on. (`state` is OrbitControls' own; without it every
-  // `start` cancels the swing, which is the safe way round to be wrong.)
-  //
-  // `onDrag` is told about the same drags. The camera reports the hand on the
-  // planet and says nothing about what it means, because what it means is a
-  // question about the *match* — see `session.js`.
-  const NOT_DRAGGING = -1; // OrbitControls' internal STATE.NONE
+  // A pull-back is *about* distance, so anything the player does outranks it —
+  // and `start` fires for every gesture there is, a drag, a pinch and a wheel
+  // alike, which is exactly the set that outranks it.
   const onControlsStart = () => {
     zoom = null;
-    if (controls.state !== NOT_DRAGGING) {
-      swing = null;
-      onDrag?.();
-    }
+    turnReported = false; // a new gesture: nothing about this hand reported yet
   };
+
+  // A swing is about *direction*, so what calls one off is the planet turning
+  // under a hand. `onDrag` is told about the same thing, and says only that:
+  // the camera reports the hand on the planet and nothing about what it means,
+  // because what it means is a question about the *match* — see `session.js`.
+  //
+  // Read as movement rather than as a gesture, and that is what makes all
+  // three zooms one case instead of three. The wheel, a pinch and a
+  // middle-button dolly each say where the player wants to be and nothing
+  // about where they want to look, so none of them ends a swing or takes the
+  // camera off the match — the swing carries on and keeps whatever distance
+  // the player lands on. Asking OrbitControls which gesture it is in gets
+  // precisely that wrong: its `state` reads as a one-finger *rotate* for the
+  // moment between the two fingers of a pinch landing, and again as one of
+  // them lifts, so a pinch took the camera off the match before it had zoomed
+  // a single pixel.
+  const TURNED = 1e-6; // radians; a hand clears this by orders of magnitude
+  const onControlsChange = () => {
+    if (selfMoving) return; // our own swing, writing the camera through `aimAt`
+    const { direction } = orbit();
+    const turned = angleBetween(facing, direction) > TURNED;
+    facing = direction;
+    if (!turned) return;
+
+    swing = null;
+    if (!turnReported) onDrag?.(); // once for the hand, not once per frame of it
+    turnReported = true;
+  };
+
   controls.addEventListener('start', onControlsStart);
+  controls.addEventListener('change', onControlsChange);
 
   return {
     get isSwinging() {
@@ -240,6 +268,7 @@ export function createCameraFocus({ camera, controls, framing = DEFAULT_FRAMING,
 
     dispose() {
       controls.removeEventListener('start', onControlsStart);
+      controls.removeEventListener('change', onControlsChange);
       cancel();
     },
   };
