@@ -346,6 +346,26 @@ export function outcomeView(outcome, nameOf = (id) => id) {
 export const REPLAY_STEP_MS = 900;
 
 /**
+ * The camera on the auto-follow button, in both of the seats that button
+ * takes. One copy rather than one per seat, since the two are the same offer
+ * and a glyph that differed between them would read as a different control.
+ *
+ * Sized in `em` by the stylesheet rather than in `rem`, so the smaller pill in
+ * the replay card's head gets a smaller camera without a second rule. Stroked
+ * in `currentColor` for the same reason the chevron is: the button already
+ * brightens on hover, and the icon has to come with it.
+ */
+const CAMERA_ICON = `
+  <span class="hud-auto-follow-icon" aria-hidden="true">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1.9 5.4h2.4l1.1-1.8h5.2l1.1 1.8h2.4v7.1H1.9z"/>
+      <circle cx="8" cy="8.9" r="2.3"/>
+    </svg>
+  </span>
+`;
+
+/**
  * `humanPlayerId` is which seat the person at the keyboard has. Told to the
  * HUD once rather than also threaded through `playerStatsFor`: it is a fact
  * about this interface rather than about the board, and one source is what
@@ -362,7 +382,7 @@ export function createHud(
     </div>
     <div class="hud-controls">
       <div class="hud-auto-follow" hidden>
-        <button class="hud-auto-follow-button" type="button">Auto-follow</button>
+        <button class="hud-auto-follow-button" type="button">${CAMERA_ICON}Auto-follow</button>
       </div>
       <div class="hud-hint" role="status" hidden>
         <p class="hud-hint-text"></p>
@@ -391,7 +411,7 @@ export function createHud(
           <span class="hud-replay-title">Replay</span>
           <span class="hud-replay-head-buttons">
             <button class="hud-auto-follow-button hud-replay-follow" type="button" hidden>
-              Auto-follow
+              ${CAMERA_ICON}Auto-follow
             </button>
             <button class="hud-replay-graph" type="button" aria-pressed="false">Graph</button>
             <button class="hud-replay-close" type="button" aria-label="Close replay">×</button>

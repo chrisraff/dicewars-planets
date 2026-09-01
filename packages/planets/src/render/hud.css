@@ -643,6 +643,12 @@
 
 .hud-auto-follow-button {
   pointer-events: auto;
+  /* the camera sits beside the words rather than in place of them: the icon
+     says what the button is about at a glance, the label says what pressing
+     it does, and an offer that comes and goes cannot rely on being learnt */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
@@ -661,6 +667,19 @@
 }
 .hud-auto-follow-button:hover { color: #fff; background: rgba(30, 30, 38, 0.9); }
 .hud-auto-follow-button:active { background: rgba(50, 50, 60, 0.9); }
+
+/* Sized in `em` so the one glyph serves both seats: the pill over the planet
+   is 0.85rem and the one in the replay head is 0.75rem, and the camera comes
+   down with the words rather than needing a rule of its own over there.
+   Slightly larger than the cap height so it reads as a mark beside the label
+   rather than as a letter in it. */
+.hud-auto-follow-icon {
+  display: inline-flex;
+  width: 1.15em;
+  height: 1.15em;
+  flex: 0 0 auto;
+}
+.hud-auto-follow-icon svg { width: 100%; height: 100%; }
 
 /* ---- the first-timer's prompt ------------------------------------
 
