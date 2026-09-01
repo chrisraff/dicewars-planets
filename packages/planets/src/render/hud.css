@@ -1161,6 +1161,21 @@
 .hud-replay-next:hover,
 .hud-replay-play:hover { background: rgba(255, 255, 255, 0.18); }
 
+/* Play and pause are drawn rather than typed. As characters (U+25B6, U+23F8)
+   they are emoji on most platforms — colour glyphs that ignore the button's
+   own colour, sit off the baseline, and look nothing like the ‹ › either side
+   of them. Both marks ship in one svg and the state picks which shows, so the
+   toggle stays a class rather than a glyph swap. */
+.hud-replay-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.hud-replay-play svg { width: 1.05rem; height: 1.05rem; }
+.hud-replay-mark-pause { display: none; }
+.hud-replay-play.is-playing .hud-replay-mark-play { display: none; }
+.hud-replay-play.is-playing .hud-replay-mark-pause { display: inline; }
+
 .hud-replay-track {
   flex: 1 1 auto;
   min-width: 0;

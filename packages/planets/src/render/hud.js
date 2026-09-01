@@ -420,7 +420,16 @@ export function createHud(
         <div class="hud-chart" hidden></div>
         <div class="hud-replay-transport">
           <button class="hud-replay-prev" type="button" aria-label="Previous attack">‹</button>
-          <button class="hud-replay-play" type="button" aria-label="Play">▶</button>
+          <button class="hud-replay-play" type="button" aria-label="Play">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path class="hud-replay-mark-play" d="M6.2 4.1 11.6 8 6.2 11.9z"
+                    stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <g class="hud-replay-mark-pause">
+                <rect x="5" y="3.5" width="2.2" height="9" rx="0.7"/>
+                <rect x="8.8" y="3.5" width="2.2" height="9" rx="0.7"/>
+              </g>
+            </svg>
+          </button>
           <button class="hud-replay-next" type="button" aria-label="Next attack">›</button>
           <input class="hud-replay-track" type="range" min="0" max="0" value="0" step="1"
                  aria-label="Replay position" />
@@ -502,7 +511,7 @@ export function createHud(
     if (!replayTimer) return;
     clearInterval(replayTimer);
     replayTimer = null;
-    replayPlay.textContent = '▶';
+    replayPlay.classList.remove('is-playing');
     replayPlay.setAttribute('aria-label', 'Play');
   }
 
@@ -531,7 +540,7 @@ export function createHud(
 
   function startReplaying() {
     if (Number(replayTrack.value) >= Number(replayTrack.max)) paintReplayStep(0);
-    replayPlay.textContent = '⏸';
+    replayPlay.classList.add('is-playing');
     replayPlay.setAttribute('aria-label', 'Pause');
     replayTimer = setInterval(() => {
       const next = paintReplayStep(Number(replayTrack.value) + 1);
