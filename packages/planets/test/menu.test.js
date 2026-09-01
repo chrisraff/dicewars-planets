@@ -38,6 +38,16 @@ test('an option whose feature is unbuilt is disabled, and says why', () => {
   assert.ok(row.help.length > 0, 'and should still explain what it will do');
 });
 
+// The line under an option is optional, and an option that has had its line
+// taken away must not leave an empty paragraph propping the gap open.
+test('an option with nothing worth adding says nothing, rather than saying it blankly', () => {
+  const bare = { key: 'k', label: 'L', kind: 'choice', default: 1, available: true,
+    choices: [{ value: 1, label: 'one' }, { value: 2, label: 'two' }] };
+
+  assert.equal(settingRowView(bare, 1).help, null, 'no help at all');
+  assert.equal(settingRowView({ ...bare, help: '' }, 1).help, null, 'and an empty one is none');
+});
+
 test('an unavailable toggle shows its default however it is asked', () => {
   // a stale stored setting or a hand-edited URL must not make the menu claim
   // something is on when the pipeline will refuse to turn it on
@@ -47,7 +57,10 @@ test('an unavailable toggle shows its default however it is asked', () => {
 
 test('every row carries what the menu needs to draw it', () => {
   for (const row of menuView(DEFAULT_SETTINGS)) {
-    assert.ok(row.key && row.label && row.help, `${row.key} is missing its text`);
+    assert.ok(row.key && row.label, `${row.key} is missing its text`);
+    // Either a real sentence or nothing at all — never the empty string, which
+    // the menu would hold a paragraph open for.
+    assert.ok(row.help === null || row.help.length > 0, `${row.key} has a blank help line`);
     assert.ok(['choice', 'toggle', 'seat'].includes(row.kind), `${row.key} has an odd kind`);
 
     if (row.kind === 'choice') assert.ok(row.choices.length > 1);

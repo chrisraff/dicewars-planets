@@ -9,6 +9,20 @@ import { DEFAULT_PLAYER_COLORS, readableTextColor } from './palette.js';
 const rgb = (color) => `rgb(${color.map((c) => Math.round(c * 255)).join(', ')})`;
 
 /**
+ * What the menu's footer says.
+ *
+ * The version is its own number rather than the package's: `package.json` is
+ * about a workspace that is never published, while this is what a player would
+ * quote back when something goes wrong. Bump it here.
+ *
+ * The year is written down rather than read off the clock. A copyright year is
+ * a fact about when the work was made, so a machine with a wrong clock should
+ * not be able to change it.
+ */
+export const APP_VERSION = '0.0.0';
+export const APP_COPYRIGHT = '© Chris Raff 2026';
+
+/**
  * The turn order as a row of seats, with the current choice painted onto it.
  *
  * A range and an exact seat are the same question — where do you sit — so they
@@ -46,7 +60,10 @@ export function settingRowView(setting, value, context = {}) {
   const base = {
     key: setting.key,
     label: setting.label,
-    help: setting.help,
+    // An option that explains itself needs no line under it, so `help` is
+    // optional — and an empty one is the same as none, rather than an empty
+    // paragraph holding open a gap where a sentence used to be.
+    help: setting.help || null,
     kind: setting.kind,
     disabled,
     note: disabled ? setting.note : null,
@@ -116,7 +133,14 @@ export function createMenu(root, { onStart, onResume, onContinue } = {}) {
         <button class="menu-continue" type="button" hidden>Continue</button>
       </div>
     </div>
+    <div class="menu-footer">
+      <span></span>
+      <span></span>
+    </div>
   `;
+  const footerParts = root.querySelectorAll('.menu-footer span');
+  footerParts[0].textContent = APP_COPYRIGHT;
+  footerParts[1].textContent = `v${APP_VERSION}`;
 
   const settingsList = root.querySelector('.menu-settings');
   const startButton = root.querySelector('.menu-start');
@@ -260,7 +284,10 @@ export function createMenu(root, { onStart, onResume, onContinue } = {}) {
     const labelText = text.querySelector('.menu-row-label span');
     labelText.id = `menu-label-${setting.key}`;
     labelText.textContent = row.label;
-    text.querySelector('.menu-row-help').textContent = row.help;
+
+    const help = text.querySelector('.menu-row-help');
+    if (row.help) help.textContent = row.help;
+    else help.remove(); // the same as the note above: nothing to say, nothing drawn
 
     const note = text.querySelector('.menu-row-note');
     if (row.note) note.textContent = row.note;

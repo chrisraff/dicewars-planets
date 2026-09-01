@@ -221,7 +221,10 @@ h1 {
 }
 .menu-host {
   display: flex;
-  justify-content: center;
+  /* A column with the panel centred, matching `#menu` — the footer is a
+     sibling of the panel, so a row would put it alongside. */
+  flex-direction: column;
+  align-items: center;
   padding: 1.25rem;
 }
 .menu-host[hidden] {

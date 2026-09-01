@@ -38,9 +38,7 @@ export const SETTING_DEFINITIONS = [
   {
     key: 'difficulty',
     label: 'Difficulty',
-    help: 'Normal takes the best fight in front of it. Hard knows what every fight really '
-      + 'costs, but not that connected land is what pays. Expert plays for the reinforcement '
-      + 'its largest region earns — and will cut yours in half to take that away from you.',
+    help: 'Normal is classic Dice Wars difficulty. Try hard or expert if you\'re familiar with the game and want a challenge.',
     kind: 'choice',
     default: 'normal',
     available: true,
@@ -53,8 +51,7 @@ export const SETTING_DEFINITIONS = [
   {
     key: 'start',
     label: 'Your turn',
-    help: 'Where you sit in the turn order. Early takes ground before anyone is strong; '
-      + 'late lets you see what everyone else did first.',
+    help: 'Pick where your turn is. The world is balanced for all players - later players start with more territories and dice.',
     kind: 'seat',
     default: 'any',
     available: true,
@@ -90,8 +87,13 @@ export const SETTING_DEFINITIONS = [
     help: 'A moon passes overhead, bridging the territories it covers as it goes.',
     kind: 'toggle',
     default: false,
+    // Both, and they do different jobs: `hidden` keeps the menu from drawing a
+    // row for a feature that is not built, and `available: false` is what pins
+    // it to its default so nothing downstream is ever handed a setting it
+    // cannot honour. No `note` — that is the text a *greyed-out* row carries,
+    // and nobody can read the note on a row that is never drawn.
     available: false,
-    note: 'Not built yet',
+    hidden: true,
   },
 ];
 

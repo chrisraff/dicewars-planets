@@ -1234,8 +1234,13 @@
   inset: 0;
   z-index: 10;
   display: flex;
+  /* A column so the footer can sit under the panel rather than beside it. The
+     panel is centred by its own auto margins instead of `justify-content`,
+     which also fixes the old hazard here: a flex item centred that way has its
+     overflowing top cut off by a scrolling container, where an auto margin
+     collapses and lets it scroll. */
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: calc(var(--safe-top) + 1rem) calc(var(--safe-right) + 1rem)
            calc(var(--safe-bottom) + 1rem) calc(var(--safe-left) + 1rem);
   background: rgba(4, 4, 8, 0.72);
@@ -1248,6 +1253,9 @@
 .menu-panel {
   width: min(26rem, 100%);
   box-sizing: border-box;
+  /* Both auto, so the free space splits above and below and the panel lands
+     centred in whatever the footer leaves it. */
+  margin: auto 0;
   padding: 1.4rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 0.7rem;
@@ -1456,6 +1464,23 @@
 .menu-start.is-secondary:hover { background: rgba(255, 255, 255, 0.16); }
 .menu-resume[hidden],
 .menu-continue[hidden] { display: none; }
+
+/* Whose game this is and which build of it, on the one screen with room to
+   say so. Deliberately quiet: it is a signature and a number to quote back
+   when something goes wrong, not something to read. Stretched to the full
+   width of the overlay so the two ends sit at the two ends. */
+.menu-footer {
+  align-self: stretch;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #f2f2f2;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 640px) {
   .menu-panel { padding: 1.1rem; }

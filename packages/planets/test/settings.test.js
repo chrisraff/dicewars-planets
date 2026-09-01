@@ -45,7 +45,10 @@ test('every option declares what the menu needs to draw it', () => {
   for (const setting of SETTING_DEFINITIONS) {
     assert.ok(setting.key, 'each option needs a key');
     assert.ok(setting.label, `${setting.key} needs a label`);
-    assert.ok(setting.help, `${setting.key} needs a line of explanation`);
+    // `help` is optional: an option whose choices explain themselves is better
+    // off saying nothing than saying something for the sake of it. What is not
+    // allowed is an *empty* one, which reads as a sentence that went missing.
+    if ('help' in setting) assert.ok(setting.help, `${setting.key} has a blank help line`);
     assert.ok(['choice', 'toggle', 'seat'].includes(setting.kind), `${setting.key} has an odd kind`);
     assert.notEqual(setting.default, undefined, `${setting.key} needs a default`);
     if (setting.kind === 'choice') assert.ok(setting.choices.length > 1);
