@@ -18,6 +18,8 @@ const PAGES = [
   'surrender',
   'terrain',
   'attack',
+  'explainer',
+  'figures',
 ];
 
 /**

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — how the game works</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>How the game works</h1>
+      <p class="lede">
+        The explainer the menu opens: the rules a player can lose a match without ever
+        working out — that attacking empties the attacker, that the defender takes ties,
+        that a one-die lead is worth far less between big stacks, and that income is paid
+        on your largest <em>joined-up</em> region and then scattered where it likes.
+        The odds figures are read out of core’s <code>winProbability</code> rather than
+        typed in, so they cannot quietly stop being true.
+      </p>
+      <p class="lede">
+        The pictures of the planet are committed PNGs, shot on
+        <a href="/preview/figures.html">the figures page</a>.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/explainer.js"></script>
+  </body>
+</html>

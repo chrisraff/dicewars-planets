@@ -1620,3 +1620,295 @@
    wherever the dice it follows happened to end. It replaces the chevron
    rather than joining it, so it inherits the pin along with the slot. */
 .battle-cancel { margin-left: auto; }
+
+/* ---- the explainer ----------------------------------------------------
+
+   "How the game works", opened from the menu and sitting over it. A panel in
+   the same page rather than a second page: the deployed site is one page, and
+   a player reading this mid-match should be handed their match back rather
+   than a fresh one.
+
+   Above #menu's z-index, since that is what it opens over, and the planet
+   keeps turning behind both. */
+#explainer {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  display: flex;
+  justify-content: center;
+  background: rgba(4, 4, 8, 0.86);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+#explainer[hidden] { display: none; }
+
+/* The panel is what scrolls, not the overlay: the head is sticky inside it,
+   so the way out never scrolls off the top of a long read. */
+.explainer-panel {
+  width: min(34rem, 100%);
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 calc(var(--safe-right) + 1.2rem) calc(var(--safe-bottom) + 3rem)
+           calc(var(--safe-left) + 1.2rem);
+}
+
+.explainer-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: calc(var(--safe-top) + 1rem) 0 0.8rem;
+  /* Opaque rather than translucent: text scrolling up under a blurred bar is
+     still text you can read the ghost of, and the way out has to stay the
+     clearest thing on the screen. */
+  background: rgba(10, 10, 14, 0.97);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.explainer-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.explainer-back {
+  pointer-events: auto;
+  font: inherit;
+  font-weight: 600;
+  color: #f2f2f2;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: var(--panel-radius);
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.explainer-back:hover { background: rgba(255, 255, 255, 0.22); }
+
+.explainer-section { margin: 2rem 0 0; }
+.explainer-section h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.explainer-section p {
+  margin: 0 0 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #c9c9d2;
+}
+
+/* ---- the pictures of the planet --------------------------------------
+
+   Side by side while there is room, since every pair here is a before and an
+   after and reading one against the other is the whole point of showing two.
+   They stack on a phone, where side by side would make each half unreadable. */
+.explainer-captures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.7rem;
+  margin: 0 0 1.2rem;
+}
+.explainer-capture { margin: 0; }
+.explainer-capture img {
+  display: block;
+  width: 100%;
+  /* the border is on the image, so it has to come out of the 100% rather than
+     be added to it — the grid track is exactly as wide as the picture */
+  box-sizing: border-box;
+  height: auto;
+  border-radius: var(--panel-radius);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #000;
+}
+.explainer-capture figcaption,
+.explainer-odds figcaption,
+.explainer-dice figcaption,
+.explainer-banked figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #8a8a93;
+}
+
+/* A capture that has not been taken yet, or has been taken out. The shot it
+   is standing in for is named, because the alternative — a broken image icon,
+   or nothing at all — tells a reader the document is broken when what is
+   actually missing is one committed file. */
+.explainer-missing {
+  display: flex;
+  align-items: center;
+  padding: 1rem 0.8rem;
+  min-height: 7rem;
+  box-sizing: border-box;
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+  border-radius: var(--panel-radius);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #8a8a93;
+}
+
+/* ---- the dice figures ------------------------------------------------- */
+
+.explainer-dice { margin: 0 0 1.2rem; }
+.explainer-dice-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.explainer-side {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.explainer-die-strip {
+  display: flex;
+  gap: 0.2rem;
+}
+.explainer-total {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* Which side took it, said as weight rather than as a color — both sides are
+   already wearing a player's. */
+.explainer-side.is-loser { opacity: 0.55; }
+.explainer-versus {
+  font-size: 0.8rem;
+  color: #8a8a93;
+}
+
+/* ---- the odds ---------------------------------------------------------
+
+   A labelled table with the bar as the magnitude cue, rather than a chart
+   with an axis: every value is printed, because this is as much something to
+   look a number up in as a shape to read, and there is no axis or hover here
+   to carry the values instead.
+
+   The bars are neutral on purpose. Every saturated color in this game names a
+   player, so a colored bar in a figure about nobody in particular reads as
+   somebody's. The track is the full 0–100%, since a percentage drawn on a
+   cropped scale is a lie about its own size. */
+.explainer-odds { margin: 0 0 1.4rem; }
+.explainer-odds-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #c9c9d2;
+  margin-bottom: 0.45rem;
+}
+.explainer-odds-rows {
+  display: grid;
+  gap: 0.25rem;
+}
+.explainer-odds-row {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr 2.4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.explainer-odds-label,
+.explainer-odds-value {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: #8a8a93;
+}
+.explainer-odds-value {
+  text-align: right;
+  color: #c9c9d2;
+  font-weight: 600;
+}
+.explainer-odds-track {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+.explainer-odds-fill {
+  display: block;
+  height: 100%;
+  /* rounded on the data end only — the other end is the baseline, and a
+     rounded zero would float the bar off it */
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgba(255, 255, 255, 0.55);
+}
+/* The half-way mark, and the only reason the even-stacks figure needs one:
+   what it is showing is that every bar falls short of it. A threshold rather
+   than a gridline, which is what the dashes say. */
+.explainer-odds-marker {
+  position: absolute;
+  top: -0.15rem;
+  bottom: -0.15rem;
+  width: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.55);
+}
+
+/* ---- banked dice ------------------------------------------------------ */
+
+.explainer-banked { margin: 0 0 1.2rem; }
+.explainer-banked-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.explainer-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.18rem;
+  max-width: 11rem;
+}
+/* In the game a tray chip is faceless because the die has not been rolled yet,
+   and it is dimmed to say so. Here they have all landed — this is a picture of
+   a finished payout — so they are solid, and the dimming is free to mean the
+   one thing this figure is about.
+
+   The dice that had nowhere to land are hollowed rather than recolored, for
+   the reason the odds bars are neutral: a color here would read as another
+   player's. */
+.explainer-tray .battle-die { opacity: 0.9; }
+.explainer-tray .battle-die.is-banked {
+  opacity: 0.3;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+/* The tile draws itself against the row it normally sits in, so it needs a
+   width here rather than filling whatever it is dropped into. */
+.explainer-tile-holder {
+  display: flex;
+  width: 7rem;
+}
+.explainer-tile-holder .hud-player { flex: 1 1 auto; }
+
+@media (max-width: 640px) {
+  .explainer-panel { padding-left: calc(var(--safe-left) + 0.9rem);
+                     padding-right: calc(var(--safe-right) + 0.9rem); }
+  .explainer-title { font-size: 0.95rem; }
+}
+
+/* The way into the explainer. Below the actions and quieter than all of them:
+   a door for somebody who came looking, which must never compete with the one
+   button almost everybody opened this menu to press. */
+.menu-explain {
+  display: block;
+  width: 100%;
+  /* There is no global `box-sizing` in this file — every rule that wants it
+     says so — and without it the padding and the border are *added* to the
+     100%, so this hangs a rem off the right edge of the panel it is supposed
+     to sit across. */
+  box-sizing: border-box;
+  margin-top: 1.1rem;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #8a8a93;
+  background: none;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+.menu-explain:hover { color: #f2f2f2; }

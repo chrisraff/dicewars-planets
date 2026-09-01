@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createViewer } from './render/createViewer.js';
 import { createDiePipMaterials } from './render/diceTextures.js';
 import { createMenu } from './render/menu.js';
+import { createExplainer } from './render/explainer.js';
 import { createSession } from './game/session.js';
 import { createSelectHandler } from './render/selectPress.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
@@ -11,6 +12,7 @@ import { ATTACK_HINT, markHintSeen, readSeenHints } from './game/hints.js';
 const canvas = document.getElementById('planet-canvas');
 const hudRoot = document.getElementById('hud');
 const menuRoot = document.getElementById('menu');
+const explainerRoot = document.getElementById('explainer');
 
 // These outlive any one game: the renderer and camera keep the planet where
 // the player left it, and the pip textures are generated once at startup.
@@ -55,12 +57,20 @@ function startGame(settings, saved = null) {
 // save becomes that game's. This is the only chance to pick up the last one.
 const savedGame = readSavedGame(window.localStorage);
 
+// Over the menu rather than instead of it, so backing out of the explainer
+// lands on the menu the player opened it from — and the match, if there is
+// one, is still sitting behind that. Nothing else needs saying about the
+// pause: the loop already stops the game while the menu is open, and the menu
+// is still open underneath this.
+const explainer = createExplainer(explainerRoot, { onClose: () => explainer.hide() });
+
 const menu = createMenu(menuRoot, {
   onStart: (settings) => startGame(settings),
   onResume: () => menu.hide(),
   // a saved game brings its own setup with it — the settings on the menu are
   // for the new game the player did not ask for
   onContinue: () => startGame(savedGame.settings, savedGame),
+  onExplain: () => explainer.show(),
 });
 
 // Skip the menu if there is a game to pick back up — one in progress, or one

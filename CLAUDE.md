@@ -1505,7 +1505,7 @@ territory. It still has to be *taken* — letting go there is how you put that
 territory back down — so it is the one case where a press is owned with nothing
 on screen to show for it.
 
-### Calling off an attack
+### Cancelling an attack
 
 A declared attack can be taken back for about a second, before its dice come
 up. The × sits on the battle readout, and **any press on the planet does the
@@ -1732,6 +1732,78 @@ the player's hand **before** `cancelled` is emitted, because putting the board
 back is part of cancelling rather than a consequence of it — announced the
 other way round, the cancel's own restore would take down the toast the cancel
 had just put up. `createGame.test.js` pins the order for exactly that reason.
+### The explainer
+
+`explainer.js` is "How the game works", opened from the menu and drawn over
+it. It covers the rules a player can lose a match without ever working out:
+that attacking empties the attacker whichever way the fight goes, that the
+defender takes ties, that a one-die lead is worth far less between big stacks
+than small ones, that income is paid on the largest *connected* region, that
+the payout scatters where it likes, and that what will not fit is banked.
+
+It is **not a tutorial** and deliberately says nothing about which button to
+press — `attackHintView` says that once, on the first turn, which is when it
+is worth saying. This is for somebody who has played a few games and wants to
+know why they keep losing.
+
+An overlay in the same page rather than a page of its own, for two reasons
+pointing the same way: `assert-deployable` holds the deployed site to one
+page, and a player reading this mid-match should be handed their match back
+rather than a fresh one. It opens over the menu and the menu stays open
+underneath, which is also the whole of the pause — `main.js` already stops
+ticking the session while `menu.isOpen()`.
+
+The content is **data rather than markup** (`EXPLAINER_SECTIONS`), so the
+document can be checked without a browser: that every section has something to
+read and something to look at, that every figure is of a kind there is a
+builder for, and that the tie figure is actually a tie.
+
+**The odds are read out of `winProbability` rather than typed in.** They are
+exactly the numbers core deals, so a change to the rules moves the document
+with it — and the two claims the figures make are asserted against core rather
+than against the prose: every even fight comes out under half, and the one-die
+lead decays monotonically from 84% at two against one to 67% at eight against
+seven.
+
+Those figures are a **labelled table with bars** rather than a chart, and that
+is a deliberate demotion: every value is printed, which a chart should not do,
+but there is no axis and no hover here to carry them instead and this is as
+much a thing to look a number up in as a shape to read. The bars are neutral
+because **every saturated colour in this game names a player** — a coloured bar
+in a figure about nobody in particular reads as somebody's. The track is the
+full 0–100%, since a percentage drawn on a cropped scale is a lie about its own
+size, and the even-stacks figure carries a dashed half-way mark because what it
+is showing is that every bar falls short of it.
+
+The UI figures are the **real components** — `dieChip` for the dice, and
+`createPlayerTile`/`paintPlayerTile` for the banked-dice badge. That tile was
+a closure inside `createHud` and is now exported for this, which is the whole
+of that refactor: a tile the explainer built for itself would be a second copy
+of the markup, free to drift from the one on screen. Only the *shape* is
+shared — every number and state class still arrives through `playerPanelView`.
+
+**The 3D figures are committed PNGs, not live planets.** A document with five
+WebGL contexts in it costs more than it explains, and half of them are
+before-and-after pairs meant to be read against each other rather than turned.
+`EXPLAINER_CAPTURES` is the contract: `preview/figures.html` shoots one picture
+per entry, a test asserts the list and what the sections ask for agree, and the
+page itself banners any entry it has no recipe for.
+
+Two things follow from a picture being a committed file. It **goes stale
+silently** when the renderer or the generator moves — the same failure the
+surrender preview's pinned seeds hit — so the harness pins its seed, builds its
+boards by hand, aims a fixed camera with the orbit controls *disabled*, and
+saves at exactly 600×400 whatever screen took it: re-shooting gives back the
+same pictures rather than similar ones, in one press. And the pictures can
+simply be **absent** — a fresh clone is in that state — so a capture that fails
+to load is replaced by a dashed box naming the shot it is standing in for,
+which is a document with its pictures pending rather than a broken page. The
+files live in `packages/planets/public/explainer/`.
+
+The payout figure is not staged: it runs `reduce(state, endTurn())` with the
+rng pinned, so where those dice land is genuinely where the game scatters them
+— including onto the two stranded territories that earned none of them, which
+is the entire point of the picture.
 
 ## Rendering conventions
 
@@ -1816,6 +1888,43 @@ from the game is worse than none.
   the old game's `change` is still to come and would repaint the board the
   refill had just replaced. And there is no camera, no saving and no AI here,
   which is the point: a board that keeps playing stops being a fixture.
+- `explainer.html` and `figures.html` are a pair: the first is the document
+  the menu opens, laid out flat and including the state a clone that has not
+  committed the pictures yet is in; the second is where those pictures come
+  from. Neither is optional furniture — the explainer is the one piece of
+  interface that cannot be reached by playing, and the figures page is the only
+  way to take its captures again after the renderer moves.
+
+  Each figure prints what its board actually holds (`describe`), because the
+  captions make numeric claims — six held, four of them joined — and a caption
+  is prose about a specific board. **Territory ids are numbers**, so an
+  override map keyed by an object literal stringifies every key and the edits
+  land *beside* the territories they were meant to replace: the board grew past
+  its own size, the player held twice what the caption said, and their largest
+  joined region was 3. Every picture would have been wrong and every caption
+  would still have read as if it were not. Hence a Map, and hence the readout.
+
+  One figure is a match **played** rather than a board arranged: the mid-game
+  shot runs `runAiTurn` for ten rounds and photographs whoever ended up with a
+  full interior and a ragged front. That is not a position anyone would think
+  to build, which is the point — staging it would be drawing the conclusion
+  rather than finding it. It needs nothing extra pinned to be reproducible,
+  since `createExpertStrategy` carries no rng of its own, so the dice and the
+  scatter are the only chance in it.
+
+  Two things about the staged empire are worth keeping. It is **small — four
+  joined and two stranded** — because the point of the figure is the *gap*, and
+  a gap you have to turn the planet to see is not a picture of anything. And
+  the stranded pair sits **exactly two steps out**, one territory of somebody
+  else's ground away: further and it leaves the frame, adjacent and it is not
+  stranded. Two steps is the nearest a territory can be and still be plainly
+  cut off.
+
+  The camera distances are **derived, not chosen** (`distanceShowing`): a
+  capture is always saved at one size, so the frustum is known exactly, and
+  `visibleAngle` answers how far back to stand to fit a given spread. A
+  hand-picked distance is one more thing that quietly stops being right when
+  the seed or the renderer moves.
 - `replay-perf.html` is the odd one out: numbers rather than a component. It
   plays real matches and puts them through the real save path against real
   `localStorage`, under a key of its own so a game in progress is never

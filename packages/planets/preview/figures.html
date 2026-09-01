@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — explainer figures</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Explainer figures</h1>
+      <p class="lede">
+        Where the pictures in <a href="/preview/explainer.html">the explainer</a> come from.
+        Each one is built from a pinned seed and a hand-built board, framed from a fixed
+        camera and saved at exactly 600&times;400 whatever screen it was shot on — so
+        re-taking one gives back the same picture rather than a similar one. The orbit
+        controls are off for that reason: a shot you can nudge is a shot you cannot take
+        twice.
+      </p>
+      <p class="lede">
+        Save them, then put the files in <code>packages/planets/public/explainer/</code> and
+        commit them. Until they are there the explainer draws a dashed box naming the shot
+        that is missing, so it works before they exist and says so.
+        <strong>These go stale silently</strong> when the renderer or the generator moves —
+        that is what one press of Save all is for.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+
+      <pre id="problems" class="menu-readout" hidden></pre>
+      <p><button id="save-all" type="button">Save all</button></p>
+
+      <div id="figures"></div>
+    </main>
+    <script type="module" src="/src/preview/figures.js"></script>
+  </body>
+</html>

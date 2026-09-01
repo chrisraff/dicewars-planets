@@ -399,3 +399,44 @@ h1 {
   color: #d8a271;
   max-width: 46rem;
 }
+
+/* ---- the explainer preview --------------------------------------------
+
+   The game draws this as a full-screen overlay (#explainer in hud.css); here
+   it sits inline in a stage, so only the placement differs and the document
+   itself is styled entirely by the game's own rules. */
+.stage.is-explainer {
+  padding: 0;
+}
+.explainer-host {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem;
+}
+/* The panel scrolls itself in the game, where it fills the screen. Inline it
+   has no height to scroll within, so it simply runs to its full length and
+   the page carries the scrolling — which is also what makes the whole
+   document readable in one pass here. */
+.explainer-host > .explainer-panel {
+  max-height: none;
+  overflow: visible;
+}
+
+/* ---- the capture harness -----------------------------------------------
+
+   Each figure is shown at the shape it is saved at, so what is framed on this
+   page is what ends up in the file.
+
+   The padding has to go and the box has to be a border box: `aspect-ratio`
+   sizes the *content* box, while the canvas inside is inset to the *padding*
+   box, so a stage with padding hands the canvas a taller shape than the one it
+   was asked for. (The capture itself no longer depends on this — it renders at
+   its own size — but a page that frames one shape and saves another is no use
+   for judging a shot.) */
+.stage.is-planet.is-capture {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 0;
+  aspect-ratio: 3 / 2;
+  max-width: 30rem;
+}

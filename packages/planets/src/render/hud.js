@@ -414,6 +414,63 @@ const CAMERA_ICON = `
 `;
 
 /**
+ * One player's tile in the stats row, built but not yet filled in.
+ *
+ * Out here rather than inside `createHud` because the stats row is not the
+ * only place a tile is worth showing: the explainer draws one to point at the
+ * banked-dice badge, and a tile it built for itself would be a second copy of
+ * this markup, free to drift from the one on screen.
+ *
+ * It is deliberately only the *shape* — every number and every state class
+ * arrives through `paintPlayerTile`, from `playerPanelView`, so there is still
+ * exactly one place that decides what a tile says.
+ */
+export function createPlayerTile({ name, color, isYou = false }) {
+  const ink = readableTextColor(color);
+
+  const element = document.createElement('div');
+  element.className = 'hud-player';
+  element.setAttribute('role', 'listitem');
+  element.style.setProperty('--player-color', rgb(color));
+  element.style.setProperty('--player-ink', rgb(ink));
+  element.style.setProperty('--player-ink-dim', rgba(ink, 0.62));
+  // Name and count are wrapped so the tile can close over them as one,
+  // leaving the dot — outside the wrapper — behind.
+  element.innerHTML = `
+    <span class="hud-player-dot" aria-hidden="true"></span>
+    <span class="hud-player-body">
+      <span class="hud-player-name"></span>
+      <span class="hud-player-territories"></span>
+    </span>
+    <span class="hud-player-reserve"></span>
+  `;
+  element.querySelector('.hud-player-name').textContent = name;
+  // The caret says "you" to anyone looking at the row; this says it to anyone
+  // who is not. The color name stays in both, since the rest of the interface
+  // still talks about colors.
+  if (isYou) element.setAttribute('aria-label', `${name}, you`);
+
+  return {
+    element,
+    territories: element.querySelector('.hud-player-territories'),
+    reserve: element.querySelector('.hud-player-reserve'),
+  };
+}
+
+/** Writes a `playerPanelView` onto a tile `createPlayerTile` built. */
+export function paintPlayerTile(tile, view) {
+  tile.territories.textContent = view.territories;
+  tile.reserve.textContent = view.reserve;
+  tile.reserve.title = view.reserveTitle;
+  for (const [name, on] of Object.entries(view.classes)) {
+    tile.element.classList.toggle(name, on);
+  }
+  for (const [name, on] of Object.entries(view.reserveClasses)) {
+    tile.reserve.classList.toggle(name, on);
+  }
+}
+
+/**
  * `humanPlayerId` is which seat the person at the keyboard has. Told to the
  * HUD once rather than also threaded through `playerStatsFor`: it is a fact
  * about this interface rather than about the board, and one source is what
@@ -695,42 +752,17 @@ export function createHud(
     let panel = panels.get(playerId);
     if (panel) return panel;
 
-    const color = playerColors.get(playerId) ?? [0.5, 0.5, 0.5];
-    const ink = readableTextColor(color);
-
-    const element = document.createElement('div');
-    element.className = 'hud-player';
-    element.setAttribute('role', 'listitem');
-    element.style.setProperty('--player-color', rgb(color));
-    element.style.setProperty('--player-ink', rgb(ink));
-    element.style.setProperty('--player-ink-dim', rgba(ink, 0.62));
-    // Name and count are wrapped so the tile can close over them as one,
-    // leaving the dot — outside the wrapper — behind.
-    element.innerHTML = `
-      <span class="hud-player-dot" aria-hidden="true"></span>
-      <span class="hud-player-body">
-        <span class="hud-player-name"></span>
-        <span class="hud-player-territories"></span>
-      </span>
-      <span class="hud-player-reserve"></span>
-    `;
-    element.querySelector('.hud-player-name').textContent = nameOf(playerId);
-    // The caret says "you" to anyone looking at the row; this says it to
-    // anyone who is not. The color name stays in both, since the rest of the
-    // interface still talks about colors.
-    if (playerId === humanPlayerId) {
-      element.setAttribute('aria-label', `${nameOf(playerId)}, you`);
-    }
-
     panel = {
-      element,
-      territories: element.querySelector('.hud-player-territories'),
-      reserve: element.querySelector('.hud-player-reserve'),
+      ...createPlayerTile({
+        name: nameOf(playerId),
+        color: playerColors.get(playerId) ?? [0.5, 0.5, 0.5],
+        isYou: playerId === humanPlayerId,
+      }),
       shown: null,
       wasCurrent: false,
     };
     panels.set(playerId, panel);
-    playersRow.append(element);
+    playersRow.append(panel.element);
     return panel;
   }
 
@@ -840,15 +872,7 @@ export function createHud(
         panel.shown = view.key;
         changed = true;
 
-        panel.territories.textContent = view.territories;
-        panel.reserve.textContent = view.reserve;
-        panel.reserve.title = view.reserveTitle;
-        for (const [name, on] of Object.entries(view.classes)) {
-          panel.element.classList.toggle(name, on);
-        }
-        for (const [name, on] of Object.entries(view.reserveClasses)) {
-          panel.reserve.classList.toggle(name, on);
-        }
+        paintPlayerTile(panel, view);
       }
 
       if (changed) refreshRowFades();

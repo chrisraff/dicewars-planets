@@ -122,7 +122,7 @@ export function menuActionsView({ canResume = false, canContinue = false } = {})
  * It renders itself from the setting definitions rather than from hand-written
  * markup, so adding an option to settings.js is all it takes to have one here.
  */
-export function createMenu(root, { onStart, onResume, onContinue } = {}) {
+export function createMenu(root, { onStart, onResume, onContinue, onExplain } = {}) {
   root.innerHTML = `
     <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Game setup">
       <h1 class="menu-title">Dicewars Planets</h1>
@@ -132,6 +132,7 @@ export function createMenu(root, { onStart, onResume, onContinue } = {}) {
         <button class="menu-start" type="button">New game</button>
         <button class="menu-continue" type="button" hidden>Continue</button>
       </div>
+      <button class="menu-explain" type="button">How the game works</button>
     </div>
     <div class="menu-footer">
       <span></span>
@@ -146,6 +147,10 @@ export function createMenu(root, { onStart, onResume, onContinue } = {}) {
   const startButton = root.querySelector('.menu-start');
   const resumeButton = root.querySelector('.menu-resume');
   const continueButton = root.querySelector('.menu-continue');
+  // Below the actions and quieter than any of them: it is a door for somebody
+  // who came looking, and it must never be in the way of the one thing almost
+  // everybody opened this menu to press.
+  const explainButton = root.querySelector('.menu-explain');
 
   let settings = normalizeSettings({});
   const controls = new Map(); // key -> a function that re-reads the DOM
@@ -304,6 +309,7 @@ export function createMenu(root, { onStart, onResume, onContinue } = {}) {
   startButton.addEventListener('click', () => onStart?.(settings));
   resumeButton.addEventListener('click', () => onResume?.());
   continueButton.addEventListener('click', () => onContinue?.());
+  explainButton.addEventListener('click', () => onExplain?.());
 
   // Escape backs out, but only when there is something to back out to
   root.addEventListener('keydown', (event) => {

@@ -114,6 +114,22 @@ export const PREVIEW_PAGES = [
       + 'pressing through the wait once it has gone. Stagger and bounce height on sliders.',
   },
   {
+    href: '/preview/explainer.html',
+    title: 'How the game works',
+    description:
+      'The explainer the menu opens — the rules a player can lose a match without ever working '
+      + 'out — with its odds figures read out of core’s own winProbability, at phone width, '
+      + 'and in the state a clone that has not committed the pictures yet is in.',
+  },
+  {
+    href: '/preview/figures.html',
+    title: 'Explainer figures',
+    description:
+      'Where the explainer’s pictures of the planet come from: each one built from a pinned '
+      + 'seed and a fixed camera, saved at one size whatever screen shot it, so re-taking them '
+      + 'after the renderer moves gives back the same pictures.',
+  },
+  {
     href: '/preview/replay-perf.html',
     title: 'Replay storage & timing',
     description:
