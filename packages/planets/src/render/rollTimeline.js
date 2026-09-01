@@ -20,7 +20,17 @@ export const DEFAULT_TIMING = {
   settleFrom: 0.75,
   // How high the bounce goes, as a fraction of the throw it came off. Its
   // *timing* is not a second number: see `touchdownAt`.
-  bounce: { height: 0.3 },
+  bounce: { height: 0.7 },
+  // How far behind the attacker the defender's dice run. A fight has two
+  // halves and they are not equal: the attacker's total is a number, and the
+  // defender's is the answer. Landing both at once makes the reader do the
+  // subtraction at the same moment they do the reading, and the beat between
+  // them is what turns a sum into a result.
+  //
+  // On the player's own fight only, like the bounce, and for a related
+  // reason: this is the fight worth dramatising, and a quarter of a second on
+  // every AI attack is a turn that crawls.
+  stagger: 0.35,
 };
 
 // Where the faces begin to resolve in a throw that does not say. Only a throw
@@ -44,7 +54,7 @@ const CANCEL_MARGIN = 0.05;
  *
  * Derived from the height rather than given, because the two are not free of
  * each other: under gravity a hop's *time* goes as the square root of its
- * height, so a bounce 0.3 as high lasts 0.55 as long. Picking the two
+ * height, so a bounce a quarter as high lasts half as long. Picking the two
  * separately is how a bounce ends up looking wrong in a way that is hard to
  * name — and naming it is what this replaces.
  *
@@ -79,8 +89,25 @@ const smoothstep = (edge0, edge1, v) => {
   return t * t * (3 - 2 * t);
 };
 
+/**
+ * The whole attack, including the beat the defender's dice run behind by —
+ * they are the last thing to come to rest, so they are what "over" means.
+ */
 export function attackDuration(timing = DEFAULT_TIMING) {
-  return timing.aim + timing.roll + timing.read;
+  return timing.aim + timing.roll + timing.read + (timing.stagger ?? 0);
+}
+
+/**
+ * How long after the attacker's dice the defender's are thrown.
+ *
+ * It costs nothing in safety and cannot cost any: the attacker's dice are
+ * unaffected, so the earliest anything can be read is exactly where it was,
+ * and the *outcome* — which needs both halves — arrives strictly later than
+ * it used to. `cancelWindow` is measured off the attacker's clock for that
+ * reason and does not mention this.
+ */
+export function staggerOf(timing = DEFAULT_TIMING) {
+  return timing.stagger ?? 0;
 }
 
 /**

@@ -1561,7 +1561,7 @@ all of which read as "unnatural" rather than as anything nameable:
   obvious at the landing, where a sine comes in soft and a thrown die does not.
 - **The bounce's timing is not a second number.** `touchdownAt` derives it from
   the height, because under gravity a hop's time goes as the square root of its
-  height — a bounce 0.3 as high lasts 0.55 as long. Picking the two
+  height — a bounce a quarter as high lasts half as long. Picking the two
   independently is exactly how a bounce ends up looking wrong. It also falls
   out of the arcs that the die leaves the ground at `sqrt(height)` of the speed
   it arrived at, which is the coefficient of restitution, consistent for free
@@ -1665,6 +1665,45 @@ rest of the release would let one press cancel the attack and — since
 cancelling puts the attacker back in the player's hand — immediately declare
 another one on the same target, the exact opposite of what pressing it meant.
 
+**The two halves of a fight land a beat apart.** The attacker's dice come to
+rest, and `stagger` later the defender's do — a fight's two totals are not
+equal things, the attacker's is a number and the defender's is the answer, and
+landing both at once makes the reader do the reading and the subtraction in the
+same moment. It is the player's own fight only, like the bounce and for a
+related reason: this is the fight worth dramatising, and a quarter of a second
+on every AI attack is a turn that crawls.
+
+It costs nothing in safety and *cannot*: the attacker's dice are untouched, so
+the earliest anything can be read is exactly where it was, and the outcome —
+which needs both halves — now arrives strictly later than it used to.
+`cancelWindow` is measured off the attacker's clock for that reason and does
+not mention the stagger. `attackDuration` does, since the defender's dice are
+the last thing to come to rest and that is what "over" means.
+
+**Once the cancel window has shut, a press skips the rest of the wait**
+(`canFastForward`). An attack past that point is a thing the player is only
+*waiting* on: the board it lands on is decided and already saved, and the
+animation is the last second of a move they have finished making — so making
+them sit through it to pick their next attacker is making them wait for
+nothing.
+
+The mechanism is one line in `pressActionOn`: **the board a press is answered
+against is `pending ?? state`** — the board it will land on rather than the one
+still being shown. The dice are decided, so a press answered against what is on
+screen would act on a board that no longer exists by the time the finger comes
+up. `clickTerritory` then lands the attack before carrying the answer out, and
+nothing about the move changes; it simply stops being watched.
+
+That is also what makes the press **pick the territory up as well as skip the
+wait** — one press to be playing again rather than one to stop watching and
+another to act — and it works on the territory just captured as readily as on
+any other, since by the board being answered against it is already theirs.
+
+Two waits are deliberately not skippable. A **payout** is the turn ending and
+there is nothing for the player to do into it, and an **AI attack** is not
+theirs to be waiting through — both fall out of `canFastForward` requiring a
+pending attack on the human's own turn.
+
 The toast (`CANCELLED_TOAST`, "You canceled the attack") is past tense and
 names *you* as the one who did it, because the one thing it must not read as is
 the move having been *rejected* by the game. It is not ticked — it has no
@@ -1760,6 +1799,23 @@ from the game is worse than none.
   chosen to be *typical* rather than damning: its old carving scores 0.317,
   which is the old carver's median. A comparison page that opened on the worst
   case it could find would be an advert rather than evidence.
+- `attack.html` is a playground rather than a set of states: a real board that
+  **refills itself**, so a throw can be watched as many times as it takes to
+  judge one. It exists because the throw is the hardest thing in the game to
+  catch in a match — two seconds long, needs a fight to happen at all, and the
+  interesting half of it is over in under one — and because `stagger` and the
+  bounce height are taste rather than measurement, so they are on sliders with
+  the derived numbers (whole throw, when the cancel closes, when the dice are
+  down) printed beside them.
+
+  It drives `createGame`, `createHud` and `createRollAnimation` directly rather
+  than going through a session, because the board has to be *replaceable* and
+  the board belongs to the game: refilling is a fresh `createGame` over an
+  edited state rather than a reach into the live one. Two things follow. The
+  rebuild waits for the frame loop rather than happening inside `resolved` —
+  the old game's `change` is still to come and would repaint the board the
+  refill had just replaced. And there is no camera, no saving and no AI here,
+  which is the point: a board that keeps playing stops being a fixture.
 - `replay-perf.html` is the odd one out: numbers rather than a component. It
   plays real matches and puts them through the real save path against real
   `localStorage`, under a key of its own so a game in progress is never

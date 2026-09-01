@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { dieTumble } from './diceLayer.js';
 import { scatterDice } from './diceScatter.js';
-import { sampleAttack, attackDuration, firstLandingAt, DEFAULT_TIMING } from './rollTimeline.js';
+import { sampleAttack, attackDuration, firstLandingAt, staggerOf, DEFAULT_TIMING }
+  from './rollTimeline.js';
 
 const HOP_HEIGHT = 1.4; // in die widths
 
@@ -19,7 +20,7 @@ function randomAxis(rng) {
 // tumble stops, and `landing` is the patch of ground it comes down on. The
 // dice leave the stack for the throw, so the whole roll is readable at once
 // instead of being hidden inside a pile.
-function prepareStack(stand, rolls, dieSize, rng) {
+function prepareStack(stand, rolls, dieSize, rng, delay = 0) {
   const landings = scatterDice(stand.meshes.length, {
     dieSize,
     radius: stand.groundRadius,
@@ -27,6 +28,9 @@ function prepareStack(stand, rolls, dieSize, rng) {
   });
   return stand.meshes.map((mesh, i) => ({
     mesh,
+    // How far behind the clock this die runs. Zero for the attacker, a beat
+    // for the defender — see `staggerOf`.
+    delay,
     restPosition: mesh.position.clone(),
     restQuaternion: mesh.quaternion.clone(),
     landing: new THREE.Vector3(landings[i].x, landings[i].y, landings[i].z),
@@ -57,9 +61,10 @@ export function createRollAnimation({
   timing = DEFAULT_TIMING,
   rng = Math.random,
 }) {
+  const stagger = staggerOf(timing);
   const dice = [
     ...prepareStack(attackerStand, event.attackRolls, dieSize, rng),
-    ...prepareStack(defenderStand, event.defendRolls, dieSize, rng),
+    ...prepareStack(defenderStand, event.defendRolls, dieSize, rng, stagger),
   ];
 
   const tumbling = new THREE.Quaternion();
@@ -81,13 +86,14 @@ export function createRollAnimation({
   return {
     duration: attackDuration(timing),
 
-    // returns the sampled beat, so the caller can react to 'read' and 'done'
+    // Returns the *defender's* beat, since they are the last to come to rest:
+    // the caller reacts to 'read' and 'done', and neither is true of the
+    // fight while half of it is still in the air.
     apply(elapsed) {
-      const beat = sampleAttack(elapsed, timing);
-
-      const bounced = bounceSpin !== null && beat.spin > bounceSpin;
-
       for (const die of dice) {
+        const beat = sampleAttack(elapsed - die.delay, timing);
+        const bounced = bounceSpin !== null && beat.spin > bounceSpin;
+
         if (bounced) {
           // Everything turned before the impact, then the rest of it about the
           // new axis on top. Composed rather than switched, so the die's
@@ -104,7 +110,7 @@ export function createRollAnimation({
         die.mesh.position.lerpVectors(die.restPosition, die.landing, beat.travel);
         die.mesh.position.y += beat.lift * die.hop;
       }
-      return beat;
+      return sampleAttack(elapsed - stagger, timing);
     },
 
     // Puts every die back exactly where it started — used when an attack is

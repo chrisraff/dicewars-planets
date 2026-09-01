@@ -108,6 +108,22 @@ export function createGame({
   // Not `isBusy`: an attack that can still be taken back is exactly the state
   // where a press means something other than "wait".
   const canCancel = () => cancelable !== null && cancelable.left > 0;
+
+  /**
+   * Whether a press should skip the rest of the attack in the air rather than
+   * be ignored for it.
+   *
+   * An attack past its cancel window is a thing the player is only *waiting*
+   * on — the board it lands on is already decided and already saved, and the
+   * animation is the last second of a move they have finished making. Making
+   * them wait it out to pick their next attacker is making them wait for
+   * nothing, so the press acts on the board the attack is about to leave
+   * behind and puts it there on the way.
+   *
+   * Only an attack. A payout is the other player's turn ending and there is
+   * nothing for the human to do into it.
+   */
+  const canFastForward = () => pending !== null && pendingReinforce === null && !canCancel();
   const isOver = () => state.phase === 'gameover';
 
   function timingFor(playerId) {
@@ -131,16 +147,27 @@ export function createGame({
    * written in terms of this so the two cannot drift apart.
    */
   function pressActionOn(territoryId) {
-    if (isOver() || isBusy() || !isHumanTurn()) return null;
+    if (isOver() || !isHumanTurn()) return null;
+    // Mid-move, and not one the player can do anything about: a cancel that is
+    // still open owns every press, and a payout is not theirs to interrupt.
+    if (isBusy() && !canFastForward()) return null;
+
+    // The board a press acts on is the one it will land on. While an attack is
+    // still in the air that is the board it is about to settle to, not the one
+    // still being shown — the dice are decided, and a press answered against
+    // what is on screen would act on a board that no longer exists by the time
+    // the finger comes up.
+    const board = pending ?? state;
+
     // Anywhere that is not a territory — ocean, or space past the planet's
     // edge — is a place to put a held territory down, and nothing otherwise.
     if (territoryId === null || territoryId === undefined) {
       return selection === null ? null : 'drop';
     }
 
-    if (selection !== null && isLegalAttack(state, selection, territoryId)) return 'attack';
+    if (selection !== null && isLegalAttack(board, selection, territoryId)) return 'attack';
 
-    const node = state.nodes.get(territoryId);
+    const node = board.nodes.get(territoryId);
     const mine = node?.owner === humanPlayerId;
     // Somebody else's ground, ground of yours too thin to attack from, or the
     // one already held — none of them can be picked up, so the tap is only
@@ -269,6 +296,7 @@ export function createGame({
   function finishAttack() {
     state = pending;
     pending = null;
+    countdown = 0; // it can be brought forward (see `canFastForward`), so this is not always ~0
     cancelable = null;
 
     emit('resolved', state);
@@ -460,7 +488,16 @@ export function createGame({
      * that answer under the player's finger for a second before they let go.
      */
     clickTerritory(territoryId) {
-      switch (pressActionOn(territoryId)) {
+      const action = pressActionOn(territoryId);
+      if (!action) return undefined;
+
+      // The press was answered against the board the attack settles to, so
+      // that board has to actually be here before the answer is carried out.
+      // Landing it early is the whole of the fast-forward: nothing about the
+      // move changes, it simply stops being watched.
+      if (canFastForward()) finishAttack();
+
+      switch (action) {
         case 'attack':
           return performAttack(selection, territoryId);
         case 'select':

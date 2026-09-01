@@ -887,3 +887,73 @@ test('the attacker is back in hand before the cancel is announced', () => {
   game.cancelAttack();
   assert.deepEqual(order, ['selection:a', 'cancelled']);
 });
+
+// --- not waiting out an attack you have finished making --------------------
+
+// An attack past its cancel window is a thing the player is only *waiting* on:
+// the board it lands on is decided and already saved, and the animation is the
+// last second of a move they have finished making. Making them sit through it
+// to pick their next attacker is making them wait for nothing.
+test('a press during the wait lands the attack early and acts on the board it leaves', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  advance(game, cancelWindow(DEFAULT_TIMING) + 0.02); // past cancelling, still in the air
+  assert.ok(game.isBusy(), 'the dice have not come down');
+  assert.equal(game.state.nodes.get('b').owner, 'p2', 'and the board still shows the old owner');
+
+  // 'b' is about to become theirs with 3 dice, so it is a territory they can
+  // pick up — and pressing it says so before the dice have landed.
+  assert.equal(game.pressActionOn('b'), 'select');
+
+  game.clickTerritory('b');
+  assert.equal(game.isBusy(), false, 'the wait is over');
+  assert.equal(game.state.nodes.get('b').owner, 'p1', 'the attack went through in full');
+  assert.equal(game.selection, 'b', 'and the press did what it said it would');
+});
+
+test('the wait is skipped without changing a thing about the move', () => {
+  const played = (skip) => {
+    const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+    game.clickTerritory('a');
+    game.clickTerritory('b');
+    advance(game, cancelWindow(DEFAULT_TIMING) + 0.02);
+    if (skip) game.clickTerritory('b');
+    else advance(game, attackDuration(DEFAULT_TIMING));
+    return boardOf(game.state);
+  };
+  assert.deepEqual(played(true), played(false));
+});
+
+// While the offer is still up a press means that and only that. Two readings
+// of one press is how a tap ends up doing the thing it was meant to stop.
+test('a press while the attack can still be cancelled cancels rather than skipping', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.clickTerritory('a');
+  game.clickTerritory('b');
+  assert.equal(game.pressActionOn('b'), null, 'nothing to press for — there is a cancel on offer');
+  assert.equal(game.cancelAttack(), true);
+  assert.equal(game.state.nodes.get('b').owner, 'p2');
+});
+
+// A payout is the turn ending, and there is nothing for the player to do into
+// it — so it is the one wait that is still a wait.
+test('a payout cannot be pressed through', () => {
+  const game = createGame({ world: balanced(), rollDie: alwaysRolls(6) });
+
+  game.endTurn();
+  assert.ok(game.isBusy(), 'the dice are landing');
+  assert.equal(game.pressActionOn('a'), null);
+  assert.equal(game.pressActionOn('c'), null);
+});
+
+test('an AI attack is not something the player can press through either', () => {
+  const game = createGame({ world: balanced(), humanPlayerId: 'p1', rollDie: alwaysRolls(6) });
+
+  game.endTurn();
+  advance(game, 1.2);
+  assert.ok(game.isBusy(), 'the AI is mid-attack');
+  assert.equal(game.pressActionOn('a'), null, 'it is not the player’s turn to be waiting through');
+});

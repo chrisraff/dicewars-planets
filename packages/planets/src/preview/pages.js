@@ -106,6 +106,14 @@ export const PREVIEW_PAGES = [
       + 'often each of the two leaves a planet that is a cap of land facing a cap of ocean.',
   },
   {
+    href: '/preview/attack.html',
+    title: 'Throwing, cancelling, skipping',
+    description:
+      'A real board that refills itself, so a throw can be watched as many times as it takes: '
+      + 'the bounce, the beat the defender lands behind by, the cancel and its draining ×, and '
+      + 'pressing through the wait once it has gone. Stagger and bounce height on sliders.',
+  },
+  {
     href: '/preview/replay-perf.html',
     title: 'Replay storage & timing',
     description:

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cancelWindow,
+  staggerOf,
   firstLandingAt,
   groundedAt,
   touchdownAt,
@@ -23,9 +24,50 @@ test('the beats run aim, roll, read, done, in that order', () => {
   assert.deepEqual(phases, ['aim', 'aim', 'roll', 'read', 'done']);
 });
 
-test('duration is the three beats back to back', () => {
-  assert.equal(attackDuration(), T.aim + T.roll + T.read);
-  assert.equal(attackDuration({ aim: 1, roll: 2, read: 3 }), 6);
+test('duration is the beats back to back, plus the beat the defender runs behind', () => {
+  assert.equal(attackDuration(), T.aim + T.roll + T.read + T.stagger);
+  assert.equal(attackDuration({ aim: 1, roll: 2, read: 3 }), 6, 'no stagger, nothing added');
+  assert.equal(attackDuration({ aim: 1, roll: 2, read: 3, stagger: 0.5 }), 6.5);
+});
+
+// --- the two halves of a fight, one after the other ------------------------
+
+// A fight has two halves and they are not equal: the attacker's total is a
+// number and the defender's is the answer. The beat between them is what turns
+// a sum into a result — landing both at once makes the reader do the reading
+// and the subtraction in the same moment.
+test('the defender’s dice have not moved while the attacker’s are being thrown', () => {
+  const stagger = staggerOf(T);
+  assert.ok(stagger > 0, 'the player’s own fight is the one worth dramatising');
+
+  // What the defender's dice are doing is the attacker's clock, run back.
+  const defender = (t) => sampleAttack(t - stagger, T);
+  assert.equal(defender(0).lift, 0);
+  assert.equal(defender(stagger / 2).travel, 0, 'still stacked while the attacker is in the air');
+  assert.equal(defender(T.aim).spin, 0);
+  assert.ok(sampleAttack(T.aim + T.roll * 0.3, T).lift > 0, 'which the attacker’s plainly are not');
+});
+
+test('the attacker comes to rest a whole beat before the defender does', () => {
+  const stagger = staggerOf(T);
+  const settles = T.aim + T.roll;
+
+  assert.equal(sampleAttack(settles, T).settle, 1, 'the attacker is read first');
+  assert.ok(sampleAttack(settles - stagger, T).settle < 1, 'and the defender is a beat behind');
+  assert.ok(
+    Math.abs(attackDuration(T) - stagger - (settles + T.read)) < 1e-9,
+    'which is what makes the whole throw a beat longer'
+  );
+});
+
+// The stagger cannot cost anything in safety, and the shape of that argument
+// matters more than the number: the attacker's dice are untouched, so the
+// earliest anything can be read is exactly where it was — and the *outcome*,
+// which needs both halves, now arrives strictly later than it used to.
+test('running the defender late does not move the cancel window', () => {
+  const withoutStagger = { ...T, stagger: 0 };
+  assert.equal(cancelWindow(T), cancelWindow(withoutStagger));
+  assert.equal(sampleAttack(cancelWindow(T), T).settle, 0);
 });
 
 test('nothing moves before the dice are thrown', () => {

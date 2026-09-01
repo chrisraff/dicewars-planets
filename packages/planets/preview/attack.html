@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — throwing, cancelling, skipping</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Throwing, cancelling, skipping</h1>
+      <p class="lede">
+        A real board that refills itself, so an attack can be thrown as many times as it takes
+        to judge one. The throw is the hardest thing in the game to catch in a match — it lasts
+        two seconds, it needs a fight to happen at all, and the interesting half of it is over in
+        under one — so the numbers that shape it are on sliders beside it.
+      </p>
+      <p class="lede">
+        Tap one of your territories and then a neighbour, exactly as in the game.
+        <strong>While the × is up</strong>, a tap anywhere calls the attack off and the toast says
+        so; dragging turns the planet and never cancels.
+        <strong>Once it has gone</strong>, a tap on a territory you are about to own skips the
+        rest of the throw and picks it up, so you never wait out a move you have finished making.
+      </p>
+      <p class="siblings"><a href="/preview/">&larr; All previews</a></p>
+      <div id="scenarios"></div>
+    </main>
+    <script type="module" src="/src/preview/attack.js"></script>
+  </body>
+</html>
