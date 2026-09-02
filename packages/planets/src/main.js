@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createViewer } from './render/createViewer.js';
 import { createDiePipMaterials } from './render/diceTextures.js';
 import { createMenu } from './render/menu.js';
+import { createMenuBackdrop } from './render/menuBackdrop.js';
 import { createExplainer } from './render/explainer.js';
 import { createSession } from './game/session.js';
 import { createSelectHandler } from './render/selectPress.js';
@@ -20,6 +21,11 @@ const viewer = createViewer(canvas);
 const pipMaterials = createDiePipMaterials();
 
 let session = null;
+// The planet behind the title screen, and only ever that: it is built when the
+// game opens with nothing to pick up, and thrown away for good the moment
+// there is a match to put in the scene instead. Every menu after that one has
+// a real game behind it.
+let backdrop = null;
 // Whether this player has already been shown how to attack. Held here rather
 // than re-read per game, so dismissing it in one match settles it for the next
 // one too — the write is only there to settle it for the next *visit*.
@@ -27,6 +33,12 @@ let attackHintSeen = readSeenHints(window.localStorage).has(ATTACK_HINT);
 
 function startGame(settings, saved = null) {
   session?.dispose();
+  // before the session, which frames the planet it is about to build: the
+  // backdrop leaves the camera looking at an offset frame, and a match has to
+  // start from one with the planet in the middle of it.
+  backdrop?.dispose();
+  backdrop = null;
+
   session = createSession({
     viewer,
     hudRoot,
@@ -78,6 +90,10 @@ const menu = createMenu(menuRoot, {
 if (savedGame) {
   startGame(savedGame.settings, savedGame);
 } else {
+  // Built before the menu is shown rather than a frame after it, so the title
+  // screen arrives whole. It costs about 35ms — a world and a few rounds of a
+  // match — against a page that has nothing else to do with them.
+  backdrop = createMenuBackdrop({ viewer, pipMaterials });
   menu.show(resolveSettings({ search: location.search, storage: window.localStorage }));
 }
 
@@ -107,6 +123,10 @@ function animate() {
 
   // the planet keeps turning behind the menu, but nothing plays out on it
   if (session && !menu.isOpen()) session.tick(dt);
+  // the title screen's own planet, which is all spin and no game — so unlike
+  // the session it goes on turning while the menu is open, which is the only
+  // time it exists
+  backdrop?.tick(dt);
   viewer.render();
 }
 animate();

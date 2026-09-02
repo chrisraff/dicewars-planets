@@ -64,22 +64,33 @@ export function narrowHalfFov(fovDegrees, aspect) {
 }
 
 /**
- * How far from the planet's center the camera has to sit for the whole planet
- * to be in frame, bar `shave` of its radius off each edge.
+ * How far from the planet's center the camera has to sit for its silhouette to
+ * come out `fraction` as wide as the frame `halfFov` measures.
  *
  * The silhouette of a unit sphere seen from `distance` is a circle of angular
  * radius `asin(1 / distance)` — the tangent cone. Perspective puts screen
  * offsets in proportion to `tan`, so disc and frame compare directly:
- * `tan(asin(1 / distance))` against `tan(halfFov)`, with the frame covering
- * `1 - shave` of the disc. This solves that for the distance.
+ * `tan(asin(1 / distance))` against `tan(halfFov)`. This solves that for the
+ * distance, and is the one piece of trig behind both of the answers below:
+ * framing the whole planet is asking for a disc a shave over the frame, and
+ * the menu's backdrop is asking for one a good deal under it.
  *
- * It grows without bound as `halfFov` narrows, so the caller still clamps it
- * to what the controls allow.
+ * It grows without bound as the frame narrows or the disc shrinks, so the
+ * caller still clamps it to what the controls allow.
+ */
+export function distanceForDisc(fraction, halfFov) {
+  return 1 / Math.sin(Math.atan(Math.tan(halfFov) * fraction));
+}
+
+/**
+ * How far from the planet's center the camera has to sit for the whole planet
+ * to be in frame, bar `shave` of its radius off each edge — so the disc comes
+ * out fractionally *wider* than the frame, and the two slivers of limb at the
+ * left and right edges are given up.
  */
 export function framingDistance(halfFov, shave = DEFAULT_FRAMING.shave) {
   const covered = 1 - Math.min(0.95, Math.max(0, shave));
-  const apparent = Math.atan(Math.tan(halfFov) / covered);
-  return 1 / Math.sin(apparent);
+  return distanceForDisc(1 / covered, halfFov);
 }
 
 /**

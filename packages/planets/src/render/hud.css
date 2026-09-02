@@ -1250,6 +1250,66 @@
 }
 #menu[hidden] { display: none; }
 
+/* ---- the title screen --------------------------------------------------
+
+   The menu with no match behind it — which is what somebody opening the game
+   for the first time gets, and the only screen in the game that is allowed to
+   be an advert for it. `menuBackdrop.js` puts a real planet part way through a
+   real match in the top right corner; this is the half that gets out of its
+   way.
+
+   So the blur goes and the scrim thins to a wash. The wash is not decoration:
+   the planet is saturated at full brightness, and the footer and the name are
+   white text laid over whatever colour happens to be turning past. The panel
+   itself needs none of it — it carries its own near-opaque background — which
+   is why this is as light as it is. */
+#menu.is-title {
+  background: rgba(4, 4, 8, 0.34);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The name, sharing the panel's own width so the two sit as one column, and
+   centred over it.
+
+   Centred on the block rather than on the window, which is the same thing here
+   only because the block is centred too — but it stays right if the column
+   ever moves. It has to be said explicitly: left-aligned, this is invisibly
+   wrong on a desktop and obviously wrong on a phone. At 26rem the title fills
+   its block to within 8px and reads as centred whatever it is; on a phone the
+   font floors at the bottom of its clamp while the block is still the full
+   width, and the 100px of slack all lands on one side.
+
+   Hidden outright when there is a game behind the menu — there the name is
+   the panel's own heading, said once and quietly. Exactly one of the two is
+   ever `display: block`, which is also what keeps one of the two `h1`s out of
+   the accessibility tree.
+
+   Keyed on the class rather than on `#menu`, because the menu is also mounted
+   somewhere else: `preview/menu.html` puts it in a stage of its own, and a
+   rule that only reached the overlay would leave that page drawing both
+   headings at once. The scrim below is the other half of this and is
+   deliberately not: that one really is about the overlay. */
+.menu-brand {
+  display: none;
+  width: min(26rem, 100%);
+  margin: 0 0 1.4rem;
+  text-align: center;
+}
+.is-title > .menu-brand { display: block; }
+.is-title .menu-title { display: none; }
+
+.menu-brand h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 7vw, 3rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  /* the same bargain the corner line makes: a glow, so it stays readable over
+     a planet that is moving underneath it */
+  text-shadow: 0 0.1rem 1.4rem rgba(0, 0, 0, 0.85), 0 0 0.4rem rgba(0, 0, 0, 0.6);
+}
+
 .menu-panel {
   width: min(26rem, 100%);
   box-sizing: border-box;

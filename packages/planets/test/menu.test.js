@@ -165,6 +165,18 @@ test('a first visit offers one way on, and it leads', () => {
   assert.equal(actions.focus, 'start');
 });
 
+test('the menu wears the name exactly when there is no match behind it', () => {
+  // The title screen is the first thing anybody sees of the game, and the one
+  // menu with a planet of its own behind it rather than a match to cover up.
+  assert.equal(menuActionsView().brand.hidden, false, 'opened cold');
+  assert.equal(menuActionsView({ canContinue: true }).brand.hidden, false, 'and with a save');
+  assert.equal(
+    menuActionsView({ canResume: true }).brand.hidden,
+    true,
+    'but not over a game in progress — the name has been said, and the board wants covering'
+  );
+});
+
 test('a saved game is what the menu leads with, and starting over steps aside', () => {
   const actions = menuActionsView({ canContinue: true });
 

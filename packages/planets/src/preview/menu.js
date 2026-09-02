@@ -65,8 +65,10 @@ function addScenario({
 }
 
 addScenario({
-  title: 'Opening the game',
-  note: 'What you get on a first visit: no game to go back to, so the only way on is forward.',
+  title: 'Opening the game — the title screen',
+  note: 'What you get on a first visit: no game to go back to, so the only way on is forward, '
+    + 'and the menu wears the name rather than hiding it in the panel. In the game a planet part '
+    + 'way through a match sits behind this, in the top right corner — see menuBackdrop.js.',
   settings: DEFAULT_SETTINGS,
 });
 
@@ -145,10 +147,14 @@ const list = summary.querySelector('.option-list');
 for (const setting of MENU_SETTINGS) {
   const item = document.createElement('li');
   const state = setting.available ? 'available' : `unavailable — ${setting.note}`;
+  // The seat row is the one that carries `modes` rather than `choices`, since
+  // its values are the ranges *plus* any one seat. Read as `choices` it threw
+  // here and took the rest of the summary — including itself — down with it.
+  const labels = (list) => list.map((choice) => choice.label).join(', ');
   const values =
-    setting.kind === 'toggle'
-      ? 'on / off'
-      : setting.choices.map((choice) => choice.label).join(', ');
+    { toggle: () => 'on / off', seat: () => `${labels(setting.modes)}, or any one seat` }[
+      setting.kind
+    ]?.() ?? labels(setting.choices);
 
   item.innerHTML = '<b></b> <i></i><br><span></span>';
   item.querySelector('b').textContent = setting.label;

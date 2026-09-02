@@ -4,6 +4,7 @@ import {
   DEFAULT_FRAMING,
   clusterAim,
   clusterFocus,
+  distanceForDisc,
   fightCenter,
   framingDistance,
   framingOf,
@@ -333,6 +334,17 @@ test('a portrait phone is framed by its width, a landscape desktop by its height
   const vertical = Math.PI / 8;
   assert.ok(narrowHalfFov(45, PHONE) < vertical, 'upright, the sides are what run out first');
   assert.equal(narrowHalfFov(45, DESKTOP), vertical, 'wide, the vertical fov is already the tighter');
+});
+
+test('distanceForDisc stands the camera where the disc comes out the asked-for size', () => {
+  // The menu's backdrop asks for a disc well under the frame, which is the end
+  // of the range `framingDistance` never visits — it only ever asks for one a
+  // shave over.
+  for (const fraction of [0.3, 0.9, 1, 1.08]) {
+    const halfFov = narrowHalfFov(45, DESKTOP);
+    const fill = discFill(distanceForDisc(fraction, halfFov), halfFov);
+    assert.ok(Math.abs(fill - fraction) < 1e-9, `asked for ${fraction}, drew ${fill}`);
+  }
 });
 
 test('the planet is framed with exactly the shave hanging off each edge', () => {

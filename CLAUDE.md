@@ -1805,6 +1805,112 @@ rng pinned, so where those dice land is genuinely where the game scatters them
 — including onto the two stranded territories that earned none of them, which
 is the entire point of the picture.
 
+### The title screen
+
+The menu with no match behind it, which is what somebody opening the game for
+the first time gets — and until now was a settings dialog over a black screen.
+`menuActionsView` decides it (`brand`), and it is the same question the rest of
+that function asks: a menu with nothing to resume has no board to cover up, so
+it wears the name and lets what is behind it through. From inside a match it is
+the ordinary dialog, blur and all, and the name goes back to being the panel's
+own quiet heading.
+
+`menuBackdrop.js` is what is behind it: **a real planet, generated and played
+rather than drawn.** The alternative is a committed picture, and
+`EXPLAINER_CAPTURES` is the record of what that costs — a file that goes stale
+silently the day the generator or the renderer moves, on the one screen
+everybody sees first. It costs about 35ms: 20ms to grow a world and under 15ms
+to play it, once, on the open that has nothing else to do. Nothing in it is
+seeded, deliberately — the board is never saved, replayed or looked at twice,
+so a seed would be a number kept for nobody, and a different planet every visit
+is the one claim a title screen is really making.
+
+Four decisions in it are worth keeping.
+
+**It is placed by skewing the frustum rather than by moving the camera.**
+Wherever the planet is asked to sit, the camera goes on looking straight at it
+and `camera.setViewOffset` renders an offset window of a larger frustum. Moving
+the camera instead would have lit it differently and foreshortened it — the
+lights are aimed off the camera (`lightRig.js`), and every framing decision the
+game makes assumes the planet is in the middle of the frame, which is why
+`dispose` clears the offset *before* a session frames the planet it is about to
+build.
+
+**Where it sits is two numbers**: its middle on the right edge of the window,
+the top of it `top` of the way down, and the furthest left it comes in frame at
+`reach` across the page. The same two whichever way the window is turned — what
+differs is their values, `wide` against `tall`.
+
+`top` is the one both windows have to honour, and it is why `reach` can be
+negative. `wide` is a planet rising out of the bottom right corner, a quarter of
+the way down and half of the way across. `tall` is a much bigger planet: a panel
+the full width of the window leaves only the band above it and the band below,
+and what fills those is a planet that runs *past* the left edge rather than
+stopping short of it. It still has to crest under the top of the screen — the
+top of a globe is most of what says it is one, and a disc overrunning the top
+edge as well as the bottom is a coloured wall — and it crests far higher than
+landscape's quarter, because the band between the title and the panel is the
+only clear sky a phone has. On the shortest phone there is, nothing is left over
+to centre the panel in and it starts about 70px down, so a crown much below that
+is behind it and a quarter of the way down is behind it on every phone.
+
+**The radius is solved for rather than picked** (`radiusReaching`), because a
+radius that looks right on 16:9 is a different fraction of the next window:
+chosen for a desktop it reaches nothing like halfway on an ultrawide and a third
+of the way on a 4:3, so the two things being asked for would only hold at one
+aspect.
+
+It is **two cases, and which applies is geometry rather than orientation.** A
+disc is widest at its own middle, so normally the leftmost point in frame is
+simply the radius left of the right edge — that is the portrait answer, and it
+is what lets a negative reach mean anything at all. But a planet big enough to
+put that middle below the bottom of the window is never seen at its widest: the
+furthest left it gets in shot is where its edge crosses the bottom edge, and it
+takes a *larger* radius to reach as far. That is the landscape answer, and it is
+the sagitta relation on the two points the numbers name. `distanceForDisc` in
+`cameraFraming.js` is how far back either puts the camera — the same trig
+`framingDistance` was already doing, now said once and used from both ends of
+its range.
+
+That radius is then **read back off the distance rather than used as asked**,
+because `nearest` can refuse it. `wide` is a statement about the width and the
+frame is a fixed lens, so a window wide enough asks the camera closer than the
+orbit controls will go (`minDistance`, 1.5) — an ultrawide asks for 1.22, where
+the horizon is 35° off and there is barely a handful of territories in shot. A
+16:9 window sits at 1.67, so nothing ordinary is touched; past about 1.9:1 the
+planet quietly stops growing. Placing from the radius that will actually be
+*drawn* is what keeps the anchor honest there: placing from the one that was
+wanted gives a clamped window a planet both smaller and sitting lower than the
+anchor says.
+
+**Which way round it starts is searched for** (`aimSpin`), because the corner
+this is framed in shows a fifth of the planet at most, and two things can go
+wrong with a fifth taken at random. Two fifths of a planet is ocean, so an
+unaimed backdrop deals a dark blue basin often enough to matter. And by the
+time a leader holds a third of the planet — which is where `lead` stops the
+match, "midway" being a property of the picture rather than a count of turns —
+they can hold the whole of the visible face, and a face that is one empire
+wall to wall says nothing about a planet being fought over. The blue player's
+does not even read as land. So `faceScore` is the sum of the square roots of
+what each player holds in frame: steep where somebody has a territory or two
+and flat where they have plenty, so a second colour is worth more than a tenth
+territory of the first. It is a search rather than an aim point because the
+window is a corner of the frame rather than a cone about the view axis — there
+is no direction to average towards that means "in shot" here.
+
+It turns slowly, about three and a half minutes to the revolution, which is
+also slow enough that the face `aimSpin` picked is still most of what is on
+screen for as long as anybody is looking. Reduced motion stops it outright
+rather than slowing it, on `fireworks.js`'s argument rather than
+`turnFlash.js`'s: this says nothing, so it is safe to simply not show.
+
+One thing about the CSS. The title-screen rules are keyed on `.is-title`
+itself rather than on `#menu.is-title`, because the menu is mounted somewhere
+else too — `preview/menu.html` puts it in a stage of its own, and a rule that
+only reached the overlay would have that page drawing both headings at once.
+The scrim is the exception and is keyed on the id, because that one really is
+about the overlay.
+
 ## Rendering conventions
 
 - The planet mesh gives each cell its own private vertices so a cell can carry

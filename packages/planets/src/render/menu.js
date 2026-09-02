@@ -100,9 +100,16 @@ export function menuView(settings, definitions = MENU_SETTINGS) {
  * previous visit, with nothing running yet; that is what the player almost
  * certainly came back for, so it takes the primary look and the focus, and
  * starting a new game steps down to being the other option on the row.
+ *
+ * `brand` is the title screen, and it is the same question asked a third way:
+ * a menu with no match behind it is the first thing somebody sees of the game,
+ * so it wears the name and lets the planet through. A menu opened *from* a
+ * match is a dialog over a game in progress — the name has already been said,
+ * and what is behind it wants covering rather than showing off.
  */
 export function menuActionsView({ canResume = false, canContinue = false } = {}) {
   return {
+    brand: { hidden: canResume },
     resume: { hidden: !canResume },
     continue: { hidden: !canContinue },
     start: {
@@ -124,6 +131,7 @@ export function menuActionsView({ canResume = false, canContinue = false } = {})
  */
 export function createMenu(root, { onStart, onResume, onContinue, onExplain } = {}) {
   root.innerHTML = `
+    <div class="menu-brand"><h1>Dice Wars Planets</h1></div>
     <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Game setup">
       <h1 class="menu-title">Dicewars Planets</h1>
       <div class="menu-settings"></div>
@@ -330,6 +338,11 @@ export function createMenu(root, { onStart, onResume, onContinue, onExplain } = 
       refresh();
 
       const actions = menuActionsView({ canResume, canContinue });
+      // The title screen, which is the whole dress rather than one element:
+      // the name over the planet, and a scrim thin enough to see it through.
+      // Exactly one of the two headings is ever drawn — the other is
+      // `display: none`, so it is out of the accessibility tree too.
+      root.classList.toggle('is-title', !actions.brand.hidden);
       resumeButton.hidden = actions.resume.hidden;
       continueButton.hidden = actions.continue.hidden;
       startButton.textContent = actions.start.label;
