@@ -130,6 +130,22 @@ export const PREVIEW_PAGES = [
       + 'after the renderer moves gives back the same pictures.',
   },
   {
+    href: '/preview/gif.html',
+    title: 'A match as a GIF',
+    description:
+      'A real match played by the real AI and encoded to an animated GIF — one camera, one frame '
+      + 'a turn, no roll animation. Players, difficulty, length, rate and size on knobs, with the '
+      + 'preview playing at the rate the file will.',
+  },
+  {
+    href: '/preview/stills.html',
+    title: 'Stills',
+    description:
+      'A planet filling the window with a whole match to scrub through, for finding a shot worth '
+      + 'screenshotting: two seeds to deal a planet and a fight over it, a turn scrubber, and H to '
+      + 'put every control away.',
+  },
+  {
     href: '/preview/replay-perf.html',
     title: 'Replay storage & timing',
     description:

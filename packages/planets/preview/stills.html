@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Dicewars Planets — stills</title>
+    <link rel="stylesheet" href="/src/render/hud.css" />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body class="is-fullscreen">
+    <canvas id="planet"></canvas>
+
+    <div id="panel" class="stills-panel">
+      <div class="fields"></div>
+      <input id="track" type="range" min="0" max="1" step="1" value="0" />
+      <div class="buttons"></div>
+      <pre id="readout"></pre>
+      <p class="hint">
+        Drag to turn the planet, scroll to zoom. Arrow keys step a turn.
+        <strong>H</strong> hides this. <a href="/preview/">All previews</a>
+      </p>
+    </div>
+
+    <script type="module" src="/src/preview/stills.js"></script>
+  </body>
+</html>

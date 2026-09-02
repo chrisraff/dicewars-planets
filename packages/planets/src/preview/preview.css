@@ -440,3 +440,86 @@ h1 {
   aspect-ratio: 3 / 2;
   max-width: 30rem;
 }
+
+/* ---- the stills rig ---------------------------------------------------
+
+   The one preview with no page around it: a planet filling the window, and a
+   panel of controls over it that goes away with `H`. Everything here exists to
+   find a shot the operating system will take — so the furniture has to be able
+   to leave, and the planet has to own the whole viewport while it does. */
+body.is-fullscreen {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+body.is-fullscreen > #planet {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  touch-action: none;
+}
+
+.stills-panel {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.6rem;
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 0.9rem 1rem;
+  box-sizing: border-box;
+  border: 1px solid #26262e;
+  border-radius: 0.5rem;
+  background: rgba(12, 12, 16, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.stills-panel.is-hidden { display: none; }
+
+.stills-panel > .fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  color: #a7a7b0;
+}
+.stills-panel > .fields label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.stills-panel > .fields input,
+.stills-panel > .fields select {
+  font: inherit;
+  width: 5.5rem;
+  padding: 0.2rem 0.35rem;
+  color: #e8e8ee;
+  background: #16161b;
+  border: 1px solid #32323c;
+  border-radius: 0.25rem;
+}
+.stills-panel > .fields select { width: auto; }
+
+/* The scrubber is the main control on the page, so it gets the full width */
+.stills-panel > #track { width: 100%; }
+
+.stills-panel > .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.stills-panel > #readout {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #a7a7b0;
+}
+.stills-panel > .hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #85858e;
+}

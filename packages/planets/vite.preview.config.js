@@ -20,6 +20,8 @@ const PAGES = [
   'attack',
   'explainer',
   'figures',
+  'gif',
+  'stills',
 ];
 
 /**

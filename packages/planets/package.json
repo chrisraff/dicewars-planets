@@ -18,6 +18,7 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "gifenc": "^1.0.3",
     "vite": "^8.2.1"
   }
 }
