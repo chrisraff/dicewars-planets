@@ -2046,7 +2046,24 @@ from the game is worse than none.
 **Previews are never deployed.** `npm run build` puts the site in `dist/`,
 asserts nothing preview-shaped got in (and that `index.html` is the only page),
 then compiles the previews separately into `dist-preview/` purely so a break
-fails the build. Point GitHub Pages at `dist/`.
+fails the build.
+
+`dist/` is what gets published, and **pushing to `main` publishes it** — the
+`deploy` job in `.github/workflows/ci.yml`, which runs after the tests and the
+build and uploads the artifact that build made rather than building a second
+time, so the bytes served are the bytes checked. The repository's Pages source
+has to be *GitHub Actions* rather than a branch.
+
+The site's `base` is **relative** (`./`), so one build works at the root of a
+domain and under a repository path — a project site is served from
+`/dicewars-planets/`, where a root-absolute asset URL resolves off the top of
+the domain instead. Hard-coding that path would break on a custom domain, and
+would make a local build differ from the deployed one. What it costs is one
+rule: **anything reaching for a file by URL goes through
+`import.meta.env.BASE_URL`, never a leading slash.** `explainer.js`'s pictures
+are the only place in the game that does, and the failure if that regresses is
+the quiet kind — every capture 404s and the document draws its "capture
+pending" boxes on a deployment that has the files.
 
 ## Testing style
 

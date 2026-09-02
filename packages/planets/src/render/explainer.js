@@ -415,13 +415,30 @@ const BUILDERS = {
  * rather than to a fresh one. It opens from the menu, over the menu, and the
  * planet keeps turning behind both.
  */
+/**
+ * Where the pictures live, which is the one place in the game that asks the
+ * server for a file by URL.
+ *
+ * Written against where the site is *served from* rather than as
+ * `/explainer`, because a GitHub Pages project site sits under the repository
+ * name and a leading slash resolves off the top of the domain instead. The
+ * failure that causes is the quiet kind this document is already built to
+ * survive: every picture 404s and the page draws its "capture pending" boxes,
+ * on a deployment that has the files.
+ *
+ * `import.meta.env` is Vite's and does not exist under plain `node --test`,
+ * where this module is imported for `EXPLAINER_SECTIONS` — hence the fallback
+ * rather than a bare read.
+ */
+const CAPTURE_BASE = `${import.meta.env?.BASE_URL ?? '/'}explainer`;
+
 export function createExplainer(
   root,
   // `captureBase` is where the pictures live, and it is an argument only so
   // the preview can point it at nothing and show what a clone without them
   // looks like. That state is the one worth being able to see: the pictures
   // are committed files, and the document has to hold up before they arrive.
-  { onClose, sections = EXPLAINER_SECTIONS, captureBase = '/explainer' } = {}
+  { onClose, sections = EXPLAINER_SECTIONS, captureBase = CAPTURE_BASE } = {}
 ) {
   root.innerHTML = `
     <div class="explainer-panel" role="dialog" aria-modal="true" aria-label="How the game works">

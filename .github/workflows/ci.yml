@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# One deploy at a time. A newer commit supersedes one still queued, but a run
+# that has already started publishing is never cancelled — half a deploy is a
+# site with mismatched assets.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -26,3 +33,33 @@ jobs:
       # rather than at deploy time.
       - name: Build
         run: npm run build
+
+      # Carried to the deploy job rather than built again there, so what gets
+      # published is the same bytes the checks above just passed on. Only for
+      # a push to main — a pull request builds to prove it can, and publishes
+      # nothing.
+      - name: Package the site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/planets/dist
+
+  # Publishes to GitHub Pages. This needs the repository's Pages source set to
+  # "GitHub Actions" (Settings -> Pages); with the default "Deploy from a
+  # branch" it fails here rather than silently serving something else.
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write # to publish
+      id-token: write # to prove to Pages that this run is the one that built it
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

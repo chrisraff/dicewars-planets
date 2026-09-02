@@ -19,8 +19,26 @@ npm run build    # site -> dist/, plus the guards and the preview pages
 
 `npm run build` does four things in order: the conventions lint, the site
 build, a check that nothing preview-shaped leaked into `dist/`, and a separate
-compile of the preview pages so that breaking one fails the build. **Point
-GitHub Pages at `dist/`** — the previews are never deployed.
+compile of the preview pages so that breaking one fails the build. The
+previews are never deployed.
+
+## Deploying
+
+Pushing to `main` publishes to GitHub Pages, from the `deploy` job in
+`.github/workflows/ci.yml`. It runs only after the tests and the build pass,
+and publishes the artifact that build produced rather than building again — so
+what is served is the bytes that were checked. Pull requests build, and publish
+nothing.
+
+It needs the repository's **Settings → Pages → Source** set to *GitHub
+Actions*; on the default *Deploy from a branch* the job fails rather than
+quietly serving something else.
+
+The site is built with a relative `base`, so the same output works at the root
+of a domain and under a repository path
+(`chrisraff.github.io/dicewars-planets/`). Anything that fetches a file by URL
+has to go through `import.meta.env.BASE_URL` rather than writing a leading
+slash — `explainer.js` and its pictures are the only place that does.
 
 ## Layout
 
