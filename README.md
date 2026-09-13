@@ -1,5 +1,7 @@
 # Dice Wars Planets
 
+## [Click here to play!](https://chrisraff.com/dicewars-planets)
+
 Dice Wars played on a sphere: a procedurally generated planet of hexagonal
 territories, rendered with three.js.
 
