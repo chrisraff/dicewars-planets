@@ -49,15 +49,42 @@ export function pipDimpleNormal(dx, dy, radius) {
   };
 }
 
-function newFaceCanvas(size) {
+/**
+ * A texture whose pixels are held in JavaScript rather than in a canvas.
+ *
+ * A `CanvasTexture` keeps no copy of its own: the canvas *is* the texture, and
+ * three.js goes back to it whenever it has to upload again. That happens after
+ * a lost WebGL context is restored, which a mobile browser does to a page left
+ * in the background for a while. The browser can also throw away a background
+ * page's 2D canvas pixels, which leaves the canvas transparent black. When
+ * both happen, the re-upload reads a blank canvas, so every die comes back
+ * black while the planet looks fine, because its colours are in a typed array.
+ * A typed array is never thrown away, so the re-upload gets the pixels it got
+ * the first time. It is not a canvas that has to be caught being blanked and
+ * redrawn.
+ *
+ * `DataTexture`'s defaults suit a lookup table: nearest filtering, no mipmaps,
+ * not flipped. Each is set back to what `CanvasTexture` had, so a die looks
+ * exactly as it did.
+ */
+function pixelTexture(data, size, colorSpace) {
+  const texture = new THREE.DataTexture(data, size, size);
+  texture.colorSpace = colorSpace;
+  texture.flipY = true;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// Still drawn on a canvas, since that is what anti-aliases the pips. The
+// canvas is only borrowed to draw on: the pixels are read back out and the
+// canvas is dropped (see `pixelTexture`).
+function drawDieFace(pipCount, size, face, ink) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
-  return canvas;
-}
-
-function drawDieFace(pipCount, size, face, ink) {
-  const canvas = newFaceCanvas(size);
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = rgb(face);
@@ -71,23 +98,20 @@ function drawDieFace(pipCount, size, face, ink) {
     ctx.fill();
   }
 
-  return canvas;
+  return new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer);
 }
 
 // The same face as a tangent-space normal map, so the pips are lit as the
 // hollows they are instead of as ink printed on a flat side.
 //
-// Canvas y runs downward while a normal map's green channel runs up the
-// texture — but three.js uploads a canvas flipped, so a row drawn near the
-// top of the canvas is a row near the top of the face, and the two cancel.
+// Rows are written top-down, the way a canvas is, while a normal map's green
+// channel runs up the texture. The texture is uploaded flipped (`flipY`), so
+// the first row written ends up at the top of the face, and the two cancel.
 // What that leaves is one negation, on the way *in*: the offset handed to
 // `pipDimpleNormal` is flipped into the face's own upward frame, and the
 // normal that comes back is encoded as it stands.
 function drawDieFaceNormals(pipCount, size) {
-  const canvas = newFaceCanvas(size);
-  const ctx = canvas.getContext('2d');
-  const image = ctx.createImageData(size, size);
-  const data = image.data;
+  const data = new Uint8Array(size * size * 4);
 
   // Flat everywhere the pips aren't: straight out of the face.
   for (let i = 0; i < data.length; i += 4) {
@@ -122,8 +146,7 @@ function drawDieFaceNormals(pipCount, size) {
     }
   }
 
-  ctx.putImageData(image, 0, 0);
-  return canvas;
+  return data;
 }
 
 // Generates the six pip-face textures once and returns them as a
@@ -137,13 +160,19 @@ export function createDiePipMaterials(options = {}) {
   const { textureSize = 128, face = DIE_FACE, ink = DIE_INK } = options;
   const facePips = [1, 6, 2, 5, 3, 4];
   return facePips.map((pips) => {
-    const texture = new THREE.CanvasTexture(drawDieFace(pips, textureSize, face, ink));
-    texture.colorSpace = THREE.SRGBColorSpace;
+    const texture = pixelTexture(
+      drawDieFace(pips, textureSize, face, ink),
+      textureSize,
+      THREE.SRGBColorSpace
+    );
 
     // A normal map is geometry written down as color, so it stays linear —
     // pushed through sRGB it would decode to the wrong directions entirely.
-    const normalMap = new THREE.CanvasTexture(drawDieFaceNormals(pips, textureSize));
-    normalMap.colorSpace = THREE.NoColorSpace;
+    const normalMap = pixelTexture(
+      drawDieFaceNormals(pips, textureSize),
+      textureSize,
+      THREE.NoColorSpace
+    );
 
     return new THREE.MeshStandardMaterial({ map: texture, normalMap, roughness: 0.5 });
   });
