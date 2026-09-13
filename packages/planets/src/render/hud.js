@@ -487,14 +487,16 @@ export function createHud(
     </div>
     <div class="hud-controls">
       <div class="hud-toast" role="status" hidden></div>
-      <div class="hud-auto-follow" hidden>
-        <button class="hud-auto-follow-button" type="button">${CAMERA_ICON}Auto-follow</button>
-      </div>
       <div class="hud-hint" role="status" hidden>
         <p class="hud-hint-text"></p>
         <button class="hud-hint-close" type="button" aria-label="Dismiss">×</button>
       </div>
-      <div class="hud-reinforce" hidden aria-hidden="true"></div>
+      <div class="hud-shelf">
+        <div class="hud-reinforce" hidden aria-hidden="true"></div>
+        <div class="hud-auto-follow" hidden>
+          <button class="hud-auto-follow-button" type="button">${CAMERA_ICON}Auto-follow</button>
+        </div>
+      </div>
       <div class="hud-controls-row">
         <span class="hud-turn"><i class="hud-dot"></i><span class="hud-turn-text"></span></span>
         <span class="hud-buttons">

@@ -1057,10 +1057,17 @@ half that can actually move a camera. The one rule that stays in `hud.js` is
 The part that needs care is giving it back, because a camera that has silently
 stopped following is indistinguishable from one that is broken. Hence
 `autoFollowButtonView` — an offer that goes up on the drag and stays up until
-it is answered, centred in the band above the controls where the hint sits
-left and the payout tray fills from the left, so it is the only thing in the
-middle. It is the recenter button a map offers once you have scrolled away
-from where you are driving.
+it is answered. It is the recenter button a map offers once you have scrolled
+away from where you are driving.
+
+It stays in one place: centred, directly on top of the controls row, sharing a
+grid cell (`.hud-shelf`) with the payout tray and drawn over it. It used to be
+a row of its own above the hint and the tray, so it rode up whenever either
+appeared and moved again every time a payout wrapped onto another line — a
+button that is somewhere different each time it is looked for. Covering a few
+chips of a payout that is gone within a second is the price. The cell is as
+tall as the taller of the two, so the hint and the toast above are pushed clear
+of both instead of being covered.
 
 **A replay follows too, so the offer is made there as well**, and the view
 answers *where* rather than just whether: `'replay'` seats it in the replay

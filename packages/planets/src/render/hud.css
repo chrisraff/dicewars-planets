@@ -627,16 +627,30 @@
    it, because the camera has stopped following the match and nothing else on
    the screen would say so.
 
-   Centred, and the only thing in this column that is: the hint sits left, the
-   payout tray fills from the left, the controls run the width of the row. A
-   button in the middle of an otherwise empty band is findable without being
-   loud, and it lands over the planet rather than over anything else it might
-   be mistaken for.
+   It has one place and stays there: centred, directly on top of the controls
+   row, whatever else is up. It used to be a row of its own in this column,
+   above the hint and the payout tray, so it jumped up whenever either one
+   appeared, and again every time a payout wrapped onto another line. A button
+   the player has to hunt for each time is only half of an offer.
+
+   So it shares a grid cell with the payout tray (`.hud-shelf`) and sits on top
+   of it. The tray grows upward from the same bottom line and runs underneath
+   the button, which hides a few chips of a payout that is gone within a
+   second. The cell is as tall as the taller of the two, so the hint and the
+   toast above are pushed clear of both instead of being covered. The button
+   comes after the tray in the markup, which is what draws it on top.
 
    Quieter than End turn on purpose — the same argument the Menu and Replay
    buttons make. The loud thing on this screen should be the move. */
+.hud-shelf { display: grid; }
+.hud-shelf > * { grid-area: 1 / 1; }
+/* Gone when neither is up: an empty item in a column with `gap` still gets a
+   gap, which would lift everything above it by half a rem for nothing. */
+.hud-shelf:has(> .hud-reinforce[hidden]):has(> .hud-auto-follow[hidden]) { display: none; }
+
 .hud-auto-follow {
-  align-self: center;
+  justify-self: center;
+  align-self: end;
   display: flex;
 }
 .hud-auto-follow[hidden] { display: none; }
@@ -783,6 +797,10 @@
   display: flex;
   flex-wrap: wrap-reverse;
   gap: 0.18rem;
+  /* It sits on the shelf's bottom line and grows upward from it, so one line
+     of chips shorter than the auto-follow button still sits on the controls
+     rather than floating at the top of the button's height. */
+  align-self: end;
 }
 .hud-reinforce[hidden] { display: none; }
 .hud-buttons {
