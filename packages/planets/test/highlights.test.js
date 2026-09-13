@@ -84,3 +84,16 @@ test('the pulse is a smooth throb that stays visible throughout', () => {
   assert.ok(Math.max(...samples) <= 1);
   assert.ok(Math.abs(pulseAt(0) - pulseAt(0.6)) < 1e-9, 'one beat per period');
 });
+
+// The moment an attack is declared is the moment the player finds out which
+// territory they actually hit, so a wrong one has to be unmistakable on the
+// very first frame. A throb that starts partway up its swell dims the target
+// the instant the finger lifts, then takes a sixth of a second to brighten.
+test('the defender starts the fight at its brightest', () => {
+  const beat = Array.from({ length: 600 }, (_, i) => pulseAt(i / 1000));
+  assert.ok(pulseAt(0) >= Math.max(...beat) - 1e-12, 'the first frame is the peak');
+  assert.ok(Math.abs(pulseAt(0) - 1) < 1e-12);
+
+  const marks = highlightsFor({ attack: { from: 1, to: 2 }, pulse: pulseAt(0) });
+  assert.ok(Math.abs(marks.get(2).amount - HIGHLIGHT.defender.amount) < 1e-12);
+});

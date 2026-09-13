@@ -19,7 +19,7 @@ const rgb = (color) => `rgb(${color.map((c) => Math.round(c * 255)).join(', ')})
  * a fact about when the work was made, so a machine with a wrong clock should
  * not be able to change it.
  */
-export const APP_VERSION = '0.0.0';
+export const APP_VERSION = '0.0.1';
 export const APP_COPYRIGHT = '© Chris Raff 2026';
 
 /**

@@ -67,6 +67,13 @@ export function highlightsFor({
 
 // A 0..1 throb, one beat per `period` seconds — never quite reaching 0, so a
 // highlighted territory never blinks all the way back to its plain color.
+//
+// A cosine, so a fight opens at the *peak* of the throb. The moment an attack
+// is declared is the moment the player finds out which territory they actually
+// hit, and a wrong one should be unmistakable on the first frame. A sine starts
+// halfway up its swell, which dimmed the target the instant the finger lifted —
+// the pressed mark is brighter than the swell's midpoint — and only brought it
+// back to full a quarter beat later.
 export function pulseAt(elapsed, period = 0.6) {
-  return 0.65 + 0.35 * Math.sin((elapsed / period) * 2 * Math.PI);
+  return 0.65 + 0.35 * Math.cos((elapsed / period) * 2 * Math.PI);
 }
