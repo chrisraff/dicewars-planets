@@ -106,12 +106,26 @@ export function menuView(settings, definitions = MENU_SETTINGS) {
  * so it wears the name and lets the planet through. A menu opened *from* a
  * match is a dialog over a game in progress — the name has already been said,
  * and what is behind it wants covering rather than showing off.
+ *
+ * `canWatchReplay` is the one door that is not a game to play: a match that
+ * finished more than a day ago, which a visit deliberately does not reopen
+ * onto (`isStaleEnding`). This is the way back to it. It is only ever on the
+ * title screen, and it does not lead — New game keeps the filled button and
+ * the focus, because starting a game is what that visit is for. In every other
+ * menu the button is `hidden`, out of the layout entirely rather than disabled.
  */
-export function menuActionsView({ canResume = false, canContinue = false } = {}) {
+export function menuActionsView({
+  canResume = false,
+  canContinue = false,
+  canWatchReplay = false,
+} = {}) {
   return {
     brand: { hidden: canResume },
     resume: { hidden: !canResume },
     continue: { hidden: !canContinue },
+    // over a match, or beside a saved game to continue, the replay of some
+    // other match would be a second door into the wrong game
+    lastReplay: { hidden: !canWatchReplay || canResume || canContinue },
     start: {
       // from inside a match, throwing it away is a deliberate act and says so
       label: canResume ? 'Start over' : 'New game',
@@ -129,7 +143,10 @@ export function menuActionsView({ canResume = false, canContinue = false } = {})
  * It renders itself from the setting definitions rather than from hand-written
  * markup, so adding an option to settings.js is all it takes to have one here.
  */
-export function createMenu(root, { onStart, onResume, onContinue, onExplain } = {}) {
+export function createMenu(
+  root,
+  { onStart, onResume, onContinue, onWatchReplay, onExplain } = {}
+) {
   root.innerHTML = `
     <div class="menu-brand"><h1>Dice Wars Planets</h1></div>
     <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Game setup">
@@ -137,6 +154,7 @@ export function createMenu(root, { onStart, onResume, onContinue, onExplain } = 
       <div class="menu-settings"></div>
       <div class="menu-actions">
         <button class="menu-resume" type="button" hidden>Back to game</button>
+        <button class="menu-last-replay" type="button" hidden>Watch last replay</button>
         <button class="menu-start" type="button">New game</button>
         <button class="menu-continue" type="button" hidden>Continue</button>
       </div>
@@ -155,6 +173,7 @@ export function createMenu(root, { onStart, onResume, onContinue, onExplain } = 
   const startButton = root.querySelector('.menu-start');
   const resumeButton = root.querySelector('.menu-resume');
   const continueButton = root.querySelector('.menu-continue');
+  const lastReplayButton = root.querySelector('.menu-last-replay');
   // Below the actions and quieter than any of them: it is a door for somebody
   // who came looking, and it must never be in the way of the one thing almost
   // everybody opened this menu to press.
@@ -317,6 +336,7 @@ export function createMenu(root, { onStart, onResume, onContinue, onExplain } = 
   startButton.addEventListener('click', () => onStart?.(settings));
   resumeButton.addEventListener('click', () => onResume?.());
   continueButton.addEventListener('click', () => onContinue?.());
+  lastReplayButton.addEventListener('click', () => onWatchReplay?.());
   explainButton.addEventListener('click', () => onExplain?.());
 
   // Escape backs out, but only when there is something to back out to
@@ -331,13 +351,16 @@ export function createMenu(root, { onStart, onResume, onContinue, onExplain } = 
 
     /**
      * `canResume` shows the way back to a match already under way;
-     * `canContinue` offers one saved from a previous visit.
+     * `canContinue` offers one saved from a previous visit;
+     * `canWatchReplay` offers the replay of a finished match too old to have
+     * reopened onto by itself.
      */
-    show(next = settings, { canResume = false, canContinue = false } = {}) {
+    show(next = settings, { canResume = false, canContinue = false, canWatchReplay = false } = {}) {
       settings = normalizeSettings(next);
       refresh();
 
-      const actions = menuActionsView({ canResume, canContinue });
+      const actions = menuActionsView({ canResume, canContinue, canWatchReplay });
+      lastReplayButton.hidden = actions.lastReplay.hidden;
       // The title screen, which is the whole dress rather than one element:
       // the name over the planet, and a scrim thin enough to see it through.
       // Exactly one of the two headings is ever drawn — the other is

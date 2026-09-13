@@ -11,6 +11,9 @@ import {
   worldFingerprint,
   cameraSnapshot,
   isUsableCamera,
+  hasEnded,
+  isStaleEnding,
+  STALE_ENDING_MS,
 } from '../src/game/saveGame.js';
 import { generatePlanetWorld } from '../src/world/generateWorld.js';
 import { createGame, AUTOPLAY } from '../src/game/createGame.js';
@@ -191,6 +194,60 @@ test('clearing means the next visit gets the menu, not the game before it', () =
   const storage = stored(saveOf(11));
   clearSavedGame(storage);
   assert.equal(readSavedGame(storage), null);
+});
+
+// --- an ending left for too long ----------------------------------------------
+
+const DAY = STALE_ENDING_MS;
+const NOW = 1_800_000_000_000;
+
+/** Every way a match becomes something to look back on rather than play. */
+function endings() {
+  const won = saveOf(11);
+  won.state.phase = 'gameover';
+  won.state.winner = 'p1';
+
+  const knockedOut = saveOf(11);
+  knockedOut.state.nodes = knockedOut.state.nodes.map(([id, node]) =>
+    [id, node.owner === 'p2' ? { ...node, owner: 'p1' } : node]);
+
+  return {
+    won,
+    knockedOut,
+    surrenderOffered: saveOf(11, { surrenderOffered: true }),
+    playedOn: saveOf(11, { playedOn: true }),
+  };
+}
+
+test('a save is dated when it is written', () => {
+  const storage = fakeStorage();
+  writeSavedGame(storage, saveOf(11), NOW);
+  assert.equal(readSavedGame(storage).savedAt, NOW);
+});
+
+test('an ending left for more than a day opens on the title screen instead', () => {
+  // somebody coming back a day later is there to play, not to be dropped back
+  // onto the replay of a match they finished yesterday
+  for (const [name, save] of Object.entries(endings())) {
+    assert.ok(hasEnded(save), `${name} is an ending`);
+    assert.equal(isStaleEnding({ ...save, savedAt: NOW - DAY - 1 }, NOW), true, `${name}, a day on`);
+    assert.equal(isStaleEnding({ ...save, savedAt: NOW - DAY + 1 }, NOW), false, `${name}, same day`);
+  }
+});
+
+test('a match still being played is picked up however long it was left', () => {
+  const save = saveOf(11);
+  assert.equal(hasEnded(save), false);
+  assert.equal(isStaleEnding({ ...save, savedAt: NOW - 30 * DAY }, NOW), false);
+  assert.equal(isStaleEnding(save, NOW), false, 'undated, and still not stale');
+});
+
+test('an ending saved before saves were dated counts as stale', () => {
+  // reopening an ending writes nothing, so an undated one would never get a
+  // date and would reopen onto its replay on every visit forever
+  for (const [name, save] of Object.entries(endings())) {
+    assert.equal(isStaleEnding(save, NOW), true, name);
+  }
 });
 
 // --- the camera the player left the planet at ---------------------------------

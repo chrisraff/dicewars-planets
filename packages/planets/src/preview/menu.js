@@ -17,6 +17,7 @@ function addScenario({
   settings,
   canResume = false,
   canContinue = false,
+  canWatchReplay = false,
   live = false,
 }) {
   const section = document.createElement('section');
@@ -46,6 +47,7 @@ function addScenario({
     onStart: (chosen) => report(chosen, 'started'),
     onResume: () => report(menu.settings, 'resumed'),
     onContinue: () => report(menu.settings, 'continued'),
+    onWatchReplay: () => report(menu.settings, 'watched the last replay'),
   });
 
   function report(chosen, action) {
@@ -60,7 +62,7 @@ function addScenario({
     ].join('\n');
   }
 
-  menu.show(settings ?? DEFAULT_SETTINGS, { canResume, canContinue });
+  menu.show(settings ?? DEFAULT_SETTINGS, { canResume, canContinue, canWatchReplay });
   if (readout) readout.textContent = 'Pick a setup and press the button.';
 }
 
@@ -79,6 +81,17 @@ addScenario({
     + 'just no longer the thing being offered.',
   settings: { players: 6 },
   canContinue: true,
+});
+
+addScenario({
+  title: 'Coming back after a finished match went stale',
+  note: 'A match that ended — won, surrendered to, or knocked out of — and was last saved more '
+    + 'than a day ago. The game does not reopen onto it: somebody coming back is here to play, '
+    + 'so they get the title screen, and this is the only menu that also offers the replay of '
+    + 'that last match. New game still leads. In every other state on this page the button is '
+    + 'not disabled but absent.',
+  settings: DEFAULT_SETTINGS,
+  canWatchReplay: true,
 });
 
 addScenario({
@@ -128,6 +141,14 @@ addScenario({
   stageClass: 'is-phone',
   settings: { players: 4 },
   canContinue: true,
+});
+
+addScenario({
+  title: 'A stale finished match, at phone width',
+  note: 'Stacked, with New game nearest the thumb and the last replay above it.',
+  stageClass: 'is-phone',
+  settings: DEFAULT_SETTINGS,
+  canWatchReplay: true,
 });
 
 // --- what the menu knows how to draw --------------------------------------

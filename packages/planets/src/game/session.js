@@ -719,6 +719,21 @@ export function createSession({
     settings,
 
     /**
+     * Straight into the replay, as if its ending banner's "Watch replay" had
+     * been pressed — for the title screen's "Watch last replay", which opens a
+     * finished match for its replay rather than for its ending. The same path
+     * as that button's, so closing lands where it would have: back on the
+     * ending for a win or a surrender, on the board for a knockout. A no-op
+     * with nothing to watch, which is what a save whose planet no longer
+     * matches leaves behind, since a fresh game is dealt in its place.
+     */
+    watchReplay() {
+      if (!canReplay()) return;
+      banner.answered();
+      openReplay();
+    },
+
+    /**
      * A press has landed. Answers with what letting go there would do —
      * `pressActionOn`'s `'attack'`, `'select'` or `'drop'` — or `null` for
      * nothing to act on, which hands the press straight to the camera so a

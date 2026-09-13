@@ -203,3 +203,28 @@ test('a match already on screen is never also offered as one to continue', () =>
   assert.equal(actions.continue.hidden, true);
   assert.equal(actions.start.secondary, false, 'so starting over keeps the primary look');
 });
+
+test('the last replay is offered on the title screen and nowhere else', () => {
+  // It exists for exactly one visit: a match that finished more than a day ago,
+  // which the game deliberately did not reopen onto. Every other menu leaves it
+  // out entirely — hidden, not greyed out.
+  assert.equal(menuActionsView({ canWatchReplay: true }).lastReplay.hidden, false);
+
+  for (const state of [{}, { canResume: true }, { canContinue: true }]) {
+    assert.equal(menuActionsView(state).lastReplay.hidden, true, JSON.stringify(state));
+  }
+  assert.equal(
+    menuActionsView({ canWatchReplay: true, canResume: true }).lastReplay.hidden,
+    true,
+    'over a match in progress it would be a door into a different game'
+  );
+  assert.equal(menuActionsView({ canWatchReplay: true, canContinue: true }).lastReplay.hidden, true);
+});
+
+test('offering the last replay does not take the lead from a new game', () => {
+  const actions = menuActionsView({ canWatchReplay: true });
+  assert.equal(actions.brand.hidden, false, 'still the title screen');
+  assert.equal(actions.focus, 'start');
+  assert.equal(actions.start.secondary, false, 'New game keeps the filled button');
+  assert.equal(actions.start.label, 'New game');
+});

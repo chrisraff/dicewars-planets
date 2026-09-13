@@ -9,7 +9,8 @@ export const PREVIEW_PAGES = [
     href: '/preview/menu.html',
     title: 'Setup menu',
     description:
-      'The game-setup menu in each state it opens in — first visit, mid-game, and phone width — '
+      'The game-setup menu in each state it opens in — first visit, coming back after a finished '
+      + 'match went stale, mid-game, and phone width — '
       + 'plus a live panel showing what the settings pipeline makes of your choices.',
   },
   {

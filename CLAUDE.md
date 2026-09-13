@@ -699,6 +699,26 @@ before any of this, which is what the handicaps are measured against.
   finished on with "Watch replay" still on it — which is also why `session.js`
   puts that banner up by hand when it restores a game already won, since `over`
   will never fire for one.
+
+  **But only for a day.** `isStaleEnding` sends a visit to the title screen
+  instead when the saved match has an ending — it is over, the player has been
+  knocked out, or they have been offered the win — and was last written more
+  than `STALE_ENDING_MS` ago. A match in progress is never stale. A finished
+  one reopened days later is a replay nobody came back for. The age is
+  `savedAt`, stamped by `writeSavedGame` rather than carried in `gameSave`, and
+  it stays honest because reopening an ending writes nothing: the clock stops
+  when the match does. That is also why an *undated* ending counts as stale —
+  it predates the stamp and would otherwise never get one. The save is not
+  cleared; the next game overwrites it on its first move, as always.
+
+  The way back to it is **Watch last replay** on that title screen, and it is
+  drawn nowhere else: `menuActionsView`'s `lastReplay` is `hidden` — out of the
+  layout, not disabled — over a match, beside a save to continue, and on a
+  first visit. It does not lead: New game keeps the filled button and the
+  focus, because starting a game is what that visit is for. Pressing it
+  restores the match and opens straight into its replay (`session.watchReplay`),
+  so closing the replay lands on whatever the match finished on — the ending
+  banner for a win or a surrender. `preview/menu.html` shows the state.
 - `settings.js` — every configurable option declared once as data
   (`SETTING_DEFINITIONS`). The menu renders itself from that list, so a new
   option is added here and nowhere else.

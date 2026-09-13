@@ -7,7 +7,7 @@ import { createExplainer } from './render/explainer.js';
 import { createSession } from './game/session.js';
 import { createSelectHandler } from './render/selectPress.js';
 import { resolveSettings, writeStoredSettings, settingsToQuery } from './game/settings.js';
-import { readSavedGame, writeSavedGame } from './game/saveGame.js';
+import { isStaleEnding, readSavedGame, writeSavedGame } from './game/saveGame.js';
 import { ATTACK_HINT, markHintSeen, readSeenHints } from './game/hints.js';
 
 const canvas = document.getElementById('planet-canvas');
@@ -82,19 +82,33 @@ const menu = createMenu(menuRoot, {
   // a saved game brings its own setup with it — the settings on the menu are
   // for the new game the player did not ask for
   onContinue: () => startGame(savedGame.settings, savedGame),
+  // A finished match too old to reopen onto by itself (`isStaleEnding`). The
+  // replay is what was asked for, so it opens straight into it rather than onto
+  // the ending banner — which is still there behind it when it closes.
+  onWatchReplay: () => {
+    startGame(savedGame.settings, savedGame);
+    session.watchReplay();
+  },
   onExplain: () => explainer.show(),
 });
 
 // Skip the menu if there is a game to pick back up — one in progress, or one
-// already won, which opens back onto the ending it finished on.
-if (savedGame) {
-  startGame(savedGame.settings, savedGame);
+// that ended recently, which opens back onto the ending it finished on. An
+// ending more than a day old gets the title screen instead (`isStaleEnding`);
+// its save is left alone, and the next game overwrites it.
+const resumable = savedGame && !isStaleEnding(savedGame) ? savedGame : null;
+if (resumable) {
+  startGame(resumable.settings, resumable);
 } else {
   // Built before the menu is shown rather than a frame after it, so the title
   // screen arrives whole. It costs about 35ms — a world and a few rounds of a
   // match — against a page that has nothing else to do with them.
   backdrop = createMenuBackdrop({ viewer, pipMaterials });
-  menu.show(resolveSettings({ search: location.search, storage: window.localStorage }));
+  // A save that got this far without being resumed is a stale ending, and the
+  // title screen is the only place its replay is offered.
+  menu.show(resolveSettings({ search: location.search, storage: window.localStorage }), {
+    canWatchReplay: savedGame !== null,
+  });
 }
 
 // --- input ----------------------------------------------------------------

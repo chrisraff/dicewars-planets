@@ -1,3 +1,4 @@
+import { isPlayerAlive } from '@dicewars/core';
 import { normalizeSettings } from './settings.js';
 
 /**
@@ -147,15 +148,62 @@ export function readSavedGame(storage) {
   }
 }
 
-export function writeSavedGame(storage, save) {
+/**
+ * Written with the time it was written (`savedAt`), stamped here rather than
+ * in `gameSave` because it is a fact about the write, not about the match —
+ * see `isStaleEnding`, which is what reads it.
+ */
+export function writeSavedGame(storage, save, now = Date.now()) {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify(save));
+    storage?.setItem(STORAGE_KEY, JSON.stringify({ ...save, savedAt: now }));
     return true;
   } catch {
     // out of quota, or a private window that refuses to store anything: the
     // game carries on, it just will not survive being closed
     return false;
   }
+}
+
+/** How long a finished match is still worth reopening onto: one day. */
+export const STALE_ENDING_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the match in this save has an ending to look back at: it is over,
+ * the player has been knocked out of it, or they have been offered the win.
+ *
+ * The same three `replayButtonView` puts the Replay button up for, but asked
+ * of the save rather than of a running match, because this is decided before
+ * one is built. A surrender counts whether or not it was answered: an
+ * unanswered one reopens onto its "You win" banner, which is as much an ending
+ * screen as the others.
+ */
+export function hasEnded(save) {
+  if (save.state.phase === 'gameover') return true;
+  if (save.surrenderOffered || save.playedOn) return true;
+  // `isPlayerAlive` only walks the board, so the saved nodes are enough
+  return !isPlayerAlive({ nodes: new Map(save.state.nodes) }, save.humanPlayerId);
+}
+
+/**
+ * Whether a visit should open on the title screen instead of on this save.
+ *
+ * Only an ending goes stale. A match still in progress is unfinished business
+ * however long it was left. A finished one reopened days later drops the player
+ * onto a replay they did not ask to see, and somebody coming back after a day
+ * is there to play. So past `STALE_ENDING_MS` they get the title screen and
+ * its planet. The save is left where it is: the next game overwrites it on its
+ * first move, as it always has.
+ *
+ * The age stays honest because reopening an ending writes nothing, so the
+ * clock stops when the match does rather than restarting on every visit. That
+ * is also why a save with no date is stale when it has ended: it was written
+ * before saves carried one, and an ending reopened without being answered is
+ * never written again, so it would never get a date and would reopen forever.
+ */
+export function isStaleEnding(save, now = Date.now()) {
+  if (!hasEnded(save)) return false;
+  if (!Number.isFinite(save.savedAt)) return true;
+  return now - save.savedAt > STALE_ENDING_MS;
 }
 
 export function clearSavedGame(storage) {
