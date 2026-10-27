@@ -66,6 +66,17 @@ rewired mid-game has to be saved as it stands. `seededRng` lives here too: both
 sources of chance already arrive through `deps`, and a generator that repeats
 is what makes that worth anything — a test pins a game, a save pins a world.
 
+One consequence of reading them back out, worth knowing before replaying a save
+through an AI and expecting its moves back: the edges come out in the order a
+`seen` set walks the adjacency, which is **not** the order the world handed
+them over, so a graph rebuilt from a save holds each node's neighbours
+differently. That is nothing to the rules and everything to the expert's
+tie-break — `expertMovesFor` offers moves in neighbour order and the sort is
+stable, so two fights worth exactly the same come back the other way round, in
+about one turn in fifty. Anything that has to reproduce recorded moves rebuilds
+the graph from the world (`createGraph(world.nodeIds, world.edges)`) rather
+than from the save.
+
 Terms that recur:
 
 - **node / territory** — one playable area, holding an owner and 1–8 dice.
@@ -346,6 +357,65 @@ outposts to be disciplined about and the refusals land on the only fights going.
 Keeping the bound under `elimination` (12) is the same argument from the other
 end: the penalty can never exceed `sprawl` itself, since `income <= held`, so a
 last-territory capture out of an outpost still goes through.
+
+`saturation` is the one term that is a **correction rather than an opinion**,
+which is why it is 1 — all of it — and why it was not tuned. Every other term
+prices what an attack *does*; this one prices what doing nothing costs, and
+until it existed the answer was zero. Reinforcement lands only where there is
+room, so a board earning more than it can hold loses the difference every turn
+— and the stack a failed attack spends is refilled out of exactly that income.
+So the AI used to stand still on a full board: measure a move against a
+baseline of nothing when the baseline is bleeding a die a territory a turn, and
+no even fight ever clears it.
+
+The position it fires in is specific and real. In the match that produced it,
+the expert had eaten four players, met the human along a front **four
+territories wide** with 27 of its 31 territories holding no enemy neighbour at
+all, and every one of its thirteen border pairs was eight against eight. Every
+attack it had scored between −1.07 and −1.35, so it passed the turn with 248
+dice on the board and a bank at the cap, and threw away 139 dice of income over
+the rest of the match while the human — who took those same 47% fights without
+thinking about it — went from 29 territories to 52.
+
+What it hands back is `dice` apiece for `min(stack spent, income − room)`, and
+only on the branch where the attack fails and the dice were genuinely spent. It
+is deliberately **income rather than income plus the bank**: what makes a die
+free is that it is replaced every turn, where a bank is spent once and lands
+wherever room appears whether anything attacks or not. That is also what keeps
+it proportional to the position rather than a switch — a lone territory earning
+a die a turn is credited one die of the seven it throws and is as unwilling to
+trade eight against eight as it ever was, while an empire earning thirty with
+nowhere to put them is spending nothing. On a board with room it does not fire
+at all, and `expertStrategy.test.js` states that as *every score identical*
+rather than as the same move chosen.
+
+Measured against the same AI with the term at 0, 12,000 games a cell: **50.4%
+±0.9 two-handed, 50.8% four, 51.0% six, 51.5% eight** — small, in the same
+direction at every table size, and significant from six up. The shape is the
+reverse of `sprawl`'s, and for a readable reason: a full board is a late-game
+board, and the more players there are the longer the game runs. Self-play alone
+would not be evidence, so it is measured against the two opponents it did not
+come from as well, 6,000 games a cell, and every cell moves by about a point:
+vs simple **67.5% against 66.5%** two-handed and **80.7% against 79.6%** six;
+vs defensive **76.4% against 75.3%** and **69.0% against 68.0%**.
+
+It costs nothing worth having on the clock — a two-handed median AI turn of
+0.90ms against 0.81ms, the same 8.5ms worst turn, and six-handed 0.29ms against
+0.31ms with the same 4.7ms worst. Hard inherits it, being the expert with
+`income` at 0, and the rung stays where it was: 67.8% against Normal both with
+the term and without it six-handed, and 38.9% against Expert with both ends of
+the ladder carrying it (6,000 games a cell, against the 69.1/41.6 measured at
+2,400 before any of this).
+
+The thing it removes outright is a **deadlock**. Replaying the match above from
+the turn the term first changes, 600 times over fresh dice: with both seats as
+they shipped, **48 of 600 continuations never finish at all** — both empires at
+the cap, neither willing to move, until the 2,000-turn cap stops them. With the
+term, none of them. The win rate between two AIs from that position is a coin
+flip either way (50.5% against 54.5%, ±4) — which is itself worth reading
+against the board it starts from, since green is ahead there, 31 territories to
+27 and 243 dice to 216, with yellow to move. What the term changes is not who
+wins the standoff but that there is one.
 
 Three budgets keep the cost of that off the frame, and none of them costs
 anything measurable in strength — `decided` at 1 measured 53.3% against 53.3%

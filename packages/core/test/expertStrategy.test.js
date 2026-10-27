@@ -418,3 +418,100 @@ test('the budgets on the lookahead are budgets, not opinions', () => {
     'looking at everything reaches the same move the budgeted search does'
   );
 });
+
+// --- income with nowhere to land ---------------------------------------------
+//
+// Reinforcement lands only where there is room, so a board earning more than
+// it can hold loses the difference every turn. That makes standing still cost
+// something, and the score of a move is a *change* in the value of the
+// position — so without `saturation` the baseline a move has to beat is zero
+// when it is really negative, and a full empire behind a narrow front refuses
+// every fight on offer while its income is thrown away.
+
+test('a full empire will trade even dice to make room for its own income', () => {
+  // p1's six territories are its whole income and every one is at the cap, so
+  // nothing it earns can land. Its only way out is `a6`, and the fight there
+  // is eight against eight — under even, into ground `b1` holds in the middle
+  // of its own, with `b2` still at the neck afterwards. Priced on the dice
+  // alone that is a loss, and the AI used to pass the turn.
+  const state = sealedIn(8);
+  const best = (saturation) =>
+    expertMovesFor(state, 'p1', { ...EXPERT_WEIGHTS, follow: 0, saturation, minGain: -Infinity })[0];
+
+  assert.ok(best(0).score < 0, 'the dice say no');
+  assert.ok(best(1).score > 0, 'the income with nowhere to go says yes');
+  assert.deepEqual(
+    createExpertStrategy({ follow: 0 })(state, 'p1'),
+    { from: 'a6', to: 'b1' },
+    'so it attacks instead of sitting on 48 dice it cannot add to'
+  );
+  assert.ok(best(1).chance < 0.5, 'and it is a fight it is more likely to lose than win');
+});
+
+test('nothing changes while there is still room for the income', () => {
+  // The same board one die short of the cap: six dice of room against six of
+  // income, so every die earned still lands somewhere and none of the stack a
+  // failed attack spends is coming back. This is the whole of the claim that
+  // the term only ever fires on a saturated board — every score is identical,
+  // not merely the move picked.
+  const state = sealedIn(7);
+  const scores = (saturation) => expertMovesFor(
+    state, 'p1', { ...EXPERT_WEIGHTS, follow: 0, saturation, minGain: -Infinity }
+  ).map((m) => `${m.from}->${m.to} ${m.score}`);
+
+  assert.deepEqual(scores(1), scores(0));
+});
+
+test('the credit is the income actually being lost, not a free hand', () => {
+  // What it hands back is `dice` apiece for as many dice as the emptied stack
+  // makes room for, and only in the branch where the attack fails and they
+  // were genuinely spent. So it is proportional to the position rather than a
+  // switch: a lone territory earning one die a turn is credited one die of
+  // the seven it throws, which is why it is no keener on an even fight than it
+  // ever was, while the empire above is spending six of its seven for nothing.
+  const handback = (state, overflow) => {
+    const at = (saturation) => expertMovesFor(
+      state, 'p1', { ...EXPERT_WEIGHTS, follow: 0, saturation, minGain: -Infinity }
+    ).find((m) => m.from === 'a6' || m.from === 'solo');
+    const move = at(0);
+    const expected = (1 - move.chance) * EXPERT_WEIGHTS.dice * overflow;
+    assert.ok(
+      Math.abs((at(1).score - move.score) - expected) < 1e-9,
+      `expected ${expected} handed back, got ${at(1).score - move.score}`
+    );
+  };
+
+  handback(sealedIn(8), 6); // six territories of income, seven dice spent
+  handback(lonelyAtTheCap(), 1); // one territory of income, same seven dice
+});
+
+// p1 is a line of six behind a two-way neck at `a6`; p2's `b1` sits inside its
+// own ground, so taking it is a stack surrounded. `dice` is what p1's stacks
+// are standing on — at 8 its income has nowhere to land, at 7 it has.
+function sealedIn(dice) {
+  const mine = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+  const theirs = ['b1', 'b2', 'b3', 'b4', 'b5'];
+  const held = (ids, owner, count) => ids.map((id) => [id, { owner, dice: count }]);
+  const line = (ids) => ids.slice(1).map((id, i) => [ids[i], id]);
+  return graphState(
+    [...held(mine, 'p1', dice), ...held(theirs, 'p2', 8)],
+    [
+      ...line(mine), ...line(theirs),
+      ['a6', 'b1'], ['a6', 'b2'],
+      ['b1', 'b3'], ['b1', 'b4'],
+    ]
+  );
+}
+
+// One territory at the cap against the same wall: an income of one, so almost
+// nothing it spends is replaced.
+function lonelyAtTheCap() {
+  const theirs = ['b1', 'b2', 'b3', 'b4', 'b5'];
+  return graphState(
+    [['solo', { owner: 'p1', dice: 8 }], ...theirs.map((id) => [id, { owner: 'p2', dice: 8 }])],
+    [
+      ...theirs.slice(1).map((id, i) => [theirs[i], id]),
+      ['solo', 'b1'], ['solo', 'b2'], ['b1', 'b3'], ['b1', 'b4'],
+    ]
+  );
+}

@@ -33,6 +33,16 @@ import { winProbability } from './battleOdds.js';
  *   `income / (held + 1)` dice a turn away from the ground that earns them.
  *   Only a capture launched out of a detached region can be in this position:
  *   an attack from the largest region is adjacent to it and always grows it.
+ * - `saturation` — how much of a spent stack to hand back when the dice were
+ *   going to be thrown away anyway. Reinforcement lands only where there is
+ *   room, so a board earning more than it can hold loses the difference every
+ *   turn — and the stack a failed attack spends is refilled out of exactly
+ *   that income. At 0 the AI prices dice the same whether or not it has
+ *   anywhere to put them, which is what made it stand still on a full board:
+ *   doing nothing is scored at zero, so an attack has to beat a baseline that
+ *   is in fact bleeding a die a territory a turn. It is a correction rather
+ *   than an opinion, which is why it is 1 — all of it, and nothing on a board
+ *   with room, where income lands somewhere useful whatever happens.
  * - `minGain` — what a move has to be worth before it is worth making.
  * - `follow` — how much of what a capture *leads to* counts towards making it.
  *   At 0 each attack is played as though the turn stopped there. See the
@@ -58,6 +68,7 @@ export const EXPERT_WEIGHTS = Object.freeze({
   relief: 0.6,
   refill: 1.5,
   sprawl: 2,
+  saturation: 1,
   minGain: 0,
   follow: 0.6,
   breadth: 4,
@@ -273,6 +284,15 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
   const costOfLosing = (id, dice) =>
     w.land + w.dice * dice + w.income * (board.income - withoutIt(id));
 
+  // Income with nowhere to land. Reinforcement only lands where there is room,
+  // so a board holding less room than it earns is throwing dice away every
+  // turn: they bank, and past `MAX_RESERVE` they are gone. Emptying a stack
+  // opens room, which is why a failed attack on such a board costs less than
+  // the dice it spent — see `freed` below.
+  let room = 0;
+  for (const id of board.mine) room += MAX_DICE_PER_NODE - state.nodes.get(id).dice;
+  const overflow = Math.max(0, board.income - room);
+
   for (const from of board.mine) {
     const attacker = state.nodes.get(from);
     if (attacker.dice <= 1) continue;
@@ -288,6 +308,18 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
     // attacking and so is handed back at the end.
     const before = exposure(state, from, holding(strength), playerId)
       * costOfLosing(from, strength);
+    // How many of the dice a failed attack spends are not really spent.
+    // Emptying this stack opens `strength - 1` slots, and the income that had
+    // nowhere to land takes them at the next payout, so that many come back.
+    //
+    // Against *income* rather than income plus the bank, because what makes a
+    // die free is that it is replaced every turn, where a bank is spent once
+    // and lands wherever room appears whether anything attacks or not. That is
+    // also what keeps this proportional to the position rather than a switch:
+    // one territory earning one die a turn is credited one die of its stack,
+    // and is as unwilling to trade eight against eight as it ever was, while
+    // an empire earning thirty with nowhere to put them is spending nothing.
+    const freed = w.saturation * Math.min(strength - 1, overflow);
 
     for (const to of neighbors(state.graph, from)) {
       if (!isLegalAttack(state, from, to)) continue;
@@ -329,7 +361,7 @@ export function expertMovesFor(state, playerId, weights = EXPERT_WEIGHTS, depth 
         - (gained === 0 ? w.sprawl * (board.income / (board.mine.length + 1)) : 0);
 
       const lost =
-        -w.dice * (strength - 1) // the stack, spent for nothing
+        -w.dice * (strength - 1 - freed) // the stack, less what comes back
         - w.risk * emptied * spent;
 
       const score = chance * won + (1 - chance) * lost + w.relief * before;
